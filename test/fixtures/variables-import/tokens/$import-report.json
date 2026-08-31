@@ -1,0 +1,78 @@
+{
+  "counts": {
+    "flagged": 3,
+    "tokens": 21,
+    "unconfirmedSubtypes": 1
+  },
+  "entries": [
+    {
+      "kind": "collision",
+      "message": "2 variables across 2 collections produce the token path \"tv.ref.palette.white\", which would clash when their sets are merged into one theme. Kept \"Core\" → \"tv/ref/palette/white\"; the rest were not written.",
+      "participants": [
+        {
+          "collectionId": "VariableCollectionId:1:2",
+          "collectionName": "Core",
+          "outcome": "written",
+          "variableId": "VariableID:1:4",
+          "variableName": "tv/ref/palette/white"
+        },
+        {
+          "collectionId": "VariableCollectionId:1:19",
+          "collectionName": "Lab",
+          "outcome": "skipped",
+          "variableId": "VariableID:1:24",
+          "variableName": "tv/ref/palette/white"
+        }
+      ],
+      "path": "tv.ref.palette.white",
+      "reason": "cross-set"
+    },
+    {
+      "kind": "collision",
+      "message": "2 variables in \"Lab\" produce the token path \"lab.color.Brand\" (names differ only by case). Kept \"lab/color/Brand\"; the rest were not written.",
+      "participants": [
+        {
+          "collectionId": "VariableCollectionId:1:19",
+          "collectionName": "Lab",
+          "outcome": "written",
+          "variableId": "VariableID:1:20",
+          "variableName": "lab/color/Brand"
+        },
+        {
+          "collectionId": "VariableCollectionId:1:19",
+          "collectionName": "Lab",
+          "outcome": "skipped",
+          "variableId": "VariableID:1:21",
+          "variableName": "lab/color/brand"
+        }
+      ],
+      "path": "lab.color.Brand",
+      "reason": "same-set-case"
+    },
+    {
+      "kind": "collision",
+      "message": "Token path \"lab.color.token\" is also a group prefix of 1 other token; DTCG cannot represent a node that is both. Kept \"Lab\" → \"lab/color/token\"; the rest were not written.",
+      "participants": [
+        {
+          "collectionId": "VariableCollectionId:1:19",
+          "collectionName": "Lab",
+          "outcome": "written",
+          "variableId": "VariableID:1:22",
+          "variableName": "lab/color/token"
+        },
+        {
+          "collectionId": "VariableCollectionId:1:19",
+          "collectionName": "Lab",
+          "outcome": "skipped",
+          "variableId": "VariableID:1:23",
+          "variableName": "lab/color/token/nested"
+        }
+      ],
+      "path": "lab.color.token",
+      "reason": "token-group"
+    }
+  ],
+  "figmaFileKey": "1ttG81lWKg74GUHq4aBnxl",
+  "importedAt": "2026-09-01T00:00:00.000Z",
+  "version": 1
+}
