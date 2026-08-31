@@ -123,15 +123,17 @@ No component has a cost floor above $0 at solo/small-team usage; the only plausi
 
 ## 9. Build Plan (Phased, for Claude Code sessions)
 
-1. **Scaffold** — Figma plugin boilerplate (manifest, TypeScript setup, plugin UI shell).
-2. **Import — Variables** — define the token schema scoped to Variables-backed types (color, number, boolean, string), then build the Variables → token JSON import (§6.5.1): read every collection/mode, map to token sets/themes (§6.2), validate the schema against a real file. No editor, no Styles, no sync yet.
-3. **Import — Styles** — extend the schema for style-only token types (typography, shadow/effect, grid) and build the Styles → token JSON import (§6.5.1): paint, text, effect, and grid styles — Figma's separate, older API from Variables, so treated as its own phase rather than bundled into Phase 2.
-4. **Local editor** — in-plugin CRUD UI for browsing and editing the imported tokens (create/edit/delete, sets/groups) — no sync yet.
-5. **Figma application** — apply tokens back to Figma Variables/Styles (§6.5.2) and drift detection (§6.5.3).
-6. **Git sync (PAT-based)** — push/pull token JSON to a GitHub repo, with a diff view before commit.
-7. **Themes, aliasing, math** — layer in multi-theme composition and token references.
-8. **Export pipeline** — wire up Style Dictionary, wire a GitHub Actions job to run it on push.
-9. **Polish** — sync status UI, error states, settings panel; decide whether to publish privately or to Figma Community.
+**Phases 1–3 are locked** — scoped and ready to build. **Phases 4–9 are provisional** — sequencing and scope are right, but the design detail (editor UX, apply/drift semantics, sync flow) is deliberately deferred until Phases 2–3 produce real imported token data to design against, rather than guessing ahead of it. Revisit and firm up each phase's detail shortly before it starts.
+
+1. **Scaffold** ✅ locked — Figma plugin boilerplate (manifest, TypeScript setup, plugin UI shell).
+2. **Import — Variables** ✅ locked — define the token schema scoped to Variables-backed types (color, number, boolean, string), then build the Variables → token JSON import (§6.5.1): read every collection/mode, map to token sets/themes (§6.2), validate the schema against a real file. No editor, no Styles, no sync yet.
+3. **Import — Styles** ✅ locked — extend the schema for style-only token types (typography, shadow/effect, grid) and build the Styles → token JSON import (§6.5.1): paint, text, effect, and grid styles — Figma's separate, older API from Variables, so treated as its own phase rather than bundled into Phase 2.
+4. **Local editor** — provisional — in-plugin CRUD UI for browsing and editing the imported tokens (create/edit/delete, sets/groups) — no sync yet.
+5. **Figma application** — provisional — apply tokens back to Figma Variables/Styles (§6.5.2) and drift detection (§6.5.3).
+6. **Git sync (PAT-based)** — provisional — push/pull token JSON to a GitHub repo, with a diff view before commit.
+7. **Themes, aliasing, math** — provisional — layer in multi-theme composition and token references.
+8. **Export pipeline** — provisional — wire up Style Dictionary, wire a GitHub Actions job to run it on push.
+9. **Polish** — provisional — sync status UI, error states, settings panel; decide whether to publish privately or to Figma Community.
 
 ## 10. Success Metrics
 
