@@ -6,16 +6,47 @@ Built incrementally with Claude Code, running entirely on free infrastructure. Z
 
 ## Status
 
-**Phase 1 (scaffold) complete.** Plugin boilerplate, TypeScript, and a UI shell build with esbuild — see [`docs/prd.md` §9](docs/prd.md#9-build-plan-phased-for-claude-code-sessions) for the phased build plan and [`CLAUDE.md`](CLAUDE.md) for current phase status.
+**Phase 2 (Figma Variables → token JSON import) in progress.** Phase 1's scaffold — plugin boilerplate, TypeScript, esbuild, UI shell — is done. See [`docs/prd.md` §9](docs/prd.md#9-build-plan-phased-for-claude-code-sessions) for the phased build plan and [`CLAUDE.md`](CLAUDE.md) for current phase status.
 
 ### Running the plugin locally
 
 ```
 npm install
-npm run build   # or: npm run watch
+npm run build       # or: npm run watch
+npm run typecheck
+npm test
 ```
 
 In Figma desktop: **Plugins → Development → Import plugin from manifest…**, select `manifest.json` at the repo root, then run it from the same menu.
+
+### The Variables import
+
+**Scan Variables** reads every local variable collection and every mode in the open file and
+generates the DTCG token tree defined by [ADR-0002](docs/adr/0002-variables-token-schema.md):
+one file per (collection, mode), plus `tokens/$manifest.json` and `tokens/$import-report.json`.
+
+Number variables whose Figma `VariableScope` says nothing useful are tagged `spacing` with
+`subtypeSource: "default"` and listed for confirmation; duration and easing are never
+auto-detectable and only ever arrive as an explicit user tag (PRD §6.1). User tags are held in
+Figma's `clientStorage` until Phase 6 gives the plugin a real working copy to read them back
+from.
+
+Nothing is written to git yet — that's Phase 6. To get the generated tree onto disk, use
+**Copy whole tree as JSON** and:
+
+```
+pbpaste > /tmp/tree.json
+node scripts/write-tokens.mjs /tmp/tree.json .
+```
+
+### Layout
+
+| Path | What lives there |
+|---|---|
+| `src/tokens/` | Pure conversion logic — schema, collisions, subtypes, serialization. No `figma` global. |
+| `src/figma/scan.ts` | The only module that calls the Figma Variables API; flattens it to a plain snapshot. |
+| `src/ui/` | The plugin iframe. |
+| `test/` | Unit tests over `src/tokens/`, run with `node --test` via esbuild (no test framework dependency). |
 
 ## Why
 
