@@ -25,7 +25,7 @@ import type {
 } from "./types";
 import { compareKeys } from "./serialize";
 import { normalizePathKey, setTokenAtPath, slugify, splitVariableName, toDottedPath } from "./paths";
-import { isAlias, isRgba, rgbaToHex, toReference } from "./values";
+import { isAlias, isRgba, normalizeFloat, rgbaToHex, toReference } from "./values";
 import { resolveSubtype, type SubtypeTag } from "./subtype";
 import { detectCollisions, type PreparedVariable } from "./collisions";
 
@@ -439,7 +439,7 @@ export function convertValue(
     if (typeof raw !== "number" || !Number.isFinite(raw)) {
       return { ok: false, reason: "type-mismatch", message: `is a FLOAT variable whose value is not a finite number.` };
     }
-    return { ok: true, value: raw, warnings: [] };
+    return { ok: true, value: normalizeFloat(raw), warnings: [] };
   }
 
   if (tokenType === "boolean") {

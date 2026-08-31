@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { isAlias, isRgba, rgbaToHex, toReference } from "../src/tokens/values";
+import { isAlias, isRgba, normalizeFloat, rgbaToHex, toReference } from "../src/tokens/values";
 
 test("opaque colours are #rrggbb, translucent ones #rrggbbaa", () => {
   assert.equal(rgbaToHex({ r: 0, g: 0, b: 0 }), "#000000");
@@ -36,4 +36,26 @@ test("isRgba accepts RGB and RGBA, rejects aliases", () => {
   assert.equal(isRgba({ r: 0, g: 0, b: 0, a: 0.2 }), true);
   assert.equal(isRgba({ type: "VARIABLE_ALIAS", id: "x" }), false);
   assert.equal(isRgba(4), false);
+});
+
+test("float32 storage noise is recovered to the decimal a human typed", () => {
+  // Figma hands back the double nearest to float32(0.4) — writing that verbatim would make
+  // every numeric token unreadable and every Figma re-save a spurious git diff.
+  assert.equal(normalizeFloat(0.4000000059604645), 0.4);
+  assert.equal(normalizeFloat(0.10000000149011612), 0.1);
+  assert.equal(normalizeFloat(0.699999988079071), 0.7);
+  assert.equal(normalizeFloat(1.5), 1.5);
+});
+
+test("normalizing a float never changes the value Figma would store back", () => {
+  for (const raw of [0.4000000059604645, 0.10000000149011612, 0.699999988079071, 0.3333333432674408]) {
+    assert.equal(Math.fround(normalizeFloat(raw)), Math.fround(raw));
+  }
+});
+
+test("integers and non-finite values pass through untouched", () => {
+  assert.equal(normalizeFloat(150), 150);
+  assert.equal(normalizeFloat(0), 0);
+  assert.equal(normalizeFloat(-24), -24);
+  assert.equal(Number.isNaN(normalizeFloat(Number.NaN)), true);
 });
