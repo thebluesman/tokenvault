@@ -6,7 +6,16 @@ Built incrementally with Claude Code, running entirely on free infrastructure. Z
 
 ## Status
 
-**Pre-build.** The PRD is drafted; no plugin code exists yet. See [`docs/prd.md` §9](docs/prd.md#9-build-plan-phased-for-claude-code-sessions) for the phased build plan and [`CLAUDE.md`](CLAUDE.md) for current phase status.
+**Phase 1 (scaffold) complete.** Plugin boilerplate, TypeScript, and a UI shell build with esbuild — see [`docs/prd.md` §9](docs/prd.md#9-build-plan-phased-for-claude-code-sessions) for the phased build plan and [`CLAUDE.md`](CLAUDE.md) for current phase status.
+
+### Running the plugin locally
+
+```
+npm install
+npm run build   # or: npm run watch
+```
+
+In Figma desktop: **Plugins → Development → Import plugin from manifest…**, select `manifest.json` at the repo root, then run it from the same menu.
 
 ## Why
 

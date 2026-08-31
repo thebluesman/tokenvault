@@ -4,7 +4,7 @@ Tokenvault is a self-built Figma plugin that replaces Tokens Studio for Figma: d
 
 ## Current phase
 
-**Pre-build.** PRD drafted (v1). Docs structure, agent roster, and backlog tooling set up 2026-08-31. No repo scaffold yet — Phase 1 of the build plan (PRD §9: Figma plugin boilerplate, manifest, TypeScript setup, plugin UI shell) hasn't landed.
+**Phase 1 (scaffold) landed 2026-09-01.** Figma plugin boilerplate, manifest, TypeScript setup (esbuild, plain TS/HTML UI shell, no framework) are in place — see `README.md` for how to build and load the plugin locally. `@frontend-engineer` is now active. Next up: Phase 2 (PRD §9), Variables → token JSON import.
 
 ## Canonical decisions
 
