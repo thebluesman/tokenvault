@@ -53,9 +53,16 @@ Tokenvault is built by Shyam via Claude Code. Single workstream — no sprint ca
 - **Good**: `git status`
 - **Also good** (only if genuinely operating from a different directory): `git -C <path> status`
 
-## Git workflow — committing doc changes
+## Workflow (agreed 2026-08-31)
 
-For doc/ops batches (ADRs, PRD, agent defs), commit directly to `main` and push — no branch, no PR. Single contributor, no required review gate for doc work. Branch/PR only when it's code (once the build phase starts) or explicitly requested.
+- **Ticket granularity**: one GitHub Issue per build-plan phase (PRD §9) — 9 tickets to start, tracking the plan 1:1. `@product-manager` splits a phase into sub-tickets only if it turns out too large to track as one.
+- **Check-in cadence**: at phase boundaries. `@frontend-engineer` works through a full phase, then demos the result running live in Figma before starting the next phase — not mid-phase check-ins by default.
+- **Code review gate**: every PR gets reviewed and merged by Shyam personally, no auto-merge. This is slower than trusting tests alone, but nothing lands on `main` unseen.
+
+## Git workflow — committing doc vs. code changes
+
+- **Docs/ops batches** (ADRs, PRD, agent defs): commit directly to `main` and push — no branch, no PR. Single contributor, no required review gate for doc work.
+- **Code** (once Phase 1 lands): branch per ticket/phase, PR opened against `main`, Shyam reviews and merges — see Workflow above. Never merge your own PR.
 
 ## GitHub access
 
