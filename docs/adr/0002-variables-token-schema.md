@@ -2,6 +2,7 @@
 
 **Status**: Accepted
 **Date**: 2026-09-01
+**Revision**: 2 — amended 2026-09-01, see [Amendment 1](#amendment-1--2026-09-01-phase-2-implementation-feedback)
 **Owner**: @tech-lead
 
 ## Context
@@ -43,26 +44,27 @@ This is byte-identical to the alias strings the atlas pipeline emits (`{atlas.re
 
 ### 3. `$type` and the `com.tokenvault` extension
 
-| Figma | `$type` | `$value` |
+| Figma `resolvedType` | `$type` | `$value` |
 |---|---|---|
 | COLOR | `color` | `#rrggbb`, or `#rrggbbaa` when alpha < 1 |
 | FLOAT | `number` | raw number, unitless |
 | BOOLEAN | `boolean` | `true` / `false` |
 | STRING | `string` | string |
+| EASING, TIMING | — | not imported in Phase 2 — see [Amendment 1 §A](#a-easing-and-timing-resolved-types-deferred-with-a-landing-zone) |
 
-Number subtype is **not** encoded in `$type`. All numbers stay `$type: "number"` and carry the distinction in the standard DTCG escape hatch:
+Number subtype is **not** encoded in `$type`. All numbers stay `$type: "number"` and carry the distinction in the standard DTCG escape hatch (keys alphabetical per §7):
 
 ```json
 "$extensions": {
   "com.tokenvault": {
-    "subtype": "spacing",
-    "subtypeSource": "default",
     "figma": {
-      "variableId": "VariableID:12:34",
       "collectionId": "VariableCollectionId:12:1",
       "modeId": "12:0",
-      "scopes": ["ALL_SCOPES"]
-    }
+      "scopes": ["ALL_SCOPES"],
+      "variableId": "VariableID:12:34"
+    },
+    "subtype": "spacing",
+    "subtypeSource": "default"
   }
 }
 ```
@@ -75,8 +77,10 @@ Tagging rules at import, per PRD §6.1:
 - `scopes` contains `OPACITY` → `subtype: "opacity"`, `subtypeSource: "auto"`.
 - Other useful scopes map where unambiguous (`CORNER_RADIUS` → `radius`; `WIDTH_HEIGHT` → `sizing`; `GAP` → `spacing`), also `auto`.
 - `ALL_SCOPES` or anything else → `subtype: "spacing"`, `subtypeSource: "default"`, surfaced in the flag/tag step for confirmation.
-- Duration/easing is never auto-detectable and only ever arrives as `subtypeSource: "user"`.
+- Duration/easing is never auto-detectable **for FLOAT and STRING variables**, and only ever arrives as `subtypeSource: "user"`. Natively-typed TIMING/EASING variables are self-describing and are a separate case — Amendment 1 §A.
 - On re-import, existing `subtypeSource: "user"` tags are read from the current token files (keyed by `figma.variableId`) and preserved. Auto and default tags are recomputed.
+
+`$description` is written from `Variable.description` when non-empty, and omitted otherwise. Additive, lossless, and a DTCG core key — no extension needed.
 
 Why not `$type: "dimension"` / `"duration"`: both require a unit in DTCG's object form, and Figma stores a bare number. Inventing `px`/`ms` at import time would be a lossy guess baked into the source of truth. Keeping numbers raw makes import lossless and moves unit synthesis to the Style Dictionary transform layer (Phase 8), where the target platform actually determines the unit. Promoting subtypes to first-class `$type`s later is a pure export-side change.
 
@@ -90,25 +94,34 @@ Why not `$type: "dimension"` / `"duration"`: both require a unit in DTCG's objec
 Both, split by whether the token made it in:
 
 - **Imported but degraded** → inline, via `subtypeSource: "default"`. No separate mechanism needed.
-- **Not imported, or contested** → `tokens/$import-report.json`, committed alongside the tokens so unmapped items show up in a PR diff rather than only in a UI that nobody re-opens. Entry kinds: `collision`, `unmappable-value`, `unsupported-type`.
+- **Not imported, or contested** → `tokens/$import-report.json`, committed alongside the tokens so unmapped items show up in a PR diff rather than only in a UI that nobody re-opens. Entry kinds: `collision`, `unmappable-value`, `unsupported-type`, plus `theme-composition` and `dangling-reference` added in Amendment 1 §C and §G.
 
-Three collision kinds are detected, all treated the same way:
+Four collision kinds are detected (`set-slug` added in Amendment 1 §E), all treated the same way:
 
+- **Set slug** — two collections whose names slugify to the same `tokens/<slug>/` directory (`Core`, `core!`).
 - **Within a set** — case-only name clashes (`color/Brand` vs `color/brand`).
 - **Token/group** — a variable whose path is also a group prefix of another (`color/brand` and `color/brand/primary`). DTCG cannot represent a node that is both.
 - **Across sets in one theme** — the same path produced from two different collections, which is a name clash rather than an intentional override (see §1).
 
-Resolution is deterministic — first wins, sorted by collection name then variable name — and **every** participant, winner included, is recorded in the report with its variable id and the contested path. Losers are not written and not renamed: no silent drop, no mangled name. The fix is a rename in Figma.
+Resolution is deterministic and **every** participant, winner included, is recorded in the report with its variable id and the contested path. Losers are not written and not renamed: no silent drop, no mangled name. The fix is a rename in Figma.
+
+> **Superseded by Amendment 1 §F.** The original winner rule — "first wins, sorted by collection name then variable name" — is replaced by a blast-radius-minimising comparator. Everything else in this section stands.
 
 ### 6. Themes in the manifest
 
 `$manifest.json` records collections, modes, and set files truthfully, and generates themes only for the unambiguous case: one multi-mode collection combined with the single mode of every single-mode collection. Two or more multi-mode collections make theme composition a product question (which combinations are real themes?) — import writes no themes and files a report entry instead of guessing a cartesian product. Full theme composition is Phase 7.
+
+> **Amended by Amendment 1 §C and §D**: the report entry gets its own `theme-composition` kind, and the zero-multi-mode-collection case generates a single synthesised `Default` theme rather than none.
 
 Set identifiers follow the atlas/Tokens Studio convention: `"<Collection>/<Mode>"` using original Figma names (`"Theme/Light"`), with a flat `tokenSetOrder` array alongside the richer `collections` block so the file stays legible to anyone used to a `$metadata.json`. Each mode entry carries `$figmaCollectionId` and `$figmaModeId` back-references to the Figma source, same idea as atlas's `$themes.json`.
 
 ### 7. Determinism
 
 Output is 2-space indented, keys sorted alphabetically at every level, trailing newline. Re-running import against an unchanged file produces a byte-identical tree.
+
+Alphabetical means *every* key, with no exception for DTCG's `$`-prefixed ones — `$description`, `$extensions`, `$type`, `$value` sort in that order, ahead of any group child. One rule, one serializer, no special cases for a future writer to rediscover. **Array** order is meaningful data (`tokenSetOrder`, `modes`, `selectedTokenSets`) and is never sorted.
+
+Byte-identical also requires normalising float32 noise — Amendment 1 §H.
 
 ## Example
 
@@ -121,22 +134,27 @@ Figma: collection **Core** (single mode `Value`) with `tv/ref/palette/blue-500`,
   "tv": {
     "global": {
       "motion": {
-        "duration-fast": { "$type": "number", "$value": 150,
-          "$extensions": { "com.tokenvault": { "subtype": "duration", "subtypeSource": "user", "figma": { "variableId": "VariableID:1:15", "collectionId": "VariableCollectionId:1:1", "modeId": "1:0", "scopes": ["ALL_SCOPES"] } } } }
+        "duration-fast": {
+          "$extensions": { "com.tokenvault": { "figma": { "collectionId": "VariableCollectionId:1:1", "modeId": "1:0", "scopes": ["ALL_SCOPES"], "variableId": "VariableID:1:15" }, "subtype": "duration", "subtypeSource": "user" } },
+          "$type": "number", "$value": 150 }
       },
       "opacity": {
-        "disabled": { "$type": "number", "$value": 0.4,
-          "$extensions": { "com.tokenvault": { "subtype": "opacity", "subtypeSource": "auto", "figma": { "variableId": "VariableID:1:14", "collectionId": "VariableCollectionId:1:1", "modeId": "1:0", "scopes": ["OPACITY"] } } } }
+        "disabled": {
+          "$extensions": { "com.tokenvault": { "figma": { "collectionId": "VariableCollectionId:1:1", "modeId": "1:0", "scopes": ["OPACITY"], "variableId": "VariableID:1:14" }, "subtype": "opacity", "subtypeSource": "auto" } },
+          "$type": "number", "$value": 0.4 }
       },
       "space": {
-        "4": { "$type": "number", "$value": 4,
-          "$extensions": { "com.tokenvault": { "subtype": "spacing", "subtypeSource": "default", "figma": { "variableId": "VariableID:1:13", "collectionId": "VariableCollectionId:1:1", "modeId": "1:0", "scopes": ["ALL_SCOPES"] } } } }
+        "4": {
+          "$extensions": { "com.tokenvault": { "figma": { "collectionId": "VariableCollectionId:1:1", "modeId": "1:0", "scopes": ["ALL_SCOPES"], "variableId": "VariableID:1:13" }, "subtype": "spacing", "subtypeSource": "default" } },
+          "$type": "number", "$value": 4 }
       }
     },
     "ref": {
       "palette": {
-        "blue-500": { "$type": "color", "$value": "#2d7ff9",
-          "$extensions": { "com.tokenvault": { "figma": { "variableId": "VariableID:1:10", "collectionId": "VariableCollectionId:1:1", "modeId": "1:0", "scopes": ["ALL_SCOPES"] } } } }
+        "blue-500": {
+          "$description": "Primary accent ramp, step 500.",
+          "$extensions": { "com.tokenvault": { "figma": { "collectionId": "VariableCollectionId:1:1", "modeId": "1:0", "scopes": ["ALL_SCOPES"], "variableId": "VariableID:1:10" } } },
+          "$type": "color", "$value": "#2d7ff9" }
       }
     }
   }
@@ -150,17 +168,20 @@ Figma: collection **Core** (single mode `Value`) with `tv/ref/palette/blue-500`,
   "tv": {
     "color": {
       "bg": {
-        "canvas": { "$type": "color", "$value": "{tv.ref.palette.white}",
-          "$extensions": { "com.tokenvault": { "figma": { "variableId": "VariableID:2:10", "collectionId": "VariableCollectionId:2:1", "modeId": "2:0", "scopes": ["ALL_SCOPES"] } } } }
+        "canvas": {
+          "$extensions": { "com.tokenvault": { "figma": { "collectionId": "VariableCollectionId:2:1", "modeId": "2:0", "scopes": ["ALL_SCOPES"], "variableId": "VariableID:2:10" } } },
+          "$type": "color", "$value": "{tv.ref.palette.white}" }
       },
       "text": {
-        "accent": { "$type": "color", "$value": "{tv.ref.palette.blue-500}",
-          "$extensions": { "com.tokenvault": { "figma": { "variableId": "VariableID:2:11", "collectionId": "VariableCollectionId:2:1", "modeId": "2:0", "scopes": ["ALL_SCOPES"] } } } }
+        "accent": {
+          "$extensions": { "com.tokenvault": { "figma": { "collectionId": "VariableCollectionId:2:1", "modeId": "2:0", "scopes": ["ALL_SCOPES"], "variableId": "VariableID:2:11" } } },
+          "$type": "color", "$value": "{tv.ref.palette.blue-500}" }
       }
     },
     "flag": {
-      "high-contrast": { "$type": "boolean", "$value": false,
-        "$extensions": { "com.tokenvault": { "figma": { "variableId": "VariableID:2:12", "collectionId": "VariableCollectionId:2:1", "modeId": "2:0", "scopes": [] } } } }
+      "high-contrast": {
+        "$extensions": { "com.tokenvault": { "figma": { "collectionId": "VariableCollectionId:2:1", "modeId": "2:0", "scopes": [], "variableId": "VariableID:2:12" } } },
+        "$type": "boolean", "$value": false }
     }
   }
 }
@@ -174,22 +195,24 @@ Note that the `tv` root here comes from the variable *names*, not from the colle
 
 ```json
 {
-  "version": 1,
-  "generatedBy": "tokenvault",
-  "tokenSetOrder": ["Core/Value", "Theme/Light", "Theme/Dark"],
   "collections": [
-    { "name": "Core", "slug": "core", "$figmaCollectionId": "VariableCollectionId:1:1",
-      "modes": [{ "name": "Value", "slug": "value", "set": "Core/Value", "$figmaModeId": "1:0", "file": "core/value.json" }] },
-    { "name": "Theme", "slug": "theme", "$figmaCollectionId": "VariableCollectionId:2:1",
+    { "$figmaCollectionId": "VariableCollectionId:1:1",
+      "modes": [{ "$figmaModeId": "1:0", "file": "core/value.json", "name": "Value", "set": "Core/Value", "slug": "value" }],
+      "name": "Core", "slug": "core" },
+    { "$figmaCollectionId": "VariableCollectionId:2:1",
       "modes": [
-        { "name": "Light", "slug": "light", "set": "Theme/Light", "$figmaModeId": "2:0", "file": "theme/light.json" },
-        { "name": "Dark", "slug": "dark", "set": "Theme/Dark", "$figmaModeId": "2:1", "file": "theme/dark.json" }
-      ] }
+        { "$figmaModeId": "2:0", "file": "theme/light.json", "name": "Light", "set": "Theme/Light", "slug": "light" },
+        { "$figmaModeId": "2:1", "file": "theme/dark.json", "name": "Dark", "set": "Theme/Dark", "slug": "dark" }
+      ],
+      "name": "Theme", "slug": "theme" }
   ],
+  "generatedBy": "tokenvault",
   "themes": [
     { "name": "Light", "selectedTokenSets": ["Core/Value", "Theme/Light"] },
     { "name": "Dark", "selectedTokenSets": ["Core/Value", "Theme/Dark"] }
-  ]
+  ],
+  "tokenSetOrder": ["Core/Value", "Theme/Light", "Theme/Dark"],
+  "version": 1
 }
 ```
 
@@ -197,11 +220,11 @@ Note that the `tv` root here comes from the variable *names*, not from the colle
 
 ```json
 {
-  "version": 1,
-  "importedAt": "2026-09-01T00:00:00.000Z",
+  "counts": { "flagged": 0, "tokens": 11, "unconfirmedSubtypes": 1 },
+  "entries": [],
   "figmaFileKey": "abc123",
-  "counts": { "tokens": 11, "flagged": 0, "unconfirmedSubtypes": 1 },
-  "entries": []
+  "importedAt": "2026-09-01T00:00:00.000Z",
+  "version": 1
 }
 ```
 
@@ -211,7 +234,8 @@ Note that the `tv` root here comes from the variable *names*, not from the colle
 - Token files are Figma-file-specific — `figma.variableId` does not survive copying tokens into a different Figma file. Accepted: those ids are what make re-import matching and Phase 5 drift detection work, and the tokens are the source of truth for *this* file.
 - Style Dictionary gets a merged document with valid native references and no custom resolver, but will need a Phase 8 transform that reads `com.tokenvault.subtype` to attach units.
 - Every token carries an `$extensions` block, so files are more verbose than hand-written token JSON. Deterministic key ordering keeps the diffs readable anyway.
-- Theme composition beyond the single-multi-mode-collection case is deferred and visible in the report, not silently invented.
+- Theme composition beyond the single-multi-mode-collection case is deferred and visible in the report, not silently invented. A file with no multi-mode collection still gets one usable theme, whose name — and only its name — is synthesised (Amendment 1 §D).
+- Motion variables (`EASING`, `TIMING`) round-trip as report entries, not tokens, until a later phase (Amendment 1 §A). A file that leans on Figma's motion variables will see them all flagged.
 - No infra implication — everything here is files in a git repo, so the PRD §8 zero-cost constraint is untouched.
 
 ## Alternatives considered
@@ -231,6 +255,77 @@ Note that the `tv` root here comes from the variable *names*, not from the colle
 - **The flag/tag step's interaction design** (bulk-tag by name pattern? per-token?) — `@ux-designer`'s call; this ADR only fixes what that step writes.
 - **Name-prefix filtering and platform scoping.** The atlas pipeline treated only `atlas/`-prefixed variables as real tokens, excluded `*`-prefixed segments as design-tooling scaffolding, and parsed a `web`/`app`/`ios`/`android` segment out of the path. Issue #2 asks for none of this and Phase 2 imports every variable, but it is adjacent to collision handling and will resurface if a real file turns out to be full of non-token variables. Deferred, not designed for.
 
+## Amendment 1 — 2026-09-01 (Phase 2 implementation feedback)
+
+Building Phase 2 (issue #2) surfaced seven points where this ADR was ambiguous, self-contradictory, or silent. Each is resolved below. The sections above have been edited in place where they were simply *wrong* (the examples' key order); everything else is amended here and cross-referenced from the section it changes.
+
+### A. EASING and TIMING resolved types: deferred, with a landing zone
+
+Confirmed against `@figma/plugin-typings@1.137.0`: `VariableResolvedDataType` is `'BOOLEAN' | 'COLOR' | 'EASING' | 'FLOAT' | 'STRING' | 'TIMING'`. These are real, first-class variable types backing Figma's motion/animation features, not legacy or reserved values — `figma.variables.createVariable()` accepts them, `VariableValue` includes `MotionEasing`, and `AnimationStyle` properties bind to them.
+
+**Decision: Phase 2 does not import them.** A variable of either type produces an `unsupported-type` report entry and is not written. Reasons, so this is not re-derived:
+
+- **EASING** is not a scalar. `MotionEasing` is a tagged object — a named curve (`GENTLE`, `EASE_IN_AND_OUT`, `HOLD`, …), a cubic bézier, or a normalised spring. Mapping it needs a `$value` shape decision that DTCG only half-covers (`cubicBezier` exists; springs and named curves do not), which is a schema decision in its own right and not one Phase 2 needs.
+- **TIMING** is a scalar but its unit is unstated in the API, and §3's whole argument is that import must not bake a unit guess into the source of truth.
+
+**Intended landing zone** (not decided now, but recorded so the shape is not re-litigated): TIMING folds into the existing number mechanism — `$type: "number"`, `$value` the raw scalar, `subtype: "duration"`, `subtypeSource: "auto"`, since a natively-typed TIMING variable *is* self-describing. EASING needs its own ADR covering the `MotionEasing` → `$value` mapping. Neither is a new `$type`, consistent with §3.
+
+**Does this undercut §3's "duration/easing is never auto-detectable"?** Partly, and §3 has been narrowed. The original claim — from `e7098cf`/`eb32ea9` and PRD §6.1 — is about `VariableScope`, and that part still holds: there is no `DURATION` or `EASING` scope, so a FLOAT variable used as a duration remains undetectable, which is the common Tokens-Studio-shaped case and the one the flag/tag step exists for. What is now false is the unqualified "never auto-detectable, scoped or not": a TIMING or EASING variable is auto-detectable by `resolvedType`. **PRD §6.1's asymmetry bullet needs the same narrowing** — flagged to Shyam rather than edited here, since the PRD is not this agent's document.
+
+### B. Key order: §7 wins everywhere; the examples were wrong
+
+Alphabetical at every level, `$`-prefixed DTCG keys included. The examples in §3 and the worked Example section have been rewritten to match; they were the inconsistency, not §7.
+
+Rejected: `$type`/`$value` first for readability. It buys a little skimmability at the cost of a two-rule serializer — a leaf exception plus a general sort — that every future writer (Phase 4's editor, Phase 6's sync) has to implement identically or produce spurious diffs. §7's byte-identical guarantee is load-bearing for the diff view; readability is not.
+
+### C. `theme-composition` is a fourth report entry kind
+
+§5's three kinds are all *token*-scoped. A theme-composition problem is file-scoped: no token failed, no participant list exists, and calling it `unmappable-value` misleads anything filtering the report by kind. New kind `theme-composition`, with `reason` one of `ambiguous` (2+ multi-mode collections, §6), `synthesized-default` (§D below), or `no-collections`. Entries carry `message` only — no `path`, `set`, or `participants`.
+
+### D. Zero multi-mode collections: synthesise one `Default` theme
+
+There is exactly one possible composition, and §6's rule is against guessing *composition*, not against naming. Writing no themes for the very common simple-file case leaves the manifest useless to Phase 8's export, which globs by theme — a real usability cost paid to avoid inventing a five-letter string.
+
+So: when no collection has more than one mode and at least one collection was imported, generate a single theme named `Default` whose `selectedTokenSets` is every set in `tokenSetOrder`, plus a `theme-composition` / `synthesized-default` report entry recording that the *name* was invented and is safe to rename. With zero collections imported, write no themes and file `theme-composition` / `no-collections`.
+
+`Default` is a placeholder identifier, not product copy — `@ux-designer` or Shyam may rename it, and nothing depends on the string.
+
+### E. `set-slug` is a fourth collision kind
+
+Formally added to §5. Two collections whose names slugify to the same value would write to the same `tokens/<slug>/` files; the second silently clobbering the first is exactly the silent loss PRD §6.5.1 rules out. Same treatment as the other three: one collection wins, the others are not written, every participant is reported. Participants for this kind carry collection identity with empty `variableId`/`variableName`, since the contest is between collections.
+
+### F. Collision winner selection — minimise blast radius, not alphabetical order
+
+Supersedes §5's "first wins, sorted by collection name then variable name". Alphabetical order has no relationship to which token is correct, and in practice a junk or test collection sorting early can evict the legitimate token — taking every alias that pointed at it down with it.
+
+The ordering cannot make the *right* choice; only a rename in Figma can. What it can do is pick the loser whose removal breaks least. New comparator, applied to `same-set-case`, `cross-set`, and `token-group`; first criterion to differentiate wins:
+
+1. **Inbound alias count** — the number of distinct variables in the file whose value in any mode aliases this variable. Higher wins. This is the actual harm: dropping the referenced token cascades into every referrer.
+2. **Namespace ownership** — the number of other surviving variables in the same collection sharing the contested path's parent prefix. Higher wins. A collection that owns the surrounding namespace is the more likely home for the token.
+3. **Name order** — collection name, then variable name, then variable id. Unchanged, and still what guarantees a total, reproducible order.
+
+The report entry records which criterion decided it, as `winnerRule`: `"alias-references" | "namespace-majority" | "name-order"`. A winner nobody can explain is worse than a loser, and this keeps the report self-justifying.
+
+For `set-slug`, the collection-level analogue: more variables wins, then collection name, then id; `winnerRule` is `"variable-count"` or `"name-order"`.
+
+Rejected: ordering by `tokenSetOrder` position. That array is itself derived from collection-name sorting, so it carries no independent signal. Also rejected: Figma's `getLocalVariableCollectionsAsync()` return order — undocumented as stable, so nothing should be built on it.
+
+### G. Dangling aliases: write the reference, report it as its own kind
+
+Blessed as implemented, with the entry kind corrected. When a token's `$value` aliases a variable that was not written (a collision loser, or an unsupported type), the reference is still written — the target's name is real in Figma, the fix is a Figma-side rename, and after that rename the reference resolves with no further edit. Excluding the referring token instead would cascade: its own referrers would dangle, and one junk variable could unwrite a whole branch.
+
+But it is not an `unmappable-value` — the token *was* mapped and written. New kind `dangling-reference`, reason `alias-target-skipped`, on the written token. `alias-target-unknown` (target not in the file and not nameable) stays `unmappable-value`, because there it genuinely blocks the token.
+
+§F makes this rarer: the most-referenced variable now wins its collisions, so the common case no longer drops an alias target.
+
+### H. Float32 normalisation (no decision needed, recorded so nobody rediscovers it)
+
+Figma stores FLOAT variable values as 32-bit floats, so a variable a designer typed as `0.4` reads back as `0.4000000059604645`. Writing that verbatim is technically §3's "raw number" but defeats §7 — it makes numeric tokens unreadable and turns any Figma-side re-save into a spurious diff. Import writes the shortest decimal whose float32 rounding is bit-identical to the stored value. This is exact, not a rounding guess: the value still round-trips into Figma unchanged, and if a human typed it, that decimal is what they typed.
+
+### Implementation deltas
+
+Against the Phase 2 branch as built, four things change: the `theme-composition` kind (§C), the synthesised `Default` theme (§D), the `dangling-reference` kind (§G), and the winner comparator plus `winnerRule` field (§F). §A, §B, §E and §H bless what is already there.
+
 ## Precedent checked
 
 Validated against `~/Desktop/atlas/` (read-only), an older Tokens Studio–format pipeline over the same Figma-Variables source model:
@@ -245,6 +340,7 @@ Atlas's larger machinery (platform variants, multi-repo fan-out, program-token s
 
 - PRD §6.1, §6.2, §6.5.1, §9 Phase 2: `docs/prd.md`
 - GitHub issue #2 (Phase 2 acceptance criteria)
-- Clarification commits `e7098cf`, `eb32ea9` (opacity vs. duration/easing asymmetry)
+- Clarification commits `e7098cf`, `eb32ea9` (opacity vs. duration/easing asymmetry — narrowed by Amendment 1 §A)
+- `@figma/plugin-typings@1.137.0` — `VariableResolvedDataType`, `VariableValue`, `MotionEasing`, `VariableScope`
 - Prior-art pipeline: `~/Desktop/atlas/` (local, read-only — see "Precedent checked")
 - DTCG format spec (`$type`/`$value`/`$description`/`$extensions`, `{dot.path}` references)
