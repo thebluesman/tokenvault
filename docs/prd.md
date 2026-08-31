@@ -62,8 +62,9 @@ Token Studio is the de facto standard for git-backed design tokens in Figma, but
 ### 6.5 Figma Application
 
 #### 6.5.1 Import (Figma → tokens) — primary use case
-- Read all Variables (every collection and mode) and Styles from the current Figma file.
-- Convert into DTCG-compatible token JSON: collections/modes map to token sets/themes (§6.2); Figma's `/`-delimited variable names map to nested token groups.
+- Read all Variables and Styles from the current Figma file and convert into DTCG-compatible token JSON. These are two distinct Figma APIs with different data models, and are built as two separate import paths (see Build Plan §9 Phases 2–3):
+  - **Variables** — every collection and mode; collections/modes map to token sets/themes (§6.2); `/`-delimited variable names map to nested token groups. Covers color, number (spacing/sizing/radius), boolean, and string variable types.
+  - **Styles** — paint, text, effect, and grid styles (Figma's older, non-Variables system). Covers typography, shadow/effect, and other style-only token types that Variables don't carry.
 - Flag naming collisions and value types that don't map cleanly to a token (rather than silently dropping or mangling them).
 - Re-importable, not just one-time bootstrap — supports incrementally pulling in further Figma-side changes made outside the token workflow.
 
@@ -123,12 +124,14 @@ No component has a cost floor above $0 at solo/small-team usage; the only plausi
 ## 9. Build Plan (Phased, for Claude Code sessions)
 
 1. **Scaffold** — Figma plugin boilerplate (manifest, TypeScript setup, plugin UI shell).
-2. **Token schema + import from Figma** — define the JSON schema, then build the Variables/Styles → token JSON import (§6.5.1) against a real file so the schema is validated against actual data, not speculative examples. Add the in-plugin CRUD editor alongside it — no git sync yet.
-3. **Figma application** — apply tokens back to Figma Variables/Styles (§6.5.2) and drift detection (§6.5.3).
-4. **Git sync (PAT-based)** — push/pull token JSON to a GitHub repo, with a diff view before commit.
-5. **Themes, aliasing, math** — layer in multi-theme composition and token references.
-6. **Export pipeline** — wire up Style Dictionary, wire a GitHub Actions job to run it on push.
-7. **Polish** — sync status UI, error states, settings panel; decide whether to publish privately or to Figma Community.
+2. **Import — Variables** — define the token schema scoped to Variables-backed types (color, number, boolean, string), then build the Variables → token JSON import (§6.5.1): read every collection/mode, map to token sets/themes (§6.2), validate the schema against a real file. No editor, no Styles, no sync yet.
+3. **Import — Styles** — extend the schema for style-only token types (typography, shadow/effect, grid) and build the Styles → token JSON import (§6.5.1): paint, text, effect, and grid styles — Figma's separate, older API from Variables, so treated as its own phase rather than bundled into Phase 2.
+4. **Local editor** — in-plugin CRUD UI for browsing and editing the imported tokens (create/edit/delete, sets/groups) — no sync yet.
+5. **Figma application** — apply tokens back to Figma Variables/Styles (§6.5.2) and drift detection (§6.5.3).
+6. **Git sync (PAT-based)** — push/pull token JSON to a GitHub repo, with a diff view before commit.
+7. **Themes, aliasing, math** — layer in multi-theme composition and token references.
+8. **Export pipeline** — wire up Style Dictionary, wire a GitHub Actions job to run it on push.
+9. **Polish** — sync status UI, error states, settings panel; decide whether to publish privately or to Figma Community.
 
 ## 10. Success Metrics
 
