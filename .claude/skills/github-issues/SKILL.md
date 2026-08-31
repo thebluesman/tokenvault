@@ -41,7 +41,7 @@ One or more labels matching the PRD's feature areas (PRD §6):
 - `area:themes` — themes, modes, Variables mode switching (§6.2)
 - `area:aliasing` — math & aliasing, circular-reference detection (§6.3)
 - `area:git-sync` — push/pull, diff view, branch selection, auth (§6.4)
-- `area:figma-apply` — Variables/Styles application, drift detection (§6.5)
+- `area:figma-io` — Variables/Styles import, application, and drift detection (§6.5)
 - `area:export` — Style Dictionary pipeline, CI export (§6.6)
 - `area:plugin-ui` — plugin panel UI, sync status, settings (§6.7)
 - `area:infra` — build tooling, CI, repo scaffolding not tied to one feature

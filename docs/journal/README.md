@@ -6,4 +6,5 @@ Entries are pointers, not copies — the canonical artifact holds the detail; th
 
 ## Index
 
+- [2026-09](2026-09.md)
 - [2026-08](2026-08.md)

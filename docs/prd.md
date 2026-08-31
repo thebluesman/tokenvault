@@ -43,6 +43,7 @@ Token Studio is the de facto standard for git-backed design tokens in Figma, but
 - Create, edit, delete tokens grouped into sets (e.g. `core`, `semantic`, `component`).
 - Support standard token types: color, spacing, sizing, typography, border radius, shadow, opacity, duration/easing.
 - Token values stored in a DTCG-compatible JSON schema for portability.
+- **Duration/easing has no native Figma Variables/Styles type.** A number Variable is ambiguous (spacing? sizing? duration?) until the user says which it is. Sourced one of two ways: (a) during Variables import (§6.5.1), the user explicitly flags a number Variable as duration/easing rather than the importer guessing; or (b) entered manually in the plugin editor (Phase 4) when no corresponding Variable exists at all.
 
 ### 6.2 Themes & Modes
 - Multiple themes composed from combinations of token sets (e.g. `light`, `dark`, brand variants).
@@ -63,7 +64,7 @@ Token Studio is the de facto standard for git-backed design tokens in Figma, but
 
 #### 6.5.1 Import (Figma → tokens) — primary use case
 - Read all Variables and Styles from the current Figma file and convert into DTCG-compatible token JSON. These are two distinct Figma APIs with different data models, and are built as two separate import paths (see Build Plan §9 Phases 2–3):
-  - **Variables** — every collection and mode; collections/modes map to token sets/themes (§6.2); `/`-delimited variable names map to nested token groups. Covers color, number (spacing/sizing/radius), boolean, and string variable types.
+  - **Variables** — every collection and mode; collections/modes map to token sets/themes (§6.2); `/`-delimited variable names map to nested token groups. Covers color, number (spacing/sizing/radius/opacity), boolean, and string variable types. Number Variables are type-ambiguous by default — import surfaces an explicit flag/tag step rather than guessing silently, since a plain number could be spacing, sizing, opacity, or duration (§6.1).
   - **Styles** — paint, text, effect, and grid styles (Figma's older, non-Variables system). Covers typography, shadow/effect, and other style-only token types that Variables don't carry.
 - Flag naming collisions and value types that don't map cleanly to a token (rather than silently dropping or mangling them).
 - Re-importable, not just one-time bootstrap — supports incrementally pulling in further Figma-side changes made outside the token workflow.
