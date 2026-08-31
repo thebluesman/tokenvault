@@ -1,0 +1,6 @@
+.claude/.historian-last-seen
+.claude/settings.local.json
+.DS_Store
+node_modules/
+dist/
+.idea/
