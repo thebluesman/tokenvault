@@ -1,0 +1,16 @@
+{
+  "name": "tokenvault",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Figma plugin: design tokens as versioned DTCG-compatible JSON, synced with GitHub, applied to Variables/Styles, exported via Style Dictionary.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.99.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.2"
+  }
+}
