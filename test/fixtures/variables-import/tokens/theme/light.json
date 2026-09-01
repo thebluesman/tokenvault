@@ -1,0 +1,76 @@
+{
+  "tv": {
+    "color": {
+      "bg": {
+        "canvas": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:1:14",
+                "modeId": "1:1",
+                "scopes": [
+                  "FRAME_FILL"
+                ],
+                "variableId": "VariableID:1:15"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "{tv.ref.palette.white}"
+        }
+      },
+      "text": {
+        "accent": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:1:14",
+                "modeId": "1:1",
+                "scopes": [
+                  "TEXT_FILL"
+                ],
+                "variableId": "VariableID:1:16"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "{tv.ref.palette.blue-500}"
+        },
+        "muted": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:1:14",
+                "modeId": "1:1",
+                "scopes": [
+                  "TEXT_FILL"
+                ],
+                "variableId": "VariableID:1:17"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "#666666"
+        }
+      }
+    },
+    "flag": {
+      "high-contrast": {
+        "$extensions": {
+          "com.tokenvault": {
+            "figma": {
+              "collectionId": "VariableCollectionId:1:14",
+              "modeId": "1:1",
+              "scopes": [
+                "ALL_SCOPES"
+              ],
+              "variableId": "VariableID:1:18"
+            }
+          }
+        },
+        "$type": "boolean",
+        "$value": false
+      }
+    }
+  }
+}

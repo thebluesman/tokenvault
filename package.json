@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/test.mjs"
   },
   "devDependencies": {
     "@figma/plugin-typings": "^1.99.0",
