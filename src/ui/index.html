@@ -15,23 +15,33 @@
       * {
         box-sizing: border-box;
       }
+      html,
+      body {
+        height: 100%;
+      }
       body {
         margin: 0;
+        display: flex;
+        flex-direction: column;
         font-family: Inter, "Segoe UI", sans-serif;
         font-size: 11px;
         line-height: 1.45;
         color: #1a1a1a;
       }
       header {
-        position: sticky;
-        top: 0;
+        flex: none;
         z-index: 2;
+        background: #fff;
+        border-bottom: 1px solid var(--border);
+      }
+      .header-row {
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 10px 12px;
-        background: #fff;
-        border-bottom: 1px solid var(--border);
+        padding: 8px 12px;
+      }
+      .header-row + .header-row {
+        padding-top: 0;
       }
       header h1 {
         flex: 1;
@@ -41,7 +51,31 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      .tabs {
+        display: flex;
+        gap: 2px;
+        flex: 1;
+      }
+      .tab {
+        padding: 3px 10px;
+        border-radius: 5px;
+        border: 1px solid transparent;
+        background: none;
+        color: var(--muted);
+      }
+      .tab.active {
+        background: var(--bg-subtle);
+        border-color: var(--border);
+        color: #1a1a1a;
+      }
+      .tab:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
       main {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
         padding: 12px;
       }
       button {
@@ -67,12 +101,24 @@
         opacity: 0.45;
         cursor: default;
       }
-      select {
+      select,
+      input[type="text"],
+      input[type="search"],
+      textarea.field {
         font: inherit;
         padding: 2px 4px;
         border: 1px solid var(--border);
         border-radius: 4px;
         background: #fff;
+        color: inherit;
+      }
+      input:disabled {
+        background: var(--bg-subtle);
+        color: var(--muted);
+      }
+      input.invalid {
+        border-color: var(--warn);
+        background: var(--warn-bg);
       }
       section {
         margin-bottom: 18px;
@@ -127,6 +173,7 @@
         font-size: 10px;
         background: var(--bg-subtle);
         color: var(--muted);
+        white-space: nowrap;
       }
       .badge.needs {
         background: var(--warn-bg);
@@ -198,13 +245,385 @@
         color: var(--muted);
       }
       .hidden {
-        display: none;
+        display: none !important;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      /* ---------------- Tokens tab (Phase 4) ---------------- */
+
+      #tokens {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .filters {
+        flex: none;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .filters input[type="search"] {
+        width: 100%;
+        padding: 4px 6px;
+      }
+      .chips {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+      }
+      .chip {
+        padding: 2px 7px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: #fff;
+        color: var(--muted);
+        font: inherit;
+        cursor: pointer;
+      }
+      .chip.on {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .chip.warn.on {
+        border-color: var(--warn);
+        color: var(--warn);
+        background: var(--warn-bg);
+      }
+      #tokens-notices {
+        flex: none;
+        padding: 8px 12px 0;
+      }
+      #tokens-notices:empty {
+        padding: 0;
+      }
+      #tokens-scroll {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        position: relative;
+      }
+      #tokens-canvas {
+        position: relative;
+      }
+      .tnode {
+        position: absolute;
+        left: 0;
+        right: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--border);
+        overflow: hidden;
+      }
+      .tnode.group {
+        cursor: pointer;
+        background: #fff;
+      }
+      .tnode.group:hover,
+      .tnode.token:hover {
+        background: var(--bg-subtle);
+      }
+      .tline {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        height: 18px;
+      }
+      .tline.head {
+        height: 20px;
+      }
+      .caret {
+        width: 10px;
+        flex: none;
+        color: var(--muted);
+      }
+      .tname {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .tname.group-name {
+        font-family: Inter, "Segoe UI", sans-serif;
+        font-weight: 500;
+      }
+      .tname mark {
+        background: #fff2a8;
+        color: inherit;
+      }
+      .vline {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 18px;
+        min-width: 0;
+      }
+      .vline .val {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        cursor: text;
+      }
+      .vline .val.readonly {
+        cursor: default;
+        color: var(--muted);
+      }
+      .vline .val.edited {
+        color: var(--accent);
+      }
+      .setcode {
+        flex: none;
+        color: var(--muted);
+        font-size: 10px;
+        min-width: 38px;
+      }
+      .setcode.derived {
+        font-style: italic;
+      }
+      .glyph {
+        flex: none;
+        width: 12px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .swatch {
+        flex: none;
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        background-color: #fff;
+        background-image: linear-gradient(45deg, #ddd 25%, transparent 25%),
+          linear-gradient(-45deg, #ddd 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #ddd 75%),
+          linear-gradient(-45deg, transparent 75%, #ddd 75%);
+        background-size: 6px 6px;
+        background-position: 0 0, 0 3px, 3px -3px, -3px 0;
+      }
+      .swatch-wrap {
+        flex: none;
+        position: relative;
+        width: 12px;
+        height: 12px;
+      }
+      .swatch-fill {
+        position: absolute;
+        inset: 0;
+        border-radius: 3px;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+      }
+      .swatch.outlined {
+        background-image: none;
+        border-style: dashed;
+      }
+      .menu-btn {
+        flex: none;
+        border: none;
+        background: none;
+        padding: 0 3px;
+        color: var(--muted);
+        cursor: pointer;
+        line-height: 1;
+      }
+      .menu-btn:hover {
+        background: none;
+        color: #1a1a1a;
+      }
+      .count-right {
+        flex: none;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .inline-edit {
+        flex: 1;
+        min-width: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .popover {
+        position: fixed;
+        z-index: 40;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+        padding: 4px;
+        max-width: 300px;
+        max-height: 380px;
+        overflow: auto;
+      }
+      .popover .item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        padding: 4px 8px;
+        border: none;
+        background: none;
+        border-radius: 4px;
+        text-align: left;
+        cursor: pointer;
+      }
+      .popover .item:hover {
+        background: var(--bg-subtle);
+      }
+      .popover .item:disabled {
+        color: var(--muted);
+        cursor: default;
+      }
+      .popover .item:disabled:hover {
+        background: none;
+      }
+      .popover .group-label {
+        padding: 4px 8px 2px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-size: 10px;
+      }
+
+      #panel {
+        position: absolute;
+        inset: 0;
+        z-index: 20;
+        background: #fff;
+        display: flex;
+        flex-direction: column;
+      }
+      #panel .panel-head {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      #panel .panel-head .title {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      #panel .panel-body {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 12px;
+      }
+      .set-section {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px;
+        margin-bottom: 10px;
+      }
+      .set-section > h3 {
+        margin: 0 0 6px;
+        font-size: 11px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .field {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 5px;
+      }
+      .field > label {
+        flex: none;
+        width: 84px;
+        color: var(--muted);
+      }
+      .field > input,
+      .field > select {
+        flex: 1;
+        min-width: 0;
+      }
+      .field .unit {
+        flex: none;
+        width: 52px;
+      }
+      .field-note {
+        margin: -3px 0 6px 90px;
+        color: var(--warn);
+      }
+      .subrow {
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 6px;
+        margin-bottom: 6px;
+      }
+      .subrow > .subhead {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 4px;
+        color: var(--muted);
+      }
+      .subrow > .subhead .grow {
+        flex: 1;
+      }
+      .ref-chip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 6px;
+        border: 1px dashed var(--border);
+        border-radius: 4px;
+        background: var(--bg-subtle);
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        overflow: hidden;
+      }
+      .ref-chip .grow {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .provenance {
+        color: var(--muted);
+        margin-top: 6px;
+        word-break: break-all;
+      }
+      .conflict-box {
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--warn);
+        border-radius: 4px;
+        background: var(--warn-bg);
+        padding: 6px 8px;
+        margin-bottom: 8px;
+      }
+      .conflict-box .actions {
+        display: flex;
+        gap: 6px;
+        margin-top: 6px;
       }
       #toast {
         position: fixed;
         left: 50%;
         bottom: 12px;
         transform: translateX(-50%);
+        z-index: 60;
+        display: flex;
+        align-items: center;
+        gap: 10px;
         background: #1a1a1a;
         color: #fff;
         padding: 6px 12px;
@@ -212,29 +631,69 @@
         opacity: 0;
         transition: opacity 0.15s;
         pointer-events: none;
+        max-width: 92vw;
       }
       #toast.show {
         opacity: 1;
+        pointer-events: auto;
+      }
+      .toast-action {
+        border: none;
+        background: none;
+        color: #7cc4ff;
+        padding: 0;
+        font: inherit;
+        cursor: pointer;
+      }
+      .toast-action:hover {
+        background: none;
+        text-decoration: underline;
       }
       #clipboard {
         position: absolute;
         left: -9999px;
         top: 0;
       }
+      #views {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+      }
     </style>
   </head>
   <body>
     <header>
-      <h1 id="file-name">Tokenvault</h1>
-      <button id="scan" class="primary">Scan file</button>
+      <div class="header-row">
+        <h1 id="file-name">Tokenvault</h1>
+        <button id="scan" class="primary">Scan file</button>
+      </div>
+      <div class="header-row">
+        <nav class="tabs">
+          <button id="tab-import" class="tab active">Import</button>
+          <button id="tab-tokens" class="tab" disabled title="Scan the file first">Tokens</button>
+        </nav>
+        <!-- The header's state slot. Phase 4 puts the "Local edits · N" chip here; Phase 6's
+             sync pill lands in the same slot, absorbing this state as "uncommitted". -->
+        <div id="state-slot"></div>
+      </div>
     </header>
-    <main id="content">
-      <p class="empty" id="intro">
-        Reads every variable collection and mode (ADR-0002) and every paint, text, effect and grid
-        style (ADR-0003) in this file, and generates the merged DTCG token tree. Nothing is written
-        to Figma or to git — git sync lands in Phase 6.
-      </p>
-    </main>
+    <div id="views">
+      <main id="content">
+        <p class="empty" id="intro">
+          Reads every variable collection and mode (ADR-0002) and every paint, text, effect and grid
+          style (ADR-0003) in this file, and generates the merged DTCG token tree. Nothing is written
+          to Figma or to git — git sync lands in Phase 6.
+        </p>
+      </main>
+      <div id="tokens" class="hidden">
+        <div class="filters" id="tokens-filters"></div>
+        <div id="tokens-notices"></div>
+        <div id="tokens-scroll"><div id="tokens-canvas"></div></div>
+      </div>
+      <div id="panel" class="hidden"></div>
+    </div>
     <div id="toast"></div>
     <textarea id="clipboard"></textarea>
     <script>
