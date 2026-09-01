@@ -1,0 +1,121 @@
+{
+  "collections": [
+    {
+      "$figmaCollectionId": "VariableCollectionId:1:2",
+      "modes": [
+        {
+          "$figmaModeId": "1:0",
+          "file": "core/value.json",
+          "name": "Value",
+          "set": "Core/Value",
+          "slug": "value"
+        }
+      ],
+      "name": "Core",
+      "slug": "core"
+    },
+    {
+      "$figmaCollectionId": "VariableCollectionId:1:19",
+      "modes": [
+        {
+          "$figmaModeId": "1:3",
+          "file": "lab/value.json",
+          "name": "Value",
+          "set": "Lab/Value",
+          "slug": "value"
+        }
+      ],
+      "name": "Lab",
+      "slug": "lab"
+    },
+    {
+      "$figmaCollectionId": "VariableCollectionId:1:14",
+      "modes": [
+        {
+          "$figmaModeId": "1:1",
+          "file": "theme/light.json",
+          "name": "Light",
+          "set": "Theme/Light",
+          "slug": "light"
+        },
+        {
+          "$figmaModeId": "1:2",
+          "file": "theme/dark.json",
+          "name": "Dark",
+          "set": "Theme/Dark",
+          "slug": "dark"
+        }
+      ],
+      "name": "Theme",
+      "slug": "theme"
+    }
+  ],
+  "generatedBy": "tokenvault",
+  "styleSets": [
+    {
+      "file": "styles/paint.json",
+      "kind": "PAINT",
+      "name": "Paint",
+      "set": "Styles/Paint",
+      "slug": "paint"
+    },
+    {
+      "file": "styles/text.json",
+      "kind": "TEXT",
+      "name": "Text",
+      "set": "Styles/Text",
+      "slug": "text"
+    },
+    {
+      "file": "styles/effect.json",
+      "kind": "EFFECT",
+      "name": "Effect",
+      "set": "Styles/Effect",
+      "slug": "effect"
+    },
+    {
+      "file": "styles/grid.json",
+      "kind": "GRID",
+      "name": "Grid",
+      "set": "Styles/Grid",
+      "slug": "grid"
+    }
+  ],
+  "themes": [
+    {
+      "name": "Light",
+      "selectedTokenSets": [
+        "Styles/Paint",
+        "Styles/Text",
+        "Styles/Effect",
+        "Styles/Grid",
+        "Core/Value",
+        "Lab/Value",
+        "Theme/Light"
+      ]
+    },
+    {
+      "name": "Dark",
+      "selectedTokenSets": [
+        "Styles/Paint",
+        "Styles/Text",
+        "Styles/Effect",
+        "Styles/Grid",
+        "Core/Value",
+        "Lab/Value",
+        "Theme/Dark"
+      ]
+    }
+  ],
+  "tokenSetOrder": [
+    "Core/Value",
+    "Lab/Value",
+    "Theme/Light",
+    "Theme/Dark",
+    "Styles/Paint",
+    "Styles/Text",
+    "Styles/Effect",
+    "Styles/Grid"
+  ],
+  "version": 2
+}

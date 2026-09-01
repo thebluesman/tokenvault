@@ -6,7 +6,7 @@ Built incrementally with Claude Code, running entirely on free infrastructure. Z
 
 ## Status
 
-**Phase 2 (Figma Variables → token JSON import) in progress.** Phase 1's scaffold — plugin boilerplate, TypeScript, esbuild, UI shell — is done. See [`docs/prd.md` §9](docs/prd.md#9-build-plan-phased-for-claude-code-sessions) for the phased build plan and [`CLAUDE.md`](CLAUDE.md) for current phase status.
+**Phase 3 (Figma Styles → token JSON import) in progress.** Phase 1's scaffold and Phase 2's Variables import are done. See [`docs/prd.md` §9](docs/prd.md#9-build-plan-phased-for-claude-code-sessions) for the phased build plan and [`CLAUDE.md`](CLAUDE.md) for current phase status.
 
 ### Running the plugin locally
 
@@ -19,17 +19,33 @@ npm test
 
 In Figma desktop: **Plugins → Development → Import plugin from manifest…**, select `manifest.json` at the repo root, then run it from the same menu.
 
-### The Variables import
+### The import
 
-**Scan Variables** reads every local variable collection and every mode in the open file and
-generates the DTCG token tree defined by [ADR-0002](docs/adr/0002-variables-token-schema.md):
-one file per (collection, mode), plus `tokens/$manifest.json` and `tokens/$import-report.json`.
+**Scan file** reads two things in one pass and merges them into a single token tree.
+
+Every local variable collection and every mode becomes the DTCG token tree defined by
+[ADR-0002](docs/adr/0002-variables-token-schema.md): one file per (collection, mode), plus
+`tokens/$manifest.json` and `tokens/$import-report.json`.
 
 Number variables whose Figma `VariableScope` says nothing useful are tagged `spacing` with
 `subtypeSource: "default"` and listed for confirmation; duration and easing are never
 auto-detectable and only ever arrive as an explicit user tag (PRD §6.1). User tags are held in
 Figma's `clientStorage` until Phase 6 gives the plugin a real working copy to read them back
 from.
+
+Every local paint, text, effect and grid style becomes four synthetic, mode-free token sets under
+`tokens/styles/`, per [ADR-0003](docs/adr/0003-styles-token-schema.md) — paint → `color`, text →
+a DTCG `typography` composite, effect → a `shadow` composite, grid → a divergent `grid` type.
+`$manifest.json` goes to `version: 2` and grows a `styleSets` key; the style sets join every
+theme in first position.
+
+Styles and Variables are merged by `src/tokens/merge.ts`, which owns the shared collision pass.
+Where a style and a Variable land on the same token path the Variable wins and both are named in
+the report — except where the style's paint is *provably bound* to that Variable, which is
+reported as an informational `redundant-style` rather than a clash. Values that cannot become a
+token (gradients, image fills, stacked paints, blur-only effects) are flagged, never dropped, and
+composites that imported with something missing (an `AUTO` line height, a blur beside a shadow)
+are flagged as `partial-token`.
 
 Nothing is written to git yet — that's Phase 6. To get the generated tree onto disk, use
 **Copy whole tree as JSON** and:
@@ -39,12 +55,22 @@ pbpaste > /tmp/tree.json
 node scripts/write-tokens.mjs /tmp/tree.json .
 ```
 
+**Copy Figma scan (fixture input)** copies the raw scan instead, which is what
+`test/fixtures/*/`'s regression fixtures are rebuilt from:
+
+```
+pbpaste > test/fixtures/styles-import/styles-snapshot.json   # the `styles` half of the scan
+UPDATE_FIXTURE=1 npm test
+```
+
 ### Layout
 
 | Path | What lives there |
 |---|---|
 | `src/tokens/` | Pure conversion logic — schema, collisions, subtypes, serialization. No `figma` global. |
+| `src/tokens/merge.ts` | Composes both imports, runs the shared collision pass, emits the manifest and report. |
 | `src/figma/scan.ts` | The only module that calls the Figma Variables API; flattens it to a plain snapshot. |
+| `src/figma/scanStyles.ts` | The only module that calls the Figma Styles API; same boundary, four style kinds. |
 | `src/ui/` | The plugin iframe. |
 | `test/` | Unit tests over `src/tokens/`, run with `node --test` via esbuild (no test framework dependency). |
 

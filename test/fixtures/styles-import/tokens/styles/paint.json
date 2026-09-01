@@ -1,0 +1,17 @@
+{
+  "legacy": {
+    "scrim": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "styleId": "S:p3",
+            "styleKey": "p3p3p3p3",
+            "styleType": "PAINT"
+          }
+        }
+      },
+      "$type": "color",
+      "$value": "#00000099"
+    }
+  }
+}

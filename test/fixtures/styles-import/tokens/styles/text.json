@@ -1,0 +1,170 @@
+{
+  "body": {
+    "base": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "paragraphSpacing": "{tv.global.space.4}"
+            },
+            "fontStyle": "Regular",
+            "styleId": "S:t2",
+            "styleKey": "t2t2t2t2",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PIXELS",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 4,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Inter",
+        "fontSize": {
+          "unit": "px",
+          "value": 16
+        },
+        "fontWeight": 400,
+        "letterSpacing": {
+          "unit": "px",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 24
+        }
+      }
+    },
+    "emphasis": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "fontStyle": "Bold Italic",
+            "styleId": "S:t3",
+            "styleKey": "t3t3t3t3",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PIXELS",
+              "lineHeightUnit": "AUTO",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "UNDERLINE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Inter",
+        "fontSize": {
+          "unit": "px",
+          "value": 14
+        },
+        "fontWeight": 700,
+        "letterSpacing": {
+          "unit": "px",
+          "value": 0.2
+        }
+      }
+    }
+  },
+  "heading": {
+    "xl": {
+      "$description": "Page title.",
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "fontStyle": "Semibold",
+            "styleId": "S:t1",
+            "styleKey": "t1t1t1t1",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PERCENT",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Inter",
+        "fontSize": {
+          "unit": "px",
+          "value": 32
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": -0.015
+        },
+        "lineHeight": 1.2
+      }
+    }
+  },
+  "label": {
+    "caps": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "fontStyle": "Kräftig",
+            "styleId": "S:t4",
+            "styleKey": "t4t4t4t4",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "CAP_HEIGHT",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PERCENT",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "UPPER",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Söhne Breit",
+        "fontSize": {
+          "unit": "px",
+          "value": 12
+        },
+        "fontWeight": "Kräftig",
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0.04
+        },
+        "lineHeight": 1
+      }
+    }
+  }
+}

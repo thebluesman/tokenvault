@@ -1,0 +1,52 @@
+{
+  "layout": {
+    "baseline": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "styleId": "S:g2",
+            "styleKey": "g2g2g2g2",
+            "styleType": "GRID"
+          }
+        }
+      },
+      "$type": "grid",
+      "$value": [
+        {
+          "pattern": "grid",
+          "sectionSize": {
+            "unit": "px",
+            "value": 8
+          }
+        }
+      ]
+    },
+    "desktop": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "styleId": "S:g1",
+            "styleKey": "g1g1g1g1",
+            "styleType": "GRID"
+          }
+        }
+      },
+      "$type": "grid",
+      "$value": [
+        {
+          "alignment": "stretch",
+          "count": 12,
+          "gutter": {
+            "unit": "px",
+            "value": 24
+          },
+          "offset": {
+            "unit": "px",
+            "value": 32
+          },
+          "pattern": "columns"
+        }
+      ]
+    }
+  }
+}

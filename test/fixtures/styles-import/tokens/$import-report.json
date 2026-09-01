@@ -1,0 +1,285 @@
+{
+  "counts": {
+    "flagged": 13,
+    "partialTokens": 3,
+    "styles": 17,
+    "tokens": 31,
+    "unconfirmedSubtypes": 1
+  },
+  "entries": [
+    {
+      "kind": "collision",
+      "message": "2 styles across 2 style sets produce the token path \"legacy.scrim\", which would clash when their sets are merged into one theme. Kept \"Styles/Paint\" → \"legacy/scrim\" (no signal to separate them — decided by name order); the rest were not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "written",
+          "styleId": "S:p3",
+          "styleName": "legacy/scrim",
+          "variableId": "",
+          "variableName": ""
+        },
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:t5",
+          "styleName": "legacy/scrim",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "legacy.scrim",
+      "reason": "cross-set",
+      "winnerRule": "name-order"
+    },
+    {
+      "kind": "collision",
+      "message": "2 tokens across 2 sources produce the token path \"tv.color.text.accent\", which would clash when their sets are merged into one theme. Kept \"Theme\" → \"tv/color/text/accent\" (a Variable outranks a Style at the same path); the rest were not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:p2",
+          "styleName": "tv/color/text/accent",
+          "variableId": "",
+          "variableName": ""
+        },
+        {
+          "collectionId": "VariableCollectionId:1:14",
+          "collectionName": "Theme",
+          "outcome": "written",
+          "variableId": "VariableID:1:16",
+          "variableName": "tv/color/text/accent"
+        }
+      ],
+      "path": "tv.color.text.accent",
+      "reason": "cross-set",
+      "winnerRule": "source-precedence"
+    },
+    {
+      "kind": "collision",
+      "message": "2 variables across 2 collections produce the token path \"tv.ref.palette.white\", which would clash when their sets are merged into one theme. Kept \"Core\" → \"tv/ref/palette/white\" (most referenced by other variables); the rest were not written.",
+      "participants": [
+        {
+          "collectionId": "VariableCollectionId:1:2",
+          "collectionName": "Core",
+          "outcome": "written",
+          "variableId": "VariableID:1:4",
+          "variableName": "tv/ref/palette/white"
+        },
+        {
+          "collectionId": "VariableCollectionId:1:19",
+          "collectionName": "Lab",
+          "outcome": "skipped",
+          "variableId": "VariableID:1:24",
+          "variableName": "tv/ref/palette/white"
+        }
+      ],
+      "path": "tv.ref.palette.white",
+      "reason": "cross-set",
+      "winnerRule": "alias-references"
+    },
+    {
+      "kind": "collision",
+      "message": "2 variables in \"Lab\" produce the token path \"lab.color.Brand\" (names differ only by case). Kept \"lab/color/Brand\" (no signal to separate them — decided by name order); the rest were not written.",
+      "participants": [
+        {
+          "collectionId": "VariableCollectionId:1:19",
+          "collectionName": "Lab",
+          "outcome": "written",
+          "variableId": "VariableID:1:20",
+          "variableName": "lab/color/Brand"
+        },
+        {
+          "collectionId": "VariableCollectionId:1:19",
+          "collectionName": "Lab",
+          "outcome": "skipped",
+          "variableId": "VariableID:1:21",
+          "variableName": "lab/color/brand"
+        }
+      ],
+      "path": "lab.color.Brand",
+      "reason": "same-set-case",
+      "winnerRule": "name-order"
+    },
+    {
+      "kind": "collision",
+      "message": "Token path \"lab.color.token\" is also a group prefix of 1 other token; DTCG cannot represent a node that is both. Kept \"Lab\" → \"lab/color/token\" (no signal to separate them — decided by name order); the rest were not written.",
+      "participants": [
+        {
+          "collectionId": "VariableCollectionId:1:19",
+          "collectionName": "Lab",
+          "outcome": "written",
+          "variableId": "VariableID:1:22",
+          "variableName": "lab/color/token"
+        },
+        {
+          "collectionId": "VariableCollectionId:1:19",
+          "collectionName": "Lab",
+          "outcome": "skipped",
+          "variableId": "VariableID:1:23",
+          "variableName": "lab/color/token/nested"
+        }
+      ],
+      "path": "lab.color.token",
+      "reason": "token-group",
+      "winnerRule": "name-order"
+    },
+    {
+      "kind": "partial-token",
+      "message": "Text style \"body/emphasis\" was written, but its line height is AUTO, which is a Figma layout behaviour rather than a value.",
+      "omitted": [
+        "lineHeight"
+      ],
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "written",
+          "styleId": "S:t3",
+          "styleName": "body/emphasis",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "body.emphasis",
+      "reason": "auto-line-height",
+      "set": "Styles/Text"
+    },
+    {
+      "kind": "partial-token",
+      "message": "Text style \"label/caps\" was written, but the font style \"Kräftig\" is not in the weight keyword table, so fontWeight kept the raw string instead of a 100–900 number.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "written",
+          "styleId": "S:t4",
+          "styleName": "label/caps",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "label.caps",
+      "reason": "unmapped-font-style",
+      "set": "Styles/Text"
+    },
+    {
+      "kind": "partial-token",
+      "message": "Effect style \"elevation/frosted\" was written, but 1 effect (layer blur) has no DTCG representation and was left out of the shadow token.",
+      "omitted": [
+        "LAYER_BLUR"
+      ],
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "written",
+          "styleId": "S:e3",
+          "styleName": "elevation/frosted",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "elevation.frosted",
+      "reason": "unsupported-effect",
+      "set": "Styles/Effect"
+    },
+    {
+      "kind": "redundant-style",
+      "message": "Paint style \"tv/ref/palette/blue-500\" is bound to the variable \"tv/ref/palette/blue-500\", which already writes the token \"tv.ref.palette.blue-500\". The style adds nothing, so no duplicate token was written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:p1",
+          "styleName": "tv/ref/palette/blue-500",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "tv.ref.palette.blue-500",
+      "reason": "mirrors-variable",
+      "set": "Styles/Paint"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Paint style \"legacy/hero-gradient\" is a gradient linear, and DTCG's gradient type is still draft, so Phase 3 does not write one. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:p4",
+          "styleName": "legacy/hero-gradient",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "legacy.hero-gradient",
+      "reason": "gradient-paint",
+      "set": "Styles/Paint"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Paint style \"legacy/photo-wash\" has 2 visible paints stacked, which a single colour token cannot represent. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:p5",
+          "styleName": "legacy/photo-wash",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "legacy.photo-wash",
+      "reason": "multi-paint",
+      "set": "Styles/Paint"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Effect style \"effect/disabled-shadow\" has no visible effects. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:e5",
+          "styleName": "effect/disabled-shadow",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "effect.disabled-shadow",
+      "reason": "unsupported-effect",
+      "set": "Styles/Effect"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Effect style \"effect/scrim-blur\" has only 1 effect (background blur), none of which DTCG's shadow type can represent. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:e4",
+          "styleName": "effect/scrim-blur",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "effect.scrim-blur",
+      "reason": "unsupported-effect",
+      "set": "Styles/Effect"
+    }
+  ],
+  "figmaFileKey": "1ttG81lWKg74GUHq4aBnxl",
+  "importedAt": "2026-09-01T00:00:00.000Z",
+  "version": 1
+}

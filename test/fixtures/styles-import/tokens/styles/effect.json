@@ -1,0 +1,123 @@
+{
+  "elevation": {
+    "frosted": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "styleId": "S:e3",
+            "styleKey": "e3e3e3e3",
+            "styleType": "EFFECT"
+          }
+        }
+      },
+      "$type": "shadow",
+      "$value": {
+        "blur": {
+          "unit": "px",
+          "value": 6
+        },
+        "color": "#00000033",
+        "inset": false,
+        "offsetX": {
+          "unit": "px",
+          "value": 0
+        },
+        "offsetY": {
+          "unit": "px",
+          "value": 0
+        },
+        "spread": {
+          "unit": "px",
+          "value": 0
+        }
+      }
+    },
+    "inset": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "styleId": "S:e2",
+            "styleKey": "e2e2e2e2",
+            "styleType": "EFFECT"
+          }
+        }
+      },
+      "$type": "shadow",
+      "$value": {
+        "blur": {
+          "unit": "px",
+          "value": 4
+        },
+        "color": "#0000003d",
+        "inset": true,
+        "offsetX": {
+          "unit": "px",
+          "value": 0
+        },
+        "offsetY": {
+          "unit": "px",
+          "value": 2
+        },
+        "spread": {
+          "unit": "px",
+          "value": 0
+        }
+      }
+    },
+    "raised": {
+      "$description": "Resting elevation for cards.",
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "styleId": "S:e1",
+            "styleKey": "e1e1e1e1",
+            "styleType": "EFFECT"
+          }
+        }
+      },
+      "$type": "shadow",
+      "$value": [
+        {
+          "blur": {
+            "unit": "px",
+            "value": 2
+          },
+          "color": "#0d0d0d14",
+          "inset": false,
+          "offsetX": {
+            "unit": "px",
+            "value": 0
+          },
+          "offsetY": {
+            "unit": "px",
+            "value": 1
+          },
+          "spread": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        {
+          "blur": {
+            "unit": "px",
+            "value": 12
+          },
+          "color": "#0d0d0d1f",
+          "inset": false,
+          "offsetX": {
+            "unit": "px",
+            "value": 0
+          },
+          "offsetY": {
+            "unit": "px",
+            "value": 4
+          },
+          "spread": {
+            "unit": "px",
+            "value": -2
+          }
+        }
+      ]
+    }
+  }
+}

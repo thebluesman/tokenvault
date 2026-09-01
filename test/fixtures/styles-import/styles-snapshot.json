@@ -1,0 +1,299 @@
+{
+  "boundVariableNames": {
+    "VariableID:1:3": "tv/ref/palette/blue-500",
+    "VariableID:1:7": "tv/global/space/4"
+  },
+  "effect": [
+    {
+      "description": "Resting elevation for cards.",
+      "effects": [
+        {
+          "boundVariables": {},
+          "color": { "a": 0.08, "b": 0.05, "g": 0.05, "r": 0.05 },
+          "offsetX": 0,
+          "offsetY": 1,
+          "radius": 2,
+          "spread": 0,
+          "type": "DROP_SHADOW",
+          "visible": true
+        },
+        {
+          "boundVariables": {},
+          "color": { "a": 0.12, "b": 0.05, "g": 0.05, "r": 0.05 },
+          "offsetX": 0,
+          "offsetY": 4,
+          "radius": 12,
+          "spread": -2,
+          "type": "DROP_SHADOW",
+          "visible": true
+        }
+      ],
+      "id": "S:e1",
+      "key": "e1e1e1e1",
+      "name": "elevation/raised"
+    },
+    {
+      "description": "",
+      "effects": [
+        {
+          "boundVariables": {},
+          "color": { "a": 0.24, "b": 0, "g": 0, "r": 0 },
+          "offsetX": 0,
+          "offsetY": 2,
+          "radius": 4,
+          "spread": 0,
+          "type": "INNER_SHADOW",
+          "visible": true
+        }
+      ],
+      "id": "S:e2",
+      "key": "e2e2e2e2",
+      "name": "elevation/inset"
+    },
+    {
+      "description": "",
+      "effects": [
+        {
+          "boundVariables": {},
+          "color": { "a": 0.2, "b": 0, "g": 0, "r": 0 },
+          "offsetX": 0,
+          "offsetY": 0,
+          "radius": 6,
+          "spread": 0,
+          "type": "DROP_SHADOW",
+          "visible": true
+        },
+        { "boundVariables": {}, "radius": 8, "type": "LAYER_BLUR", "visible": true }
+      ],
+      "id": "S:e3",
+      "key": "e3e3e3e3",
+      "name": "elevation/frosted"
+    },
+    {
+      "description": "",
+      "effects": [
+        { "boundVariables": {}, "radius": 24, "type": "BACKGROUND_BLUR", "visible": true }
+      ],
+      "id": "S:e4",
+      "key": "e4e4e4e4",
+      "name": "effect/scrim-blur"
+    },
+    {
+      "description": "",
+      "effects": [
+        {
+          "boundVariables": {},
+          "color": { "a": 0.5, "b": 0, "g": 0, "r": 0 },
+          "offsetX": 0,
+          "offsetY": 8,
+          "radius": 16,
+          "spread": 0,
+          "type": "DROP_SHADOW",
+          "visible": false
+        }
+      ],
+      "id": "S:e5",
+      "key": "e5e5e5e5",
+      "name": "effect/disabled-shadow"
+    }
+  ],
+  "grid": [
+    {
+      "description": "",
+      "id": "S:g1",
+      "key": "g1g1g1g1",
+      "layoutGrids": [
+        {
+          "alignment": "STRETCH",
+          "count": 12,
+          "gutterSize": 24,
+          "offset": 32,
+          "pattern": "COLUMNS",
+          "visible": true
+        }
+      ],
+      "name": "layout/desktop"
+    },
+    {
+      "description": "",
+      "id": "S:g2",
+      "key": "g2g2g2g2",
+      "layoutGrids": [{ "pattern": "GRID", "sectionSize": 8, "visible": true }],
+      "name": "layout/baseline"
+    }
+  ],
+  "paint": [
+    {
+      "description": "",
+      "id": "S:p1",
+      "key": "p1p1p1p1",
+      "name": "tv/ref/palette/blue-500",
+      "paints": [
+        {
+          "boundVariableId": "VariableID:1:3",
+          "color": { "b": 0.9764705882352941, "g": 0.4980392156862745, "r": 0.17647058823529413 },
+          "opacity": 1,
+          "type": "SOLID",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "description": "Legacy accent, kept for the old marketing pages.",
+      "id": "S:p2",
+      "key": "p2p2p2p2",
+      "name": "tv/color/text/accent",
+      "paints": [
+        {
+          "color": { "b": 0.9764705882352941, "g": 0.4980392156862745, "r": 0.17647058823529413 },
+          "opacity": 1,
+          "type": "SOLID",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "description": "",
+      "id": "S:p3",
+      "key": "p3p3p3p3",
+      "name": "legacy/scrim",
+      "paints": [
+        {
+          "color": { "b": 0, "g": 0, "r": 0 },
+          "opacity": 0.6,
+          "type": "SOLID",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "description": "",
+      "id": "S:p4",
+      "key": "p4p4p4p4",
+      "name": "legacy/hero-gradient",
+      "paints": [{ "opacity": 1, "type": "GRADIENT_LINEAR", "visible": true }]
+    },
+    {
+      "description": "",
+      "id": "S:p5",
+      "key": "p5p5p5p5",
+      "name": "legacy/photo-wash",
+      "paints": [
+        { "opacity": 1, "type": "IMAGE", "visible": true },
+        {
+          "color": { "b": 0, "g": 0, "r": 0 },
+          "opacity": 0.3,
+          "type": "SOLID",
+          "visible": true
+        }
+      ]
+    }
+  ],
+  "text": [
+    {
+      "boundVariables": {},
+      "description": "Page title.",
+      "fontFamily": "Inter",
+      "fontSize": 32,
+      "fontStyle": "Semibold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:t1",
+      "key": "t1t1t1t1",
+      "leadingTrim": "NONE",
+      "letterSpacing": { "unit": "PERCENT", "value": -1.5 },
+      "lineHeight": { "unit": "PERCENT", "value": 120 },
+      "listSpacing": 0,
+      "name": "heading/xl",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": { "paragraphSpacing": "VariableID:1:7" },
+      "description": "",
+      "fontFamily": "Inter",
+      "fontSize": 16,
+      "fontStyle": "Regular",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:t2",
+      "key": "t2t2t2t2",
+      "leadingTrim": "NONE",
+      "letterSpacing": { "unit": "PIXELS", "value": 0 },
+      "lineHeight": { "unit": "PIXELS", "value": 24 },
+      "listSpacing": 0,
+      "name": "body/base",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 4,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {},
+      "description": "",
+      "fontFamily": "Inter",
+      "fontSize": 14,
+      "fontStyle": "Bold Italic",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:t3",
+      "key": "t3t3t3t3",
+      "leadingTrim": "NONE",
+      "letterSpacing": { "unit": "PIXELS", "value": 0.2 },
+      "lineHeight": { "unit": "AUTO" },
+      "listSpacing": 0,
+      "name": "body/emphasis",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "UNDERLINE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {},
+      "description": "",
+      "fontFamily": "Söhne Breit",
+      "fontSize": 12,
+      "fontStyle": "Kräftig",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:t4",
+      "key": "t4t4t4t4",
+      "leadingTrim": "CAP_HEIGHT",
+      "letterSpacing": { "unit": "PERCENT", "value": 4 },
+      "lineHeight": { "unit": "PERCENT", "value": 100 },
+      "listSpacing": 0,
+      "name": "label/caps",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "UPPER",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {},
+      "description": "",
+      "fontFamily": "Inter",
+      "fontSize": 16,
+      "fontStyle": "Regular",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:t5",
+      "key": "t5t5t5t5",
+      "leadingTrim": "NONE",
+      "letterSpacing": { "unit": "PIXELS", "value": 0 },
+      "lineHeight": { "unit": "PERCENT", "value": 150 },
+      "listSpacing": 0,
+      "name": "legacy/scrim",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    }
+  ]
+}
