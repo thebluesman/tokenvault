@@ -66,6 +66,38 @@ test("the real file exercises every collision kind ADR §5 defines", () => {
   }
 });
 
+test("every collision in the real file records which criterion picked the winner", () => {
+  for (const entry of run().report.entries) {
+    if (entry.kind !== "collision") continue;
+    assert.ok(entry.winnerRule, `${entry.reason} has no winnerRule`);
+  }
+});
+
+test("the legitimate token wins the cross-set clash regardless of collection name", () => {
+  // The bug Amendment 1 §F fixes, held against real data. This collection was originally called
+  // "Collision Lab", which sorts before "Core" — under the superseded alphabetical rule the junk
+  // collection evicted the real palette token and dangled the Theme alias pointing at it. Now
+  // Core's token wins on inbound alias count, and renaming the collection cannot change that.
+  const renamed: FileSnapshot = {
+    ...snapshot,
+    collections: snapshot.collections.map((collection) =>
+      collection.name === "Lab" ? { ...collection, name: "Aaa Collision Lab" } : collection
+    ),
+  };
+
+  const result = buildImport(renamed, { userSubtypes, importedAt: IMPORTED_AT });
+  const clash = result.report.entries.find((entry) => entry.reason === "cross-set");
+  assert.ok(clash);
+  assert.equal(clash.winnerRule, "alias-references");
+  assert.equal(clash.participants?.find((p) => p.outcome === "written")?.collectionName, "Core");
+
+  // And the Theme alias that pointed at it still resolves — nothing dangles.
+  assert.equal(
+    result.report.entries.some((entry) => entry.kind === "dangling-reference"),
+    false
+  );
+});
+
 test("re-import reads its own user tags back out of the fixture it generated", () => {
   // ADR §3's round trip: the tags in `user-subtypes.json` are exactly the ones recoverable from
   // the generated token files, so a re-import preserves them without being told again.

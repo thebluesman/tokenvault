@@ -136,8 +136,8 @@ test("an alias to a library variable is named from aliasTargetNames rather than 
     tokenAt(fileAt(result.files, "tokens/local/value.json"), "brand.primary")?.$value,
     "{lib.palette.blue}"
   );
-  // The only entry is the theme note this single-mode file always produces.
-  assert.deepEqual(reasons(result.report.entries), ["theme-composition-unnamed"]);
+  // The only entry is the synthesised-theme note this single-mode file always produces.
+  assert.deepEqual(reasons(result.report.entries), ["synthesized-default"]);
 });
 
 test("an unnameable alias target is flagged, not written as a bogus reference", () => {
@@ -271,14 +271,36 @@ test("two multi-mode collections generate no themes and file a report entry inst
   );
 
   assert.deepEqual(result.manifest.themes, []);
-  assert.equal(reasons(result.report.entries).includes("theme-composition-ambiguous"), true);
+  const entry = entryFor(result.report.entries, "ambiguous");
+  assert.equal(entry.kind, "theme-composition");
+  // File-scoped, so no participants and no contested path (Amendment 1 §C).
+  assert.equal(entry.participants, undefined);
+  assert.equal(entry.path, undefined);
 });
 
-test("no multi-mode collection means no theme to name, and that is reported too", () => {
+test("no multi-mode collection synthesises a single Default theme over every set", () => {
+  // Amendment 1 §D — one possible composition is not a guess; only the name is invented.
   const core = collection("c1", "Core", [["m1", "Value"]]);
-  const result = build(snapshot([core], [variable("v1", "a/b", core.id, "COLOR", { m1: { r: 0, g: 0, b: 0 } })]));
+  const extra = collection("c2", "Extra", [["m2", "Value"]]);
+  const result = build(
+    snapshot([core, extra], [
+      variable("v1", "a/b", core.id, "COLOR", { m1: { r: 0, g: 0, b: 0 } }),
+      variable("v2", "c/d", extra.id, "COLOR", { m2: { r: 1, g: 1, b: 1 } }),
+    ])
+  );
+
+  assert.deepEqual(result.manifest.themes, [
+    { name: "Default", selectedTokenSets: ["Core/Value", "Extra/Value"] },
+  ]);
+  const entry = entryFor(result.report.entries, "synthesized-default");
+  assert.equal(entry.kind, "theme-composition");
+  assert.match(entry.message, /safe to rename/);
+});
+
+test("a file with no collections at all gets no theme and says so", () => {
+  const result = build(snapshot([], []));
   assert.deepEqual(result.manifest.themes, []);
-  assert.equal(reasons(result.report.entries).includes("theme-composition-unnamed"), true);
+  assert.equal(entryFor(result.report.entries, "no-collections").kind, "theme-composition");
 });
 
 // ---------------------------------------------------------------------------
@@ -307,7 +329,7 @@ test("a case-only clash inside one set keeps the first and reports every partici
   const entry = entryFor(result.report.entries, "same-set-case");
   assert.equal(entry.kind, "collision");
   assert.equal(entry.path, "color.Brand");
-  assert.deepEqual(entry.participants.map((p) => [p.variableId, p.outcome]), [
+  assert.deepEqual(entry.participants?.map((p) => [p.variableId, p.outcome]), [
     ["v1", "written"],
     ["v2", "skipped"],
   ]);
@@ -330,7 +352,7 @@ test("a token/group clash is reported and the group side is dropped, never mangl
 
   const entry = entryFor(result.report.entries, "token-group");
   assert.equal(entry.path, "color.brand");
-  assert.deepEqual(entry.participants.map((p) => [p.variableId, p.outcome]), [
+  assert.deepEqual(entry.participants?.map((p) => [p.variableId, p.outcome]), [
     ["v1", "written"],
     ["v2", "skipped"],
   ]);
@@ -351,7 +373,7 @@ test("the same path from two collections is a cross-set clash, not an override",
   );
 
   const entry = entryFor(result.report.entries, "cross-set");
-  assert.deepEqual(entry.participants.map((p) => [p.collectionName, p.outcome]), [
+  assert.deepEqual(entry.participants?.map((p) => [p.collectionName, p.outcome]), [
     ["Core", "written"],
     ["Extra", "skipped"],
   ]);
@@ -379,7 +401,7 @@ test("a collision loser is excluded from every mode file of its collection", () 
   assert.equal(tokenAt(fileAt(result.files, "tokens/theme/dark.json"), "color.brand"), undefined);
 });
 
-test("first-wins ordering is by collection name then variable name, not input order", () => {
+test("with no signal to separate them, name order decides and says so", () => {
   const zeta = collection("c1", "Zeta", [["m1", "Value"]]);
   const alpha = collection("c2", "Alpha", [["m2", "Value"]]);
   const result = build(
@@ -389,7 +411,9 @@ test("first-wins ordering is by collection name then variable name, not input or
     ])
   );
 
-  assert.equal(entryFor(result.report.entries, "cross-set").participants[0].collectionName, "Alpha");
+  const entry = entryFor(result.report.entries, "cross-set");
+  assert.equal(entry.winnerRule, "name-order");
+  assert.equal(entry.participants?.[0].collectionName, "Alpha");
 });
 
 test("collections whose names slug to the same directory do not overwrite each other", () => {
@@ -408,18 +432,30 @@ test("collections whose names slug to the same directory do not overwrite each o
   assert.equal(tokenAt(fileAt(result.files, "tokens/core/value.json"), "c.d"), undefined);
 });
 
-test("an alias to a token that lost a collision is flagged as a dangling reference", () => {
+test("a token aliasing a collision loser is still written, and flagged as dangling", () => {
+  // Amendment 1 §G: the reference is real in Figma and resolves the moment the clash is
+  // renamed, so excluding the referring token would cascade for no benefit.
   const core = collection("c1", "Core", [["m1", "Value"]]);
   const extra = collection("c2", "Extra", [["m2", "Value"]]);
   const result = build(
     snapshot([core, extra], [
       variable("v1", "color/brand", core.id, "COLOR", { m1: { r: 0, g: 0, b: 0 } }),
       variable("v2", "color/brand", extra.id, "COLOR", { m2: { r: 1, g: 1, b: 1 } }),
-      variable("v3", "color/use", core.id, "COLOR", { m1: alias("v2") }),
+      // Two referrers to Extra's, one to Core's — so Core's loses and v4 is left dangling.
+      variable("v3", "extra/useA", extra.id, "COLOR", { m2: alias("v2") }),
+      variable("v4", "extra/useB", extra.id, "COLOR", { m2: alias("v2") }),
+      variable("v5", "core/use", core.id, "COLOR", { m1: alias("v1") }),
     ])
   );
 
-  assert.equal(reasons(result.report.entries).includes("alias-target-skipped"), true);
+  const entry = entryFor(result.report.entries, "alias-target-skipped");
+  assert.equal(entry.kind, "dangling-reference");
+
+  // The referring token is written, reference intact.
+  assert.equal(
+    tokenAt(fileAt(result.files, "tokens/core/value.json"), "core.use")?.$value,
+    "{color.brand}"
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -523,4 +559,147 @@ test("report entries are sorted, so a rerun diffs cleanly", () => {
   const first = build(input).report.entries;
   const reversed = build({ ...input, variables: input.variables.slice().reverse() }).report.entries;
   assert.deepEqual(first, reversed);
+});
+
+// ---------------------------------------------------------------------------
+// Winner selection — Amendment 1 §F (blast radius, not alphabetical order)
+// ---------------------------------------------------------------------------
+
+test("the most-referenced participant wins, even when it sorts last alphabetically", () => {
+  // The case the amendment exists for: under the superseded "collection name first" rule Alpha
+  // would win and take Zeta's two referrers down with it.
+  const alpha = collection("c1", "Alpha", [["m1", "Value"]]);
+  const zeta = collection("c2", "Zeta", [["m2", "Value"]]);
+  const result = build(
+    snapshot([alpha, zeta], [
+      variable("v1", "color/brand", alpha.id, "COLOR", { m1: { r: 0, g: 0, b: 0 } }),
+      variable("v2", "color/brand", zeta.id, "COLOR", { m2: { r: 1, g: 1, b: 1 } }),
+      variable("v3", "zeta/a", zeta.id, "COLOR", { m2: alias("v2") }),
+      variable("v4", "zeta/b", zeta.id, "COLOR", { m2: alias("v2") }),
+    ])
+  );
+
+  const entry = entryFor(result.report.entries, "cross-set");
+  assert.equal(entry.winnerRule, "alias-references");
+  assert.deepEqual(entry.participants?.map((p) => [p.collectionName, p.outcome]), [
+    ["Alpha", "skipped"],
+    ["Zeta", "written"],
+  ]);
+
+  assert.ok(tokenAt(fileAt(result.files, "tokens/zeta/value.json"), "color.brand"));
+  assert.equal(tokenAt(fileAt(result.files, "tokens/alpha/value.json"), "color.brand"), undefined);
+});
+
+test("a variable aliasing the same target in several modes counts as one referrer", () => {
+  const core = collection("c1", "Core", [["m1", "Value"]]);
+  const theme = collection("c2", "Theme", [["t0", "Light"], ["t1", "Dark"]]);
+  const result = build(
+    snapshot([core, theme], [
+      // Two genuinely distinct referrers for Core's, one double-mode referrer for Theme's.
+      variable("v1", "color/brand", core.id, "COLOR", { m1: { r: 0, g: 0, b: 0 } }),
+      variable("v2", "color/brand", theme.id, "COLOR", { t0: { r: 1, g: 1, b: 1 }, t1: { r: 0, g: 0, b: 0 } }),
+      variable("v3", "core/a", core.id, "COLOR", { m1: alias("v1") }),
+      variable("v4", "core/b", core.id, "COLOR", { m1: alias("v1") }),
+      variable("v5", "theme/a", theme.id, "COLOR", { t0: alias("v2"), t1: alias("v2") }),
+    ])
+  );
+
+  const entry = entryFor(result.report.entries, "cross-set");
+  assert.equal(entry.winnerRule, "alias-references");
+  assert.equal(entry.participants?.find((p) => p.outcome === "written")?.collectionName, "Core");
+});
+
+test("with aliases tied, the collection owning more of the surrounding namespace wins", () => {
+  const alpha = collection("c1", "Alpha", [["m1", "Value"]]);
+  const zeta = collection("c2", "Zeta", [["m2", "Value"]]);
+  const result = build(
+    snapshot([alpha, zeta], [
+      variable("v1", "ui/color/brand", alpha.id, "COLOR", { m1: { r: 0, g: 0, b: 0 } }),
+      variable("v2", "ui/color/brand", zeta.id, "COLOR", { m2: { r: 1, g: 1, b: 1 } }),
+      // Zeta owns the rest of `ui.color`, so it is the more likely home for the token.
+      variable("v3", "ui/color/accent", zeta.id, "COLOR", { m2: { r: 1, g: 0, b: 0 } }),
+      variable("v4", "ui/color/muted", zeta.id, "COLOR", { m2: { r: 0, g: 1, b: 0 } }),
+      // Alpha has variables, but nowhere near the contested path.
+      variable("v5", "spacing/small", alpha.id, "COLOR", { m1: { r: 0, g: 0, b: 1 } }),
+    ])
+  );
+
+  const entry = entryFor(result.report.entries, "cross-set");
+  assert.equal(entry.winnerRule, "namespace-majority");
+  assert.equal(entry.participants?.find((p) => p.outcome === "written")?.collectionName, "Zeta");
+});
+
+test("winnerRule is recorded on same-set-case and token-group collisions too", () => {
+  const core = collection("c1", "Core", [["m1", "Value"]]);
+  const result = build(
+    snapshot([core], [
+      variable("v1", "color/Brand", core.id, "COLOR", { m1: { r: 0, g: 0, b: 0 } }),
+      variable("v2", "color/brand", core.id, "COLOR", { m1: { r: 1, g: 1, b: 1 } }),
+      variable("v3", "size/token", core.id, "COLOR", { m1: { r: 0, g: 0, b: 1 } }),
+      variable("v4", "size/token/nested", core.id, "COLOR", { m1: { r: 0, g: 1, b: 0 } }),
+    ])
+  );
+
+  assert.equal(entryFor(result.report.entries, "same-set-case").winnerRule, "name-order");
+  assert.equal(entryFor(result.report.entries, "token-group").winnerRule, "name-order");
+});
+
+test("a referenced token beats an unreferenced one inside a token/group clash", () => {
+  const core = collection("c1", "Core", [["m1", "Value"]]);
+  const result = build(
+    snapshot([core], [
+      variable("v1", "color/brand", core.id, "COLOR", { m1: { r: 0, g: 0, b: 0 } }),
+      variable("v2", "color/brand/primary", core.id, "COLOR", { m1: { r: 1, g: 1, b: 1 } }),
+      variable("v3", "use/it", core.id, "COLOR", { m1: alias("v2") }),
+    ])
+  );
+
+  const entry = entryFor(result.report.entries, "token-group");
+  assert.equal(entry.winnerRule, "alias-references");
+  // The nested token is referenced, so the bare `color.brand` is the one dropped.
+  const tree = fileAt(result.files, "tokens/core/value.json");
+  assert.ok(tokenAt(tree, "color.brand.primary"));
+  assert.equal(tokenAt(tree, "color.brand"), undefined);
+});
+
+test("a slug clash is won by the collection with more variables", () => {
+  const big = collection("c1", "Core", [["m1", "Value"]]);
+  const small = collection("c2", "core!", [["m2", "Value"]]);
+  const result = build(
+    snapshot([small, big], [
+      variable("v1", "a/b", big.id, "COLOR", { m1: { r: 0, g: 0, b: 0 } }),
+      variable("v2", "a/c", big.id, "COLOR", { m1: { r: 0, g: 0, b: 1 } }),
+      variable("v3", "z/z", small.id, "COLOR", { m2: { r: 1, g: 1, b: 1 } }),
+    ])
+  );
+
+  const entry = entryFor(result.report.entries, "set-slug");
+  assert.equal(entry.winnerRule, "variable-count");
+  assert.equal(entry.participants?.find((p) => p.outcome === "written")?.collectionName, "Core");
+  // Participants carry collection identity only — the contest is between collections (§E).
+  assert.deepEqual(entry.participants?.map((p) => p.variableId), ["", ""]);
+});
+
+test("an evenly matched slug clash falls back to name order", () => {
+  const a = collection("c1", "Core", [["m1", "Value"]]);
+  const b = collection("c2", "core!", [["m2", "Value"]]);
+  const result = build(
+    snapshot([a, b], [
+      variable("v1", "a/b", a.id, "COLOR", { m1: { r: 0, g: 0, b: 0 } }),
+      variable("v2", "z/z", b.id, "COLOR", { m2: { r: 1, g: 1, b: 1 } }),
+    ])
+  );
+  assert.equal(entryFor(result.report.entries, "set-slug").winnerRule, "name-order");
+});
+
+test("winner selection does not depend on the order Figma returns variables", () => {
+  const alpha = collection("c1", "Alpha", [["m1", "Value"]]);
+  const zeta = collection("c2", "Zeta", [["m2", "Value"]]);
+  const input = snapshot([alpha, zeta], [
+    variable("v1", "color/brand", alpha.id, "COLOR", { m1: { r: 0, g: 0, b: 0 } }),
+    variable("v2", "color/brand", zeta.id, "COLOR", { m2: { r: 1, g: 1, b: 1 } }),
+    variable("v3", "zeta/a", zeta.id, "COLOR", { m2: alias("v2") }),
+  ]);
+
+  assert.equal(serializeAll(input), serializeAll({ ...input, variables: input.variables.slice().reverse() }));
 });

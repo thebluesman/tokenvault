@@ -129,7 +129,25 @@ export interface Manifest {
   themes: ManifestTheme[];
 }
 
-export type ReportEntryKind = "collision" | "unmappable-value" | "unsupported-type";
+export type ReportEntryKind =
+  | "collision"
+  | "unmappable-value"
+  | "unsupported-type"
+  /** File-scoped, not token-scoped: no participants, no path. Amendment 1 §C. */
+  | "theme-composition"
+  /** A token that WAS written, whose `$value` references something that was not. Amendment 1 §G. */
+  | "dangling-reference";
+
+/**
+ * Which criterion decided a collision, so the report can justify itself (Amendment 1 §F).
+ *
+ * `variable-count` applies only to `set-slug`, where the contest is between collections.
+ */
+export type WinnerRule =
+  | "alias-references"
+  | "namespace-majority"
+  | "name-order"
+  | "variable-count";
 
 export interface ReportParticipant {
   variableId: string;
@@ -149,7 +167,10 @@ export interface ReportEntry {
   path?: string;
   /** Set identifier (`"<Collection>/<Mode>"`) where the entry is mode-specific. */
   set?: string;
-  participants: ReportParticipant[];
+  /** Collisions only: which criterion picked the winner (Amendment 1 §F). */
+  winnerRule?: WinnerRule;
+  /** Absent on file-scoped entries — `theme-composition` has no participants (Amendment 1 §C). */
+  participants?: ReportParticipant[];
 }
 
 export interface ImportReport {

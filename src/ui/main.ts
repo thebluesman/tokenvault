@@ -206,8 +206,10 @@ function renderReport(entries: ReportEntry[]): HTMLElement {
     head.appendChild(el("span", "kind", `${entry.kind} · ${entry.reason}`));
     box.appendChild(head);
     box.appendChild(el("div", undefined, entry.message));
-    if (entry.participants.length > 0) {
-      const names = entry.participants
+    // `theme-composition` entries are file-scoped and carry no participants (Amendment 1 §C).
+    const participants = entry.participants ?? [];
+    if (participants.length > 0) {
+      const names = participants
         .map((participant) => `${participant.outcome === "written" ? "kept" : "skipped"}: ${participant.collectionName}/${participant.variableName || "(collection)"}`)
         .join("  ·  ");
       box.appendChild(el("div", "meta", names));

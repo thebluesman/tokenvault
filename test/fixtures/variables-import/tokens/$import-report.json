@@ -7,7 +7,7 @@
   "entries": [
     {
       "kind": "collision",
-      "message": "2 variables across 2 collections produce the token path \"tv.ref.palette.white\", which would clash when their sets are merged into one theme. Kept \"Core\" → \"tv/ref/palette/white\"; the rest were not written.",
+      "message": "2 variables across 2 collections produce the token path \"tv.ref.palette.white\", which would clash when their sets are merged into one theme. Kept \"Core\" → \"tv/ref/palette/white\" (most referenced by other variables); the rest were not written.",
       "participants": [
         {
           "collectionId": "VariableCollectionId:1:2",
@@ -25,11 +25,12 @@
         }
       ],
       "path": "tv.ref.palette.white",
-      "reason": "cross-set"
+      "reason": "cross-set",
+      "winnerRule": "alias-references"
     },
     {
       "kind": "collision",
-      "message": "2 variables in \"Lab\" produce the token path \"lab.color.Brand\" (names differ only by case). Kept \"lab/color/Brand\"; the rest were not written.",
+      "message": "2 variables in \"Lab\" produce the token path \"lab.color.Brand\" (names differ only by case). Kept \"lab/color/Brand\" (no signal to separate them — decided by name order); the rest were not written.",
       "participants": [
         {
           "collectionId": "VariableCollectionId:1:19",
@@ -47,11 +48,12 @@
         }
       ],
       "path": "lab.color.Brand",
-      "reason": "same-set-case"
+      "reason": "same-set-case",
+      "winnerRule": "name-order"
     },
     {
       "kind": "collision",
-      "message": "Token path \"lab.color.token\" is also a group prefix of 1 other token; DTCG cannot represent a node that is both. Kept \"Lab\" → \"lab/color/token\"; the rest were not written.",
+      "message": "Token path \"lab.color.token\" is also a group prefix of 1 other token; DTCG cannot represent a node that is both. Kept \"Lab\" → \"lab/color/token\" (no signal to separate them — decided by name order); the rest were not written.",
       "participants": [
         {
           "collectionId": "VariableCollectionId:1:19",
@@ -69,7 +71,8 @@
         }
       ],
       "path": "lab.color.token",
-      "reason": "token-group"
+      "reason": "token-group",
+      "winnerRule": "name-order"
     }
   ],
   "figmaFileKey": "1ttG81lWKg74GUHq4aBnxl",

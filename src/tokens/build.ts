@@ -27,9 +27,17 @@ import { compareKeys } from "./serialize";
 import { normalizePathKey, setTokenAtPath, slugify, splitVariableName, toDottedPath } from "./paths";
 import { isAlias, isRgba, normalizeFloat, rgbaToHex, toReference } from "./values";
 import { resolveSubtype, type SubtypeTag } from "./subtype";
-import { detectCollisions, type PreparedVariable } from "./collisions";
+import {
+  countInboundAliases,
+  detectCollisions,
+  explainWinnerRule,
+  type PreparedVariable,
+} from "./collisions";
 
 const TOKENS_DIR = "tokens";
+
+/** Placeholder identifier, not product copy — Amendment 1 §D. Nothing depends on the string. */
+const DEFAULT_THEME_NAME = "Default";
 
 /** Figma `resolvedType` → DTCG `$type`. ADR §3's table; anything absent is unsupported. */
 const TYPE_MAP: Record<string, TokenType> = {
@@ -43,7 +51,11 @@ export function buildImport(snapshot: FileSnapshot, options: BuildOptions): Impo
   const userSubtypes = options.userSubtypes ?? {};
   const entries: ReportEntry[] = [];
 
-  const { collections, excludedCollectionIds } = resolveCollections(snapshot.collections, entries);
+  const { collections, excludedCollectionIds } = resolveCollections(
+    snapshot.collections,
+    snapshot.variables,
+    entries
+  );
   const collectionsById = new Map<string, CollectionSnapshot>();
   for (const collection of collections) collectionsById.set(collection.id, collection);
 
@@ -56,7 +68,8 @@ export function buildImport(snapshot: FileSnapshot, options: BuildOptions): Impo
   }
 
   const prepared = prepareVariables(snapshot.variables, collectionsById, excludedCollectionIds, entries);
-  const collisions = detectCollisions(prepared);
+  const inboundAliases = countInboundAliases(snapshot.variables);
+  const collisions = detectCollisions(prepared, inboundAliases);
   entries.push(...collisions.entries);
 
   // Every variable that will not appear in the output, for whatever reason. An alias pointing
@@ -182,6 +195,7 @@ export function buildImport(snapshot: FileSnapshot, options: BuildOptions): Impo
  */
 function resolveCollections(
   collections: CollectionSnapshot[],
+  variables: VariableSnapshot[],
   entries: ReportEntry[]
 ): { collections: CollectionSnapshot[]; excludedCollectionIds: Set<string> } {
   const sorted = collections.slice().sort((a, b) => compareKeys(a.name, b.name) || compareKeys(a.id, b.id));
@@ -193,18 +207,36 @@ function resolveCollections(
     else bySlug.set(slug, [collection]);
   }
 
+  // Amendment 1 §F, collection-level analogue: the collection with more variables wins, since
+  // that is the one whose removal loses more tokens. Name order is the deterministic tiebreak.
+  const variableCounts = new Map<string, number>();
+  for (const variable of variables) {
+    variableCounts.set(variable.collectionId, (variableCounts.get(variable.collectionId) ?? 0) + 1);
+  }
+
   const excludedCollectionIds = new Set<string>();
   for (const slug of Array.from(bySlug.keys()).sort(compareKeys)) {
     const group = bySlug.get(slug) as CollectionSnapshot[];
     if (group.length < 2) continue;
-    const winner = group[0];
-    for (const loser of group.slice(1)) excludedCollectionIds.add(loser.id);
+
+    let best = -Infinity;
+    for (const collection of group) best = Math.max(best, variableCounts.get(collection.id) ?? 0);
+    const leaders = group.filter((collection) => (variableCounts.get(collection.id) ?? 0) === best);
+
+    const winner = leaders[0];
+    const winnerRule = leaders.length === 1 ? ("variable-count" as const) : ("name-order" as const);
+    for (const loser of group) {
+      if (loser !== winner) excludedCollectionIds.add(loser.id);
+    }
+
     entries.push({
       kind: "collision",
       reason: "set-slug",
-      message: `${group.length} collections slug to "${slug}" and would write to the same files. Kept "${winner.name}"; the others were not written.`,
+      message: `${group.length} collections slug to "${slug}" and would write to the same files. Kept "${winner.name}" (${explainWinnerRule(winnerRule)}); the others were not written.`,
       path: slug,
+      winnerRule,
       participants: group.map((collection) => ({
+        // The contest is between collections, so variable identity is empty (Amendment 1 §E).
         variableId: "",
         variableName: "",
         collectionId: collection.id,
@@ -346,7 +378,8 @@ function buildModeFile(
 
     for (const warning of converted.warnings) {
       entries.push({
-        kind: "unmappable-value",
+        // The token WAS mapped and written; only what it points at is missing (Amendment 1 §G).
+        kind: "dangling-reference",
         reason: warning.reason,
         message: `Variable "${item.variable.name}" (${setId}): ${warning.message}`,
         path: item.path,
@@ -456,9 +489,12 @@ export function convertValue(
 }
 
 /**
- * ADR §6 — themes are generated only for the unambiguous case: exactly one multi-mode
- * collection, combined with the single mode of every single-mode collection. Anything else
- * writes no themes and files a report entry rather than guessing a cartesian product.
+ * Theme composition — ADR §6, as amended by Amendment 1 §C and §D.
+ *
+ * One multi-mode collection is the unambiguous case: one theme per mode, plus the single mode
+ * of every single-mode collection. Two or more make composition a product question, so nothing
+ * is generated. Zero is not ambiguous at all — there is exactly one possible composition — so a
+ * single theme is generated and only its *name* is synthesised.
  */
 function buildThemes(
   collections: ManifestCollection[],
@@ -479,24 +515,30 @@ function buildThemes(
     }));
   }
 
-  if (multiMode.length === 0) {
+  if (collections.length === 0) {
     entries.push({
-      kind: "unmappable-value",
-      reason: "theme-composition-unnamed",
-      message:
-        collections.length === 0
-          ? "No variable collections were imported, so no themes were generated."
-          : "No collection has more than one mode, so there is nothing to switch between and no theme name to derive. No themes were generated; compose them by hand or wait for Phase 7.",
-      participants: [],
+      kind: "theme-composition",
+      reason: "no-collections",
+      message: "No variable collections were imported, so no themes were generated.",
     });
     return [];
   }
 
+  if (multiMode.length === 0) {
+    // Amendment 1 §D: §6's rule is against guessing *composition*, not against naming. Writing
+    // no themes here would leave the manifest useless to Phase 8's export, which globs by theme.
+    entries.push({
+      kind: "theme-composition",
+      reason: "synthesized-default",
+      message: `No collection has more than one mode, so there is exactly one possible composition. Generated a single theme over all ${tokenSetOrder.length} set${tokenSetOrder.length === 1 ? "" : "s"}; the name "${DEFAULT_THEME_NAME}" was invented by import and is safe to rename.`,
+    });
+    return [{ name: DEFAULT_THEME_NAME, selectedTokenSets: tokenSetOrder.slice() }];
+  }
+
   entries.push({
-    kind: "unmappable-value",
-    reason: "theme-composition-ambiguous",
+    kind: "theme-composition",
+    reason: "ambiguous",
     message: `${multiMode.length} collections have more than one mode (${multiMode.map((collection) => `"${collection.name}"`).join(", ")}), so which mode combinations are real themes is a product question, not something import can infer. No themes were generated — see ADR-0002 §6.`,
-    participants: [],
   });
   return [];
 }
