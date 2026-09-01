@@ -96,6 +96,12 @@
           "$extensions": {
             "com.tokenvault": {
               "figma": {
+                "boundVariables": {
+                  "color": "{folio.color.elevation.shadow.0}",
+                  "offsetX": "{folio.spacing.elevation.shadow.x-offset.0}",
+                  "offsetY": "{folio.spacing.elevation.shadow.y-offset.0}",
+                  "radius": "{folio.spacing.elevation.shadow.blur-radius.0}"
+                },
                 "styleId": "S:c0eccbdc2c1ba95eb9a51ec5334b859dde931f2e,",
                 "styleKey": "c0eccbdc2c1ba95eb9a51ec5334b859dde931f2e",
                 "styleType": "EFFECT"
@@ -128,6 +134,12 @@
           "$extensions": {
             "com.tokenvault": {
               "figma": {
+                "boundVariables": {
+                  "color": "{folio.color.elevation.shadow.1}",
+                  "offsetX": "{folio.spacing.elevation.shadow.x-offset.1}",
+                  "offsetY": "{folio.spacing.elevation.shadow.y-offset.1}",
+                  "radius": "{folio.spacing.elevation.shadow.blur-radius.1}"
+                },
                 "styleId": "S:1ac87d5ba2daab116a127f5cda807cc2667e810d,",
                 "styleKey": "1ac87d5ba2daab116a127f5cda807cc2667e810d",
                 "styleType": "EFFECT"
@@ -160,6 +172,12 @@
           "$extensions": {
             "com.tokenvault": {
               "figma": {
+                "boundVariables": {
+                  "color": "{folio.color.elevation.shadow.2}",
+                  "offsetX": "{folio.spacing.elevation.shadow.x-offset.2}",
+                  "offsetY": "{folio.spacing.elevation.shadow.y-offset.2}",
+                  "radius": "{folio.spacing.elevation.shadow.blur-radius.2}"
+                },
                 "styleId": "S:01d44c838a4d44f5d8095a250520325453a3fa07,",
                 "styleKey": "01d44c838a4d44f5d8095a250520325453a3fa07",
                 "styleType": "EFFECT"
@@ -192,6 +210,12 @@
           "$extensions": {
             "com.tokenvault": {
               "figma": {
+                "boundVariables": {
+                  "color": "{folio.color.elevation.shadow.3}",
+                  "offsetX": "{folio.spacing.elevation.shadow.x-offset.3}",
+                  "offsetY": "{folio.spacing.elevation.shadow.y-offset.3}",
+                  "radius": "{folio.spacing.elevation.shadow.blur-radius.3}"
+                },
                 "styleId": "S:1f205a126a055273d7a59ecebcf6b55763fca9a2,",
                 "styleKey": "1f205a126a055273d7a59ecebcf6b55763fca9a2",
                 "styleType": "EFFECT"

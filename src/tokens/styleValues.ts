@@ -32,6 +32,8 @@ export interface StyleValueOk<T> {
   omitted: string[];
   /** One sentence naming what was dropped and why, for the report. Empty when nothing was. */
   note: string;
+  /** Overrides the caller's default `partial-token` reason slug when the omitted keys alone don't say why. */
+  partialReason?: string;
 }
 
 /** A conversion that produced nothing. `reason` is the `unmappable-value` reason (ADR-0003 §6). */
@@ -43,8 +45,8 @@ export interface StyleValueFailed {
 
 export type StyleValueResult<T> = StyleValueOk<T> | StyleValueFailed;
 
-function ok<T>(value: T, omitted: string[] = [], note = ""): StyleValueOk<T> {
-  return { ok: true, value, omitted, note };
+function ok<T>(value: T, omitted: string[] = [], note = "", partialReason?: string): StyleValueOk<T> {
+  return { ok: true, value, omitted, note, partialReason };
 }
 
 function failed(reason: string, message: string): StyleValueFailed {
@@ -191,6 +193,7 @@ export function fontWeightOf(fontStyle: string): FontWeightResult {
 export function typographyValue(style: TextStyleSnapshot): StyleValueResult<TypographyValue> {
   const omitted: string[] = [];
   const notes: string[] = [];
+  let partialReason: string | undefined;
 
   const font = fontWeightOf(style.fontStyle);
   if (!font.mapped) {
@@ -215,6 +218,7 @@ export function typographyValue(style: TextStyleSnapshot): StyleValueResult<Typo
     // Auto line height is a Figma layout behaviour, not a value: there is no number to write.
     omitted.push("lineHeight");
     notes.push("its line height is AUTO, which is a Figma layout behaviour rather than a value");
+    partialReason = "auto-line-height";
   } else if (style.lineHeight.value !== undefined) {
     value.lineHeight =
       style.lineHeight.unit === "PERCENT"
@@ -224,9 +228,10 @@ export function typographyValue(style: TextStyleSnapshot): StyleValueResult<Typo
   } else {
     omitted.push("lineHeight");
     notes.push(`its line height unit is ${style.lineHeight.unit} but Figma reported no value`);
+    partialReason = "missing-line-height-value";
   }
 
-  return ok(value, omitted, notes.join("; "));
+  return ok(value, omitted, notes.join("; "), partialReason);
 }
 
 /**
@@ -289,6 +294,29 @@ export function shadowValue(
       : `${describeEffects(others)} ${others.length === 1 ? "has" : "have"} no DTCG representation and ${others.length === 1 ? "was" : "were"} left out of the shadow token`;
 
   return ok(values.length === 1 ? values[0] : values, omitted, note);
+}
+
+/**
+ * Bindable fields across the style's visible shadow effects, flattened to one map.
+ *
+ * A single shadow keeps Paint's flat convention (`color`, not `shadows.0.color`) since that is
+ * the common case and there is nothing to disambiguate. Multiple shadows prefix by their index in
+ * `shadowValue`'s source order, so a binding on the second shadow's radius doesn't collide with
+ * one on the first.
+ */
+export function shadowBoundVariables(style: EffectStyleSnapshot): Record<string, string> {
+  const shadows = style.effects.filter(
+    (effect) => effect.visible && SHADOW_TYPES.indexOf(effect.type) !== -1
+  );
+
+  const result: Record<string, string> = {};
+  shadows.forEach((effect, index) => {
+    const prefix = shadows.length === 1 ? "" : `shadows.${index}.`;
+    for (const field of Object.keys(effect.boundVariables)) {
+      result[`${prefix}${field}`] = effect.boundVariables[field];
+    }
+  });
+  return result;
 }
 
 function toShadow(effect: EffectSnapshot): ShadowValue {

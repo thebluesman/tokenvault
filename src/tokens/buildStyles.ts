@@ -27,7 +27,14 @@ import type {
 import { compareKeys } from "./serialize";
 import { normalizePathKey, splitVariableName, toDottedPath } from "./paths";
 import { toReference } from "./values";
-import { gridValue, paintValue, shadowValue, textExtras, typographyValue } from "./styleValues";
+import {
+  gridValue,
+  paintValue,
+  shadowBoundVariables,
+  shadowValue,
+  textExtras,
+  typographyValue,
+} from "./styleValues";
 import type { StyleValueResult } from "./styleValues";
 
 /** ADR-0003 §1. `styles` is a reserved set-slug; merge.ts enforces that against collections. */
@@ -109,7 +116,7 @@ export function buildStyleTokens(
 
   for (const style of paint) convertPaint(style, context, candidates, entries);
   for (const style of text) convertText(style, context, candidates, entries);
-  for (const style of effect) convertEffect(style, candidates, entries);
+  for (const style of effect) convertEffect(style, context, candidates, entries);
   for (const style of grid) convertGrid(style, candidates, entries);
 
   return {
@@ -228,6 +235,7 @@ function convertText(
 
 function convertEffect(
   style: EffectStyleSnapshot,
+  context: StyleBuildContext,
   candidates: StyleCandidate[],
   entries: ReportEntry[]
 ): void {
@@ -237,9 +245,11 @@ function convertEffect(
   const result = shadowValue(style);
   if (!record(result, style, "EFFECT", target.path, entries)) return;
 
-  candidates.push(
-    candidate(style, "EFFECT", target, token("shadow", result.value, style, provenanceOf(style, "EFFECT")))
-  );
+  const provenance = provenanceOf(style, "EFFECT");
+  const bound = boundVariableReferences(shadowBoundVariables(style), context);
+  if (bound !== undefined) provenance.boundVariables = bound;
+
+  candidates.push(candidate(style, "EFFECT", target, token("shadow", result.value, style, provenance)));
 }
 
 function convertGrid(
@@ -318,7 +328,7 @@ function record<T>(
   if (result.omitted.length > 0) {
     entries.push({
       kind: "partial-token",
-      reason: partialReason(kind, result.omitted),
+      reason: result.partialReason ?? partialReason(kind),
       message: `${label(kind)} style "${style.name}" was written, but ${result.note}.`,
       path,
       set,
@@ -341,8 +351,7 @@ function record<T>(
   return true;
 }
 
-function partialReason(kind: FigmaStyleType, omitted: string[]): string {
-  if (kind === "TEXT") return omitted.indexOf("lineHeight") !== -1 ? "auto-line-height" : "omitted-sub-value";
+function partialReason(kind: FigmaStyleType): string {
   if (kind === "EFFECT") return "unsupported-effect";
   if (kind === "GRID") return "unsupported-grid";
   return "omitted-sub-value";
