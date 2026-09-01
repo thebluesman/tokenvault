@@ -41,7 +41,7 @@ Token Studio is the de facto standard for git-backed design tokens in Figma, but
 
 ### 6.1 Token Management
 - Create, edit, delete tokens grouped into sets (e.g. `core`, `semantic`, `component`).
-- Support standard token types: color, spacing, sizing, typography, border radius, shadow, opacity, duration/easing.
+- Support standard token types: color, spacing, sizing, typography, border radius, shadow, grid, opacity, duration/easing.
 - Token values stored in a DTCG-compatible JSON schema for portability.
 - **Opacity vs. duration/easing — not symmetric.** Figma's Plugin API gives number Variables an optional `VariableScope` (e.g. `OPACITY`, `CORNER_RADIUS`, `WIDTH_HEIGHT`, `GAP`, `FONT_SIZE`) that a designer may set in Figma's UI to control where the variable shows up as a bindable field:
   - **Opacity**: auto-detectable when the source Variable is scoped to `OPACITY` — import reads `variable.scopes` and tags it automatically. When the designer left the Variable unscoped (`ALL_SCOPES`) or scoped to something else, it's ambiguous like any other number and falls back to the flag/tag step below.
