@@ -4,7 +4,9 @@ Tokenvault is a self-built Figma plugin that replaces Tokens Studio for Figma: d
 
 ## Current phase
 
-**Phase 1 (scaffold) landed 2026-09-01.** Figma plugin boilerplate, manifest, TypeScript setup (esbuild, plain TS/HTML UI shell, no framework) are in place — see `README.md` for how to build and load the plugin locally. `@frontend-engineer` is now active. Next up: Phase 2 (PRD §9), Variables → token JSON import.
+**Phase 2 (Variables import) landed 2026-09-01.** Figma Variables → DTCG token JSON import is built against ADR-0002 (Accepted, Revision 2), with the pure conversion layer under `src/tokens/`, the Figma API boundary in `src/figma/scan.ts`, and a scaffold-level scan/confirm-subtype/report UI. 97 unit tests, validated live in Figma desktop. Next up: Phase 3 (PRD §9, issue #3), Styles → token JSON import.
+
+Phase 1 (scaffold) landed 2026-09-01 — see `README.md` for how to build and load the plugin locally.
 
 ## Canonical decisions
 
