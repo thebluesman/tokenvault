@@ -2,7 +2,7 @@
 
 **Status:** Provisional — a starting design, to be revised once it's used live in Figma.
 **Owner:** `@ux-designer`
-**Covers:** PRD §6.1 (token CRUD), §6.7 (plugin panel), build plan §9 Phase 4.
+**Covers:** PRD §6.1 (token CRUD, minus create — deferred, see §2), §6.7 (plugin panel), build plan §9 Phase 4.
 **Grounded in:** `src/tokens/types.ts`, ADR-0002 (rev 2), ADR-0003, and the real import fixture in `test/fixtures/styles-import/`.
 
 ---
@@ -42,12 +42,13 @@ The `figma` block is **provenance, not user content**. It's the re-import matchi
 ## 2. Scope
 
 ### In scope (Phase 4)
-Browse, search, create, edit, delete tokens in the imported tree, across sets and groups, in-plugin.
+Browse, search, edit, delete tokens in the imported tree, across sets and groups, in-plugin.
 
 ### Explicitly out of scope — do not build these in Phase 4
 
 | Not this phase | Where it lives | What that means for Phase 4 |
 |---|---|---|
+| **Creating a token by hand** | Its own future ticket, once Phase 5/6 exist | Nothing could consume a hand-authored token: it can't be applied to Figma until Phase 5 or committed until Phase 6. Every token in Phase 4 arrives from import, so every token has `figma` provenance. *(Shyam, 2026-09-01 — see §10.4.)* |
 | Writing tokens back to Figma Variables/Styles | Phase 5 (§6.5.2) | Editing a token changes **nothing** on the canvas. The panel must say so, not imply live application. |
 | Drift detection | Phase 5 (§6.5.3) | No "this diverged from Figma" state. Provenance is displayed, not diffed. |
 | Git push/pull, commit, diff view | Phase 6 (§6.4) | No sync status pill in the header. Reserve the slot; leave it empty. |
@@ -63,7 +64,7 @@ The one place this line gets blurry is **references**. They are in the data toda
 ```
 Import (existing, Phase 2/3)      Editor (new, Phase 4)
 ┌────────────────────────┐        ┌────────────────────────┐
-│ Scan file              │        │ Set ▾   ⌕ search    + │  A. Browser
+│ Scan file              │        │ Set ▾   ⌕ search      │  A. Browser
 │ Summary counts         │───────▶│ ▸ folio               │
 │ Subtype confirm        │        │   ▾ color             │
 │ Flagged report         │        │     ▸ border   12     │
@@ -93,7 +94,7 @@ The Tokens tab is disabled with the copy *"Scan the file first"* until an import
 ┌──────────────────────────────────────────────┐
 │ Folio design system            Import│Tokens │  header (existing)
 ├──────────────────────────────────────────────┤
-│ [ Theme / Light          ▾ ]        [ + ]    │  set switcher + new token
+│ [ Theme / Light          ▾ ]                 │  set switcher
 │ [ ⌕ Filter tokens                        ]   │  search
 │ [ All types ▾ ] [ ⚑ 12 ] [ ● 4 unconfirmed ] │  filter chips
 ├──────────────────────────────────────────────┤
@@ -189,7 +190,7 @@ Tokens Studio puts everything in a modal. We diverge for scalars because the dom
 
 **Read-only, always shown, never editable:**
 
-- **Source** — `Variable · Theme/Light` or `Style · TEXT`, with the id available on hover/copy. Plus a `Local` state for tokens created in the plugin, which have no `figma` provenance at all.
+- **Source** — `Variable · Theme/Light` or `Style · TEXT`, with the id available on hover/copy. Every Phase 4 token has one, since every token came from import; there is no provenance-less `Local` state until token creation ships (§2).
 - **`boundVariables`** — for style-derived tokens, listed as `fontSize → {folio.typography.font-size.70}`. This is why a text style's numbers look "already aliased"; hiding it makes the value editor look broken.
 - **`text` extras** — collapsed behind *"11 Figma text properties"*, expandable. They round-trip but have no DTCG home.
 
@@ -211,34 +212,15 @@ Edits apply to the in-memory tree immediately and mark it dirty. The header gain
 > The file will be re-read from Figma and your local changes to `folio.color.*` and 4 other paths will be lost. Copy the tree as JSON first if you want to keep them.
 > `[ Copy tree first ]` `[ Rescan anyway ]` `[ Cancel ]`
 
-**Open question for Shyam (§9):** whether Phase 4 persists the edited tree to `clientStorage` between sessions, or whether the tree is session-only and "Copy whole tree as JSON" remains the sole exit. The copy above assumes session-only, which is the safer default to design against; if it persists, the rescan warning changes but doesn't disappear.
+**Open question for Shyam (§10.1):** whether Phase 4 persists the edited tree to `clientStorage` between sessions, or whether the tree is session-only and "Copy whole tree as JSON" remains the sole exit. The copy above assumes session-only, which is the safer default to design against; if it persists, the rescan warning changes but doesn't disappear.
 
 ---
 
-## 6. C. Creating a token
+## 6. C. Creating a token — deferred
 
-Entry points: the header `+`, and `⋯ → New token in this group` on any group row (which prefills the path prefix — the more common route, given 7-segment paths).
+Cut from Phase 4 by Shyam on 2026-09-01. There's no consumer for a hand-authored token until Phase 5 can apply one to Figma or Phase 6 can commit one, so creation becomes its own ticket then. See §2's out-of-scope table and §10.4.
 
-The overlay, in this order:
-
-1. **Set** — prefilled from context. Style sets are selectable; a token created in `Styles / Text` is `typography` by definition, so the type field locks accordingly.
-2. **Path** — a single text field taking the **full dotted path** (`folio.color.border.accent.hover`), with the prefilled prefix pre-typed and the caret after it. Not a segment-by-segment builder: users think in whole paths, and they'll paste one from an existing token as often as they type it.
-3. **Type** — the seven `TokenType`s. Choosing it swaps in the §5.2 editor.
-4. **Subtype** — number/string only, defaulting to `untagged` rather than `spacing`. `DEFAULT_NUMBER_SUBTYPE` is a *guess for imported data*; a hand-created token has a human present, so guessing at them is worse than asking.
-5. **Value** — per §5.2, empty and required.
-6. **Description** — optional.
-
-New tokens get **no `figma` provenance** and are badged `Local` in the tree. They can't be re-import-matched (there's nothing in Figma to match) and they can't be applied until Phase 5.
-
-**Live path validation**, as typed, mirroring `setTokenAtPath`'s failure modes:
-
-| Condition | Message |
-|---|---|
-| Path already a token in this set | `folio.color.border.accent.default already exists in Theme/Light. Open it instead?` |
-| An ancestor segment is a token leaf | `folio.color.border.accent is a token, so nothing can nest under it. Pick a different path.` |
-| The path is an existing group | `folio.color.border is a group of 12 tokens, not a token. Add a segment.` |
-| Same path exists in a *different* set | Not an error. Info: `Also defined in Theme/Dark.` |
-| Empty or `//` segments | `Path segments can't be empty.` |
+Nothing else in Phase 4 depends on it: every token in the tree arrives from import, with `figma` provenance attached. Section numbering below is unchanged so existing references still land.
 
 ---
 
@@ -268,7 +250,7 @@ Deleting anyway is allowed, and the dependents get the existing `dangling-refere
 
 **Deleting a group**: allowed from a group row, confirmation names the count (`Delete folio.color.border and its 12 tokens?`) and aggregates inbound references across all of them. Undo restores the whole subtree.
 
-**Style-derived and Variable-derived tokens delete like any other.** Nothing is removed from Figma (Phase 5), and a rescan brings the token straight back. The confirmation says so for provenanced tokens:
+**Style-derived and Variable-derived tokens delete like any other** — which, with creation deferred (§6), is every token in the tree. Nothing is removed from Figma (Phase 5), and a rescan brings the token straight back, so the confirmation always says so:
 
 > This removes it from the local token tree only. Nothing changes in Figma, and a rescan will re-import it.
 
@@ -282,7 +264,7 @@ Deleting anyway is allowed, and the dependents get the existing `dangling-refere
 |---|---|
 | Tokens tab, nothing imported | **No tokens yet.** Scan the file on the Import tab to read its Variables and Styles. `[ Go to Import ]` |
 | Scan produced zero tokens | **Nothing importable in this file.** No Variables or Styles mapped to a token — see the Import tab's report for what was skipped. |
-| Set has no tokens | **This set is empty.** Every token in it was dropped as a collision — see the report. `[ New token ]` |
+| Set has no tokens | **This set is empty.** Every token in it was dropped as a collision — see the report. `[ Go to Import ]` |
 | Search, no matches in set | **No tokens match "shadw" in Theme/Light.** `[ Search all sets ]` |
 | Search, no matches anywhere | **No tokens match "shadw".** Search covers token paths and descriptions. |
 | Type/state filter empties the list | **No `boolean` tokens in this set.** `[ Clear filters ]` |
@@ -294,7 +276,6 @@ Deleting anyway is allowed, and the dependents get the existing `dangling-refere
 |---|---|---|
 | Invalid value, inline edit | Field goes amber (`--warn`), message below the row, value **not** committed, edit stays open | `Not a hex colour. Use #RRGGBB or #RRGGBBAA.` |
 | Value contradicts subtype | Amber note, value **is** committed | `Opacity is usually 0–1. Saved as 4.` |
-| Path collision on create | Inline under the path field, Create disabled | see §6 table |
 | Dangling reference | Row badge, `↗` becomes `⚠` | `Points at folio.ref.palette.red-warm.50, which isn't in any set.` |
 | Partial token (`partial-token`) | Muted badge `partial` on the row; overlay lists omitted keys | `Imported without lineHeight — Figma's value was Auto, which has no token equivalent.` |
 | Collision loser | Not shown in the tree at all (it was never written). Discoverable only in the report. | — |
@@ -303,7 +284,7 @@ Deleting anyway is allowed, and the dependents get the existing `dangling-refere
 | Editing a reference | Disabled field + chip | see §5.3 |
 | Tree too large to render | Never surfaced — virtualize instead | — |
 
-**Circular references and math errors are not Phase 4 states.** PRD §6.3 puts them in Phase 7, and Phase 4 cannot create a cycle because it cannot create or edit a reference. If one arrives in imported data, it renders as an ordinary reference chip. Don't build cycle detection here.
+**Circular references and math errors are not Phase 4 states.** PRD §6.3 puts them in Phase 7, and Phase 4 cannot create a cycle because it can neither author a token nor edit a reference. If one arrives in imported data, it renders as an ordinary reference chip. Don't build cycle detection here.
 
 ---
 
@@ -314,7 +295,7 @@ Deleting anyway is allowed, and the dependents get the existing `dangling-refere
 - 11px Inter body, monospace for anything path- or value-shaped (`.row .name` already does this).
 - `--border #e6e6e6`, `--muted #8c8c8c`, `--accent #0d99ff`, `--warn #b8730a` / `--warn-bg #fff6e5`.
 - `.row` (flex, 1px bottom border, ellipsised monospace name, trailing control) is exactly the token row. Reuse it.
-- `.badge` / `.badge.needs` already encode "state, neutral" vs "state, needs you". The subtype tags, `Local`, `partial`, and flagged all map onto these two; **don't introduce a third badge colour.**
+- `.badge` / `.badge.needs` already encode "state, neutral" vs "state, needs you". The subtype tags, `partial`, and flagged all map onto these two; **don't introduce a third badge colour.**
 - `.entry` (amber left border) is the error/flag block. Reuse for validation messages.
 - The existing toast is the undo surface.
 - Reserve the header's right slot for the Phase 6 sync pill. Leave it empty in Phase 4 rather than filling it with something that'll be evicted.
@@ -328,8 +309,9 @@ Two things Phase 4 has to add: a **disclosure/caret row** for groups, and a **co
 1. **Does the edited tree persist between plugin sessions** (`clientStorage`), or is it session-only until Phase 6's git sync gives it a real home? Changes §5.4's warning and whether "unsaved" is even the right word. *(Also a tech-lead question — flagging, not deciding.)*
 2. **Single-set browsing vs. a merged view.** §4.2 argues for one set at a time. If you routinely need to compare `Theme/Light` against `Theme/Dark` side by side, that's a different screen and worth knowing now.
 3. **Should delete be blocked outright when references exist**, rather than warning and allowing? §7 allows it because the report already models `dangling-reference`, but that's a taste call about how much the tool should protect you from yourself.
-4. **Are hand-created (`Local`) tokens actually wanted in Phase 4**, given nothing can be applied to Figma until Phase 5 and nothing can be committed until Phase 6? The PRD asks for create; it may in practice be dead weight for two phases. Worth confirming before it's built.
-5. **Renaming a token's path** isn't specified above. It's mechanically a delete + create with the same reference consequences, but it also breaks every inbound reference at once. Is rename in Phase 4, or does it wait for Phase 7 where references can be rewritten?
+4. ~~**Are hand-created (`Local`) tokens actually wanted in Phase 4**, given nothing can be applied to Figma until Phase 5 and nothing can be committed until Phase 6? The PRD asks for create; it may in practice be dead weight for two phases. Worth confirming before it's built.~~
+   **Resolved 2026-09-01 — Shyam: defer.** Creation is out of Phase 4 (§2). Phase 4 is browse/edit/delete over imported tokens only. Creation returns as its own ticket once Phase 5 or 6 gives a hand-made token somewhere to go. §6 is kept as a stub pointer.
+5. **Renaming a token's path** isn't specified above. It's mechanically a delete + create with the same reference consequences, but it also breaks every inbound reference at once. Is rename in Phase 4, or does it wait for Phase 7 where references can be rewritten? *(Sharper now that create is deferred: rename would be the only way to get a token onto a path Figma didn't produce, so shipping it would partly reopen the door §2 just closed.)*
 
 ---
 
