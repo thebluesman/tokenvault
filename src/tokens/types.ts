@@ -367,7 +367,14 @@ export type ReportEntryKind =
    * A paint style provably bound to a Variable at the same token path (ADR-0003 §4).
    * Informational, not a failure — a distinct kind so severity filters can drop it.
    */
-  | "redundant-style";
+  | "redundant-style"
+  /**
+   * A local edit and Figma both moved from the same `base` (ADR-0004 §4–5). The local edit is
+   * applied — it is the only side that cannot be recovered by rescanning — and flagged.
+   */
+  | "edit-conflict"
+  /** The Variable or Style a local edit targeted no longer exists in the file (ADR-0004 §4–5). */
+  | "orphaned-edit";
 
 /**
  * Which criterion decided a collision, so the report can justify itself (Amendment 1 §F).
@@ -435,6 +442,10 @@ export interface ImportCounts {
   styles?: number;
   /** Tokens written but degraded — `partial-token` entries. */
   partialTokens?: number;
+  /** Local edits from the `clientStorage` overlay reapplied over this build (ADR-0004 §5). */
+  editsApplied?: number;
+  /** Of those, how many were `edit-conflict`s. */
+  editConflicts?: number;
 }
 
 export interface ImportReport {
