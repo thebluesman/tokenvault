@@ -1,6 +1,6 @@
 // Number/string subtype tagging — ADR-0002 §3, PRD §6.1.
 
-import type { Subtype, SubtypeSource, TokenGroup, Token } from "./types";
+import type { Subtype, SubtypeSelection, SubtypeSource, TokenGroup, Token } from "./types";
 import { isToken } from "./paths";
 
 export const NUMBER_SUBTYPES: Subtype[] = [
@@ -16,6 +16,9 @@ export const STRING_SUBTYPES: Subtype[] = ["easing"];
 
 /** ADR §3: the importer's guess when no scope tells us anything. */
 export const DEFAULT_NUMBER_SUBTYPE: Subtype = "spacing";
+
+/** The sentinel the confirm/override step sends to mean "deliberately no subtype". */
+export const UNTAGGED = "untagged" as const;
 
 /**
  * `VariableScope` → subtype, in priority order.
@@ -49,30 +52,34 @@ export interface SubtypeTag {
 export function resolveSubtype(
   tokenType: "color" | "number" | "boolean" | "string",
   scopes: string[],
-  userSubtype: Subtype | undefined
+  userSubtype: SubtypeSelection | undefined
 ): SubtypeTag {
-  if (tokenType === "number") {
-    if (userSubtype !== undefined && NUMBER_SUBTYPES.indexOf(userSubtype) !== -1) {
-      return { subtype: userSubtype, subtypeSource: "user" };
-    }
-    for (const candidate of SCOPE_PRIORITY) {
-      if (scopes.indexOf(candidate.scope) !== -1) {
-        return { subtype: candidate.subtype, subtypeSource: "auto" };
-      }
-    }
-    return { subtype: DEFAULT_NUMBER_SUBTYPE, subtypeSource: "default" };
-  }
-
-  if (tokenType === "string") {
-    if (userSubtype !== undefined && STRING_SUBTYPES.indexOf(userSubtype) !== -1) {
-      return { subtype: userSubtype, subtypeSource: "user" };
-    }
-    // An untagged string is just a string. ADR §3: "Absent means untagged."
+  if (tokenType !== "number" && tokenType !== "string") {
+    // Colours and booleans have no subtype dimension.
     return {};
   }
 
-  // Colours and booleans have no subtype dimension.
-  return {};
+  // An explicit "no subtype" is a human decision, not the absence of one. ADR §3: "Absent
+  // means untagged" — so the subtype is omitted, but the source records who omitted it, which
+  // is what stops the next import from re-guessing `spacing`.
+  if (userSubtype === UNTAGGED) return { subtypeSource: "user" };
+
+  const allowed = tokenType === "number" ? NUMBER_SUBTYPES : STRING_SUBTYPES;
+  if (userSubtype !== undefined && allowed.indexOf(userSubtype) !== -1) {
+    return { subtype: userSubtype, subtypeSource: "user" };
+  }
+
+  if (tokenType === "string") {
+    // Nothing auto-detects `easing`, so an unconfirmed string is simply untagged.
+    return {};
+  }
+
+  for (const candidate of SCOPE_PRIORITY) {
+    if (scopes.indexOf(candidate.scope) !== -1) {
+      return { subtype: candidate.subtype, subtypeSource: "auto" };
+    }
+  }
+  return { subtype: DEFAULT_NUMBER_SUBTYPE, subtypeSource: "default" };
 }
 
 /**
@@ -84,8 +91,8 @@ export function resolveSubtype(
  * `tokens/` tree, and it is the authority when both are available: the committed files are the
  * source of truth, `clientStorage` is only a local cache.
  */
-export function extractUserSubtypes(tree: TokenGroup): Record<string, Subtype> {
-  const result: Record<string, Subtype> = {};
+export function extractUserSubtypes(tree: TokenGroup): Record<string, SubtypeSelection> {
+  const result: Record<string, SubtypeSelection> = {};
 
   const walk = (node: TokenGroup): void => {
     for (const key of Object.keys(node)) {
@@ -103,19 +110,19 @@ export function extractUserSubtypes(tree: TokenGroup): Record<string, Subtype> {
   return result;
 }
 
-function collect(token: Token, into: Record<string, Subtype>): void {
+function collect(token: Token, into: Record<string, SubtypeSelection>): void {
   const extension = token.$extensions?.["com.tokenvault"];
   if (!extension) return;
   if (extension.subtypeSource !== "user") return;
-  if (extension.subtype === undefined) return;
   const variableId = extension.figma?.variableId;
   if (typeof variableId !== "string" || variableId.length === 0) return;
-  into[variableId] = extension.subtype;
+  // `subtypeSource: "user"` with no subtype is the recorded "deliberately untagged" decision.
+  into[variableId] = extension.subtype ?? UNTAGGED;
 }
 
 /** Merges user subtypes from several previously generated token files. Later files win. */
-export function extractUserSubtypesFromFiles(trees: TokenGroup[]): Record<string, Subtype> {
-  const merged: Record<string, Subtype> = {};
+export function extractUserSubtypesFromFiles(trees: TokenGroup[]): Record<string, SubtypeSelection> {
+  const merged: Record<string, SubtypeSelection> = {};
   for (const tree of trees) {
     const found = extractUserSubtypes(tree);
     for (const key of Object.keys(found)) {

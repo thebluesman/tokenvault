@@ -76,6 +76,16 @@ export type Subtype = "spacing" | "sizing" | "radius" | "opacity" | "duration" |
 
 export type SubtypeSource = "auto" | "user" | "default";
 
+/**
+ * What the confirm/override step can send back for one variable.
+ *
+ * Three states, not two: a subtype, the explicit choice of *no* subtype, and (by the key being
+ * absent altogether) "no human has said anything — auto-detect it". `"untagged"` is a decision,
+ * so it is recorded with `subtypeSource: "user"` and survives a re-import the same way a real
+ * tag does; without it, clearing a tag would silently fall back to the `spacing` guess.
+ */
+export type SubtypeSelection = Subtype | "untagged";
+
 export interface TokenFigmaProvenance {
   variableId: string;
   collectionId: string;
@@ -206,8 +216,8 @@ export interface SubtypeCandidate {
 }
 
 export interface BuildOptions {
-  /** Explicit user tags, keyed by Figma variable id. Produce `subtypeSource: "user"`. */
-  userSubtypes?: Record<string, Subtype>;
+  /** Explicit user choices, keyed by Figma variable id. Produce `subtypeSource: "user"`. */
+  userSubtypes?: Record<string, SubtypeSelection>;
   /** ISO timestamp stamped into `$import-report.json`. Injected so builds are reproducible in tests. */
   importedAt: string;
 }

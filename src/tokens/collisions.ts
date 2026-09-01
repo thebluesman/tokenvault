@@ -70,15 +70,18 @@ export function countInboundAliases(variables: VariableSnapshot[]): Map<string, 
  * Criterion 2: how much of the contested path's surrounding namespace this variable's
  * collection already owns.
  *
- * Counted over every prepared variable rather than only the ones still surviving, so the answer
- * does not depend on which collision pass ran first. Participants in the contest itself are
- * excluded — they are what is being decided.
+ * Only *surviving* variables count. A variable already dropped by an earlier pass is not going
+ * to be written, so letting it pad its collection's tally would let a phantom token decide a
+ * later token/group contest — and could hand the win to the collection with less real presence
+ * in the namespace. Participants in the contest itself are excluded too: they are what is being
+ * decided.
  */
 function namespaceOwnership(
   candidate: PreparedVariable,
   contestedPath: string,
   prepared: PreparedVariable[],
-  participantIds: Set<string>
+  participantIds: Set<string>,
+  excludedIds: Set<string>
 ): number {
   const segments = contestedPath.split(".");
   const parent = segments.slice(0, -1).join(".");
@@ -87,6 +90,7 @@ function namespaceOwnership(
   for (const item of prepared) {
     if (item.collection.id !== candidate.collection.id) continue;
     if (participantIds.has(item.variable.id)) continue;
+    if (excludedIds.has(item.variable.id)) continue;
     if (parent === "" || item.normalizedPath === parent || isStrictPathPrefix(parent, item.normalizedPath)) {
       count += 1;
     }
@@ -109,7 +113,8 @@ export function selectWinner(
   group: PreparedVariable[],
   contestedPath: string,
   prepared: PreparedVariable[],
-  inboundAliases: Map<string, number>
+  inboundAliases: Map<string, number>,
+  excludedIds: Set<string> = new Set()
 ): WinnerSelection {
   const ordered = group.slice().sort(compareVariables);
   const participantIds = new Set(ordered.map((item) => item.variable.id));
@@ -118,7 +123,7 @@ export function selectWinner(
   if (byAliases.length === 1) return { winner: byAliases[0], winnerRule: "alias-references" };
 
   const byNamespace = bestBy(byAliases, (item) =>
-    namespaceOwnership(item, contestedPath, prepared, participantIds)
+    namespaceOwnership(item, contestedPath, prepared, participantIds, excludedIds)
   );
   if (byNamespace.length === 1) return { winner: byNamespace[0], winnerRule: "namespace-majority" };
 
@@ -189,7 +194,7 @@ export function detectCollisions(
     if (group.length < 2) continue;
 
     const sameCollection = group.every((item) => item.collection.id === group[0].collection.id);
-    const { winner, winnerRule } = selectWinner(group, key, sorted, inboundAliases);
+    const { winner, winnerRule } = selectWinner(group, key, sorted, inboundAliases, excludedIds);
     for (const loser of group) {
       if (loser !== winner) excludedIds.add(loser.variable.id);
     }
@@ -237,7 +242,7 @@ export function detectCollisions(
     const live = group.filter((item) => !excludedIds.has(item.variable.id));
     if (live.length < 2) continue;
 
-    const { winner, winnerRule } = selectWinner(live, shortPath, sorted, inboundAliases);
+    const { winner, winnerRule } = selectWinner(live, shortPath, sorted, inboundAliases, excludedIds);
     for (const loser of live) {
       if (loser !== winner) excludedIds.add(loser.variable.id);
     }

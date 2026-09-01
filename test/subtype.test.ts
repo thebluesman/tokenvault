@@ -159,3 +159,38 @@ test("user tags merge across the token files of a whole tree", () => {
     "VariableID:2:1": "easing",
   });
 });
+
+test("an explicit untagged choice leaves a number genuinely unset, not re-guessed as spacing", () => {
+  // The UI's "untagged" option used to fall through to DEFAULT_NUMBER_SUBTYPE, silently
+  // reclassifying a cleared "duration" as "spacing".
+  assert.deepEqual(resolveSubtype("number", ["ALL_SCOPES"], "untagged"), { subtypeSource: "user" });
+  assert.deepEqual(resolveSubtype("string", ["ALL_SCOPES"], "untagged"), { subtypeSource: "user" });
+});
+
+test("untagged beats auto-detection, the same way a real tag does", () => {
+  assert.deepEqual(resolveSubtype("number", ["OPACITY"], "untagged"), { subtypeSource: "user" });
+});
+
+test("clearing the choice entirely is different from choosing untagged", () => {
+  // `undefined` means nobody has said anything, so auto-detection runs again.
+  assert.deepEqual(resolveSubtype("number", ["OPACITY"], undefined), {
+    subtype: "opacity",
+    subtypeSource: "auto",
+  });
+});
+
+test("an untagged decision round-trips through the generated token files", () => {
+  const untagged: TokenGroup = {
+    a: {
+      $type: "number",
+      $value: 12,
+      $extensions: {
+        "com.tokenvault": {
+          subtypeSource: "user",
+          figma: { variableId: "VariableID:9:1", collectionId: "c", modeId: "m", scopes: [] },
+        },
+      },
+    },
+  };
+  assert.deepEqual(extractUserSubtypes(untagged), { "VariableID:9:1": "untagged" });
+});

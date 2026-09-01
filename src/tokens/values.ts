@@ -1,6 +1,7 @@
 // Figma variable value → DTCG `$value` conversion — ADR-0002 §2, §3.
 
 import type { AliasSnapshot, RgbaSnapshot, VariableValueSnapshot } from "./types";
+import { toDottedPath } from "./paths";
 
 export function isAlias(value: VariableValueSnapshot): value is AliasSnapshot {
   return (
@@ -65,12 +66,12 @@ export function normalizeFloat(value: number): number {
   return value;
 }
 
-/** The `{dot.path}` reference form of an alias target's `/`-delimited name (ADR §2). */
+/**
+ * The `{dot.path}` reference form of an alias target's `/`-delimited name (ADR §2).
+ *
+ * Delegates to `toDottedPath` so a reference and the token path it points at can never disagree
+ * about segment handling — they are the same string by construction.
+ */
 export function toReference(targetName: string): string {
-  const dotted = targetName
-    .split("/")
-    .map((segment) => segment.trim())
-    .filter((segment) => segment.length > 0)
-    .join(".");
-  return `{${dotted}}`;
+  return `{${toDottedPath(targetName)}}`;
 }

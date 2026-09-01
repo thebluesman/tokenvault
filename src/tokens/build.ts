@@ -72,15 +72,6 @@ export function buildImport(snapshot: FileSnapshot, options: BuildOptions): Impo
   const collisions = detectCollisions(prepared, inboundAliases);
   entries.push(...collisions.entries);
 
-  // Every variable that will not appear in the output, for whatever reason. An alias pointing
-  // at one of these still gets its reference written (the name is real in Figma) but is
-  // flagged, so a dangling reference never reaches the repo unannounced.
-  const notWritten = new Set<string>(collisions.excludedIds);
-  const survivorIds = new Set(collisions.survivors.map((item) => item.variable.id));
-  for (const variable of snapshot.variables) {
-    if (!survivorIds.has(variable.id)) notWritten.add(variable.id);
-  }
-
   const survivorsByCollection = new Map<string, PreparedVariable[]>();
   for (const item of collisions.survivors) {
     const bucket = survivorsByCollection.get(item.collection.id);
@@ -98,6 +89,34 @@ export function buildImport(snapshot: FileSnapshot, options: BuildOptions): Impo
     );
   }
 
+  // Convert every (variable, mode) cell up front. Whether a reference resolves depends on which
+  // sets its target ended up in, and that is only knowable once every file has been converted —
+  // so conversion and reporting are two passes, not one.
+  const plans: FilePlan[] = [];
+  for (const collection of collections) {
+    const collectionSlug = slugify(collection.name);
+    const members = survivorsByCollection.get(collection.id) ?? [];
+
+    for (const mode of collection.modes) {
+      plans.push({
+        collection,
+        modeId: mode.modeId,
+        setId: `${collection.name}/${mode.name}`,
+        file: `${collectionSlug}/${slugify(mode.name)}.json`,
+        cells: members.map((item) => ({
+          item,
+          result: convertValue(
+            item.variable.valuesByMode[mode.modeId],
+            TYPE_MAP[item.variable.resolvedType],
+            namesById
+          ),
+        })),
+      });
+    }
+  }
+
+  const index = buildResolutionIndex(plans, snapshot.variables);
+
   const files: TokenFileOutput[] = [];
   const manifestCollections: ManifestCollection[] = [];
   const tokenSetOrder: string[] = [];
@@ -105,30 +124,27 @@ export function buildImport(snapshot: FileSnapshot, options: BuildOptions): Impo
 
   for (const collection of collections) {
     const modes: ManifestMode[] = [];
-    const collectionSlug = slugify(collection.name);
-    const members = survivorsByCollection.get(collection.id) ?? [];
 
-    for (const mode of collection.modes) {
-      const setId = `${collection.name}/${mode.name}`;
-      const file = `${collectionSlug}/${slugify(mode.name)}.json`;
+    for (const plan of plans) {
+      if (plan.collection !== collection) continue;
 
-      const tree = buildModeFile(members, collection, mode.modeId, setId, namesById, subtypeByVariableId, notWritten, entries);
+      const tree = buildModeFile(plan, subtypeByVariableId, index, entries);
       tokenCount += tree.tokenCount;
 
-      files.push({ path: `${TOKENS_DIR}/${file}`, content: tree.root });
+      files.push({ path: `${TOKENS_DIR}/${plan.file}`, content: tree.root });
       modes.push({
-        name: mode.name,
-        slug: slugify(mode.name),
-        set: setId,
-        $figmaModeId: mode.modeId,
-        file,
+        name: modeNameOf(collection, plan.modeId),
+        slug: slugify(modeNameOf(collection, plan.modeId)),
+        set: plan.setId,
+        $figmaModeId: plan.modeId,
+        file: plan.file,
       });
-      tokenSetOrder.push(setId);
+      tokenSetOrder.push(plan.setId);
     }
 
     manifestCollections.push({
       name: collection.name,
-      slug: collectionSlug,
+      slug: slugify(collection.name),
       $figmaCollectionId: collection.id,
       modes,
     });
@@ -320,6 +336,49 @@ function prepareVariables(
   return prepared;
 }
 
+function modeNameOf(collection: CollectionSnapshot, modeId: string): string {
+  const mode = collection.modes.find((candidate) => candidate.modeId === modeId);
+  return mode ? mode.name : modeId;
+}
+
+/**
+ * Indexes, across every planned file, where each variable's token actually landed.
+ *
+ * A cell that failed to convert — no value for the mode, or a value contradicting the type —
+ * produces no token, so the variable is "missing" from that set even though it exists in the
+ * file. That is the hole a reference can fall through.
+ */
+function buildResolutionIndex(plans: FilePlan[], variables: VariableSnapshot[]): ResolutionIndex {
+  const writtenAnywhere = new Set<string>();
+  const missingSets = new Map<string, string[]>();
+
+  for (const plan of plans) {
+    for (const cell of plan.cells) {
+      const raw = cell.item.variable.valuesByMode[plan.modeId];
+      const produced = cell.result.ok && raw !== undefined && raw !== null;
+
+      if (produced) {
+        writtenAnywhere.add(cell.item.variable.id);
+      } else {
+        const bucket = missingSets.get(cell.item.variable.id);
+        if (bucket) bucket.push(plan.setId);
+        else missingSets.set(cell.item.variable.id, [plan.setId]);
+      }
+    }
+  }
+
+  for (const sets of Array.from(missingSets.values())) sets.sort(compareKeys);
+
+  const collectionOf = new Map<string, string>();
+  const names = new Map<string, string>();
+  for (const variable of variables) {
+    collectionOf.set(variable.id, variable.collectionId);
+    names.set(variable.id, variable.name);
+  }
+
+  return { writtenAnywhere, missingSets, collectionOf, names };
+}
+
 function participantOf(variable: VariableSnapshot, collection: CollectionSnapshot) {
   return {
     variableId: variable.id,
@@ -335,21 +394,101 @@ interface ModeFileResult {
   tokenCount: number;
 }
 
-function buildModeFile(
-  members: PreparedVariable[],
-  collection: CollectionSnapshot,
-  modeId: string,
+/** One (collection, mode) output file, with every member's value already converted. */
+interface FilePlan {
+  collection: CollectionSnapshot;
+  modeId: string;
+  setId: string;
+  file: string;
+  cells: Array<{ item: PreparedVariable; result: ConversionResult }>;
+}
+
+/**
+ * What is needed to tell whether a written reference actually resolves.
+ *
+ * A reference is mode-free (ADR §2) but the thing it points at is not: the target has one token
+ * per mode of *its* collection, and a mode it has no value for produces no token at all. So
+ * "was this variable written" is not enough — the question is which sets it was written to.
+ */
+interface ResolutionIndex {
+  /** Variables that produced at least one token anywhere in the output. */
+  writtenAnywhere: Set<string>;
+  /** For each variable, the sets it should have appeared in but did not. Sorted. */
+  missingSets: Map<string, string[]>;
+  /** Every variable's owning collection id, including ones that were never written. */
+  collectionOf: Map<string, string>;
+  names: Map<string, string>;
+}
+
+/**
+ * Decides whether a reference written into `setId` will fail to resolve, and why.
+ *
+ * Three distinct failures, all `dangling-reference` (Amendment 1 §G) since the referring token
+ * itself was written fine:
+ *
+ * - the target lives in a team library, so it is nameable but its tokens are not in this repo;
+ * - the target produced no token anywhere — a collision loser, an unsupported type, or a
+ *   variable with no usable value in any mode;
+ * - the target exists but is absent from a mode. When the target lives in the referrer's own
+ *   collection, that is exact: same collection, same modes, so it dangles in this very file.
+ *   Across collections it depends on which modes a theme pairs, so the entry names the sets
+ *   where the hole is rather than claiming this one set is broken.
+ */
+function danglingReference(
+  targetId: string,
+  targetName: string,
+  referrerCollectionId: string,
   setId: string,
-  namesById: Map<string, string>,
+  index: ResolutionIndex
+): { reason: string; message: string } | null {
+  if (!index.collectionOf.has(targetId)) {
+    // Nameable but not local: an alias into a team library. The reference is written because it
+    // is what Figma actually points at, but nothing in this repo defines it.
+    return {
+      reason: "alias-target-external",
+      message: `references "${targetName}", which lives in a team library rather than this file, so no token in this repo defines it.`,
+    };
+  }
+
+  if (!index.writtenAnywhere.has(targetId)) {
+    return {
+      reason: "alias-target-skipped",
+      message: `references "${targetName}", which was not written to the token files (it lost a collision, its type is unsupported, or it has no usable value), so the reference will not resolve until that is fixed in Figma.`,
+    };
+  }
+
+  const missing = index.missingSets.get(targetId);
+  if (!missing || missing.length === 0) return null;
+
+  const sameCollection = index.collectionOf.get(targetId) === referrerCollectionId;
+  if (sameCollection) {
+    if (missing.indexOf(setId) === -1) return null;
+    return {
+      reason: "alias-target-missing-in-mode",
+      message: `references "${targetName}", which has no value in this mode, so the reference does not resolve within ${setId}.`,
+    };
+  }
+
+  return {
+    reason: "alias-target-missing-in-mode",
+    message: `references "${targetName}", which is missing from ${missing.join(", ")}. Any theme selecting one of those sets will not resolve this reference.`,
+  };
+}
+
+function buildModeFile(
+  plan: FilePlan,
   subtypeByVariableId: Map<string, SubtypeTag>,
-  notWritten: Set<string>,
+  index: ResolutionIndex,
   entries: ReportEntry[]
 ): ModeFileResult {
+  const { collection, modeId, setId } = plan;
   const root: TokenGroup = {};
   let tokenCount = 0;
 
-  for (const item of members) {
+  for (const cell of plan.cells) {
+    const { item, result } = cell;
     const raw = item.variable.valuesByMode[modeId];
+
     if (raw === undefined || raw === null) {
       entries.push({
         kind: "unmappable-value",
@@ -362,13 +501,11 @@ function buildModeFile(
       continue;
     }
 
-    const tokenType = TYPE_MAP[item.variable.resolvedType];
-    const converted = convertValue(raw, tokenType, namesById, notWritten);
-    if (!converted.ok) {
+    if (!result.ok) {
       entries.push({
         kind: "unmappable-value",
-        reason: converted.reason,
-        message: `Variable "${item.variable.name}" (${setId}): ${converted.message} Not written.`,
+        reason: result.reason,
+        message: `Variable "${item.variable.name}" (${setId}): ${result.message} Not written.`,
         path: item.path,
         set: setId,
         participants: [participantOf(item.variable, collection)],
@@ -376,22 +513,32 @@ function buildModeFile(
       continue;
     }
 
-    for (const warning of converted.warnings) {
-      entries.push({
-        // The token WAS mapped and written; only what it points at is missing (Amendment 1 §G).
-        kind: "dangling-reference",
-        reason: warning.reason,
-        message: `Variable "${item.variable.name}" (${setId}): ${warning.message}`,
-        path: item.path,
-        set: setId,
-        participants: [participantOf(item.variable, collection)],
-      });
+    if (result.aliasTargetId !== undefined && result.aliasTargetName !== undefined) {
+      const dangling = danglingReference(
+        result.aliasTargetId,
+        result.aliasTargetName,
+        collection.id,
+        setId,
+        index
+      );
+      if (dangling) {
+        entries.push({
+          // The token WAS mapped and written; only what it points at is missing (Amendment 1 §G).
+          kind: "dangling-reference",
+          reason: dangling.reason,
+          message: `Variable "${item.variable.name}" (${setId}): ${dangling.message}`,
+          path: item.path,
+          set: setId,
+          participants: [participantOf(item.variable, collection)],
+        });
+      }
     }
 
+    const tokenType = TYPE_MAP[item.variable.resolvedType];
     const tag = subtypeByVariableId.get(item.variable.id) ?? {};
     const token: Token = {
       $type: tokenType,
-      $value: converted.value,
+      $value: result.value,
       $extensions: {
         "com.tokenvault": {
           subtype: tag.subtype,
@@ -426,21 +573,27 @@ function buildModeFile(
   return { root, tokenCount };
 }
 
-interface ConversionWarning {
-  reason: string;
-  message: string;
-}
-
 type ConversionResult =
-  | { ok: true; value: string | number | boolean; warnings: ConversionWarning[] }
+  | {
+      ok: true;
+      value: string | number | boolean;
+      /** Set when the value was an alias, so the caller can check the target actually resolves. */
+      aliasTargetId?: string;
+      aliasTargetName?: string;
+    }
   | { ok: false; reason: string; message: string };
 
-/** ADR §2 and §3: aliases become `{dot.path}` references, everything else a literal. */
+/**
+ * ADR §2 and §3: aliases become `{dot.path}` references, everything else a literal.
+ *
+ * Whether a reference actually *resolves* is deliberately not decided here — that depends on
+ * which set file is being written and which mode it is for, which this function cannot see.
+ * It reports the target it referenced and lets the caller judge.
+ */
 export function convertValue(
   raw: VariableValueSnapshot,
   tokenType: TokenType,
-  namesById: Map<string, string>,
-  notWritten: Set<string>
+  namesById: Map<string, string>
 ): ConversionResult {
   if (isAlias(raw)) {
     const targetName = namesById.get(raw.id);
@@ -451,41 +604,39 @@ export function convertValue(
         message: `aliases variable ${raw.id}, which is not in this file and could not be named, so no reference can be written.`,
       };
     }
-    const warnings: ConversionWarning[] = [];
-    if (notWritten.has(raw.id)) {
-      warnings.push({
-        reason: "alias-target-skipped",
-        message: `references "${targetName}", which was not written to the token files (it lost a collision, or its type is unsupported), so the reference will not resolve until that is fixed in Figma.`,
-      });
-    }
-    return { ok: true, value: toReference(targetName), warnings };
+    return {
+      ok: true,
+      value: toReference(targetName),
+      aliasTargetId: raw.id,
+      aliasTargetName: targetName,
+    };
   }
 
   if (tokenType === "color") {
     if (!isRgba(raw)) {
       return { ok: false, reason: "type-mismatch", message: `is a COLOR variable whose value is not an RGB(A) object.` };
     }
-    return { ok: true, value: rgbaToHex(raw), warnings: [] };
+    return { ok: true, value: rgbaToHex(raw) };
   }
 
   if (tokenType === "number") {
     if (typeof raw !== "number" || !Number.isFinite(raw)) {
       return { ok: false, reason: "type-mismatch", message: `is a FLOAT variable whose value is not a finite number.` };
     }
-    return { ok: true, value: normalizeFloat(raw), warnings: [] };
+    return { ok: true, value: normalizeFloat(raw) };
   }
 
   if (tokenType === "boolean") {
     if (typeof raw !== "boolean") {
       return { ok: false, reason: "type-mismatch", message: `is a BOOLEAN variable whose value is not a boolean.` };
     }
-    return { ok: true, value: raw, warnings: [] };
+    return { ok: true, value: raw };
   }
 
   if (typeof raw !== "string") {
     return { ok: false, reason: "type-mismatch", message: `is a STRING variable whose value is not a string.` };
   }
-  return { ok: true, value: raw, warnings: [] };
+  return { ok: true, value: raw };
 }
 
 /**

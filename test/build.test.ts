@@ -136,8 +136,11 @@ test("an alias to a library variable is named from aliasTargetNames rather than 
     tokenAt(fileAt(result.files, "tokens/local/value.json"), "brand.primary")?.$value,
     "{lib.palette.blue}"
   );
-  // The only entry is the synthesised-theme note this single-mode file always produces.
-  assert.deepEqual(reasons(result.report.entries), ["synthesized-default"]);
+  // Written, but flagged: the library's own tokens are not in this repo, so the reference has
+  // nothing to resolve against here.
+  const entry = entryFor(result.report.entries, "alias-target-external");
+  assert.equal(entry.kind, "dangling-reference");
+  assert.equal(entry.set, "Local/Value");
 });
 
 test("an unnameable alias target is flagged, not written as a bogus reference", () => {
@@ -702,4 +705,116 @@ test("winner selection does not depend on the order Figma returns variables", ()
   ]);
 
   assert.equal(serializeAll(input), serializeAll({ ...input, variables: input.variables.slice().reverse() }));
+});
+
+// ---------------------------------------------------------------------------
+// Per-mode reference resolution
+// ---------------------------------------------------------------------------
+
+test("a reference dangles only in the mode where its target has no value", () => {
+  // The target exists overall, so a whole-file "was this written anywhere" check misses it.
+  const theme = collection("c1", "Theme", [["t0", "Light"], ["t1", "Dark"]]);
+  const result = build(
+    snapshot([theme], [
+      variable("v1", "core/a", theme.id, "COLOR", { t0: { r: 0, g: 0, b: 0 } }),
+      variable("v2", "use/it", theme.id, "COLOR", { t0: alias("v1"), t1: alias("v1") }),
+    ])
+  );
+
+  const dangling = result.report.entries.filter((entry) => entry.kind === "dangling-reference");
+  assert.deepEqual(dangling.map((entry) => entry.set), ["Theme/Dark"]);
+  assert.equal(dangling[0].reason, "alias-target-missing-in-mode");
+
+  // The referring token is written in both modes — the reference is what Figma points at.
+  assert.equal(tokenAt(fileAt(result.files, "tokens/theme/light.json"), "use.it")?.$value, "{core.a}");
+  assert.equal(tokenAt(fileAt(result.files, "tokens/theme/dark.json"), "use.it")?.$value, "{core.a}");
+});
+
+test("a fully-resolvable reference produces no dangling entry in any mode", () => {
+  const theme = collection("c1", "Theme", [["t0", "Light"], ["t1", "Dark"]]);
+  const result = build(
+    snapshot([theme], [
+      variable("v1", "core/a", theme.id, "COLOR", { t0: { r: 0, g: 0, b: 0 }, t1: { r: 1, g: 1, b: 1 } }),
+      variable("v2", "use/it", theme.id, "COLOR", { t0: alias("v1"), t1: alias("v1") }),
+    ])
+  );
+  assert.equal(result.report.entries.some((entry) => entry.kind === "dangling-reference"), false);
+});
+
+test("a cross-collection mode gap names the sets with the hole rather than blaming this one", () => {
+  const theme = collection("c1", "Theme", [["t0", "Light"], ["t1", "Dark"]]);
+  const core = collection("c2", "Core", [["m1", "Value"]]);
+  const result = build(
+    snapshot([theme, core], [
+      variable("v1", "core/a", theme.id, "COLOR", { t0: { r: 0, g: 0, b: 0 } }),
+      variable("v2", "use/it", core.id, "COLOR", { m1: alias("v1") }),
+    ])
+  );
+
+  const entry = entryFor(result.report.entries, "alias-target-missing-in-mode");
+  assert.equal(entry.set, "Core/Value");
+  assert.match(entry.message, /Theme\/Dark/);
+});
+
+test("a target with no usable value in any mode is reported as skipped, not missing-in-mode", () => {
+  const core = collection("c1", "Core", [["m1", "Value"]]);
+  const result = build(
+    snapshot([core], [
+      variable("v1", "core/a", core.id, "COLOR", {}),
+      variable("v2", "use/it", core.id, "COLOR", { m1: alias("v1") }),
+    ])
+  );
+  assert.equal(entryFor(result.report.entries, "alias-target-skipped").kind, "dangling-reference");
+});
+
+// ---------------------------------------------------------------------------
+// Subtype clearing
+// ---------------------------------------------------------------------------
+
+test("choosing untagged writes no subtype but records that a human chose it", () => {
+  const core = collection("c1", "Core", [["m1", "Value"]]);
+  const input = snapshot([core], [
+    variable("v1", "motion/fast", core.id, "FLOAT", { m1: 150 }, { scopes: ["OPACITY"] }),
+  ]);
+
+  const result = build(input, { v1: "untagged" });
+  const extension = tokenAt(fileAt(result.files, "tokens/core/value.json"), "motion.fast")
+    ?.$extensions["com.tokenvault"];
+
+  assert.equal(extension?.subtype, undefined);
+  assert.equal(extension?.subtypeSource, "user");
+  // Confirmed by a human, so it no longer blocks.
+  assert.equal(result.counts.unconfirmedSubtypes, 0);
+  assert.equal(result.candidates[0].needsConfirmation, false);
+});
+
+// ---------------------------------------------------------------------------
+// Namespace tally hygiene
+// ---------------------------------------------------------------------------
+
+test("variables already dropped by an earlier pass do not pad the namespace tally", () => {
+  // Aye has two variables under `ui.color`, but they are a case-only clash, so only one
+  // survives. Counting the dropped one would tie the tally at 2-2 and hand the token/group
+  // contest to Aye on name order; counting only survivors gives Bee the namespace majority.
+  const aye = collection("c1", "Aye", [["m1", "Value"]]);
+  const bee = collection("c2", "Bee", [["m2", "Value"]]);
+  const black = { r: 0, g: 0, b: 0 };
+
+  const result = build(
+    snapshot([aye, bee], [
+      variable("v1", "ui/color/brand", aye.id, "COLOR", { m1: black }),
+      variable("v2", "ui/color/brand/primary", bee.id, "COLOR", { m2: black }),
+      variable("v3", "ui/color/X", aye.id, "COLOR", { m1: black }),
+      variable("v4", "ui/color/x", aye.id, "COLOR", { m1: black }),
+      variable("v5", "ui/color/y", bee.id, "COLOR", { m2: black }),
+      variable("v6", "ui/color/z", bee.id, "COLOR", { m2: black }),
+    ])
+  );
+
+  const entry = entryFor(result.report.entries, "token-group");
+  assert.equal(entry.winnerRule, "namespace-majority");
+  assert.equal(entry.participants?.find((p) => p.outcome === "written")?.collectionName, "Bee");
+
+  assert.ok(tokenAt(fileAt(result.files, "tokens/bee/value.json"), "ui.color.brand.primary"));
+  assert.equal(tokenAt(fileAt(result.files, "tokens/aye/value.json"), "ui.color.brand"), undefined);
 });
