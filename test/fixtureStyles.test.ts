@@ -3,19 +3,23 @@
 // The Variables half is the real capture Phase 2 committed: `figma-snapshot.json` is the verbatim
 // output of `src/figma/scan.ts` against https://www.figma.com/design/1ttG81lWKg74GUHq4aBnxl.
 //
-// The Styles half (`styles-snapshot.json`) is hand-authored in the exact shape `scanStyles`
-// emits, and is a placeholder for a live capture — see the note at the bottom of this file.
-// It is built to exercise the cases ADR-0003 actually decides rather than to look plausible:
+// The Styles half (`styles-snapshot.json`) is a live capture too: the verbatim output of
+// `scanStyles` against the Folio Design System file, taken with the plugin's
+// "Copy Figma scan (fixture input)" button. Between them the two halves exercise:
 //
-//   - a paint style bound to the Variable at its own path       → redundant-style (§4)
 //   - a paint style name-matching a Variable, with no binding   → cross-set, Variables win (§5)
-//   - a paint and a text style at the same path                 → style-vs-style, name order (§5)
-//   - gradient, image-over-solid stack                          → unmappable-value (§3)
-//   - a two-shadow style, and an inner shadow                   → array / inset composites (§3)
-//   - shadow + blur, blur only, invisible-only                  → partial-token / unmappable (§3)
-//   - AUTO line height, an unmapped font style string           → partial-token (§3, §6)
-//   - a text style binding a Variable to paragraphSpacing       → figma.boundVariables (§3)
+//   - gradient and multi-paint stacks                           → unmappable-value (§3)
+//   - a two-shadow style, one entry inset                       → array / inset composites (§3)
+//   - unsupported effects                                       → partial-token / unmappable (§3)
+//   - AUTO line height                                          → partial-token (§3, §6)
 //   - columns and grid layout grids                             → the `grid` divergence (§3)
+//
+// Two ADR-0003 cases are deliberately NOT covered here, and are covered by synthetic unit tests
+// instead — see the note at the bottom of this file:
+//
+//   - `mirrors-variable` / redundant-style (§4), and the cross-source clash it competes with,
+//     because the two halves come from two different Figma files (see below)
+//   - `unmapped-font-style` (§6), pending a font with a non-standard style name
 //
 // To regenerate after an intentional schema change, or after capturing a real file with the
 // plugin's "Copy Figma scan (fixture input)" button:
@@ -115,77 +119,73 @@ test("all four style kinds import from one scan", () => {
 test("a text style's family, size, weight and line height stay one composite token", () => {
   // Issue #3's acceptance criterion: composite styles map to composite tokens, not to flattened
   // leaf tokens per property.
-  const token = tokenAt(file("tokens/styles/text.json"), "heading.xl");
+  const token = tokenAt(file("tokens/styles/text.json"), "Display.Display Large");
   assert.equal(token?.$type, "typography");
   assert.deepEqual(token?.$value, {
-    fontFamily: "Inter",
-    fontSize: { unit: "px", value: 32 },
+    fontFamily: "Fraunces",
+    fontSize: { unit: "px", value: 52 },
     fontWeight: 600,
-    letterSpacing: { unit: "em", value: -0.015 },
-    lineHeight: 1.2,
+    letterSpacing: { unit: "em", value: 0 },
+    lineHeight: { unit: "px", value: 64 },
   });
 });
 
+// Folio's one multi-effect style. Both entries carry the same geometry; what distinguishes them
+// — and what the composite has to preserve in order — is `inset`.
 test("an effect style's several shadows stay one ordered composite token", () => {
-  const token = tokenAt(file("tokens/styles/effect.json"), "elevation.raised");
+  const token = tokenAt(file("tokens/styles/effect.json"), "folio.effects.liquid-glass.test");
   assert.equal(token?.$type, "shadow");
-  const shadows = token?.$value as Array<{ offsetY: { value: number }; spread: { value: number } }>;
+  const shadows = token?.$value as Array<{
+    blur: { value: number };
+    inset: boolean;
+    offsetY: { value: number };
+    spread: { value: number };
+  }>;
   assert.equal(shadows.length, 2);
-  assert.deepEqual(shadows.map((shadow) => shadow.offsetY.value), [1, 4]);
-  assert.equal(shadows[1].spread.value, -2);
+  assert.deepEqual(shadows.map((shadow) => shadow.offsetY.value), [4, 4]);
+  assert.deepEqual(shadows.map((shadow) => shadow.blur.value), [4, 4]);
+  assert.deepEqual(shadows.map((shadow) => shadow.spread.value), [0, 0]);
+  assert.deepEqual(shadows.map((shadow) => shadow.inset), [true, false]);
 });
 
 test("an inner shadow round-trips as an inset shadow", () => {
-  const token = tokenAt(file("tokens/styles/effect.json"), "elevation.inset");
-  assert.equal((token?.$value as { inset: boolean }).inset, true);
+  const token = tokenAt(file("tokens/styles/effect.json"), "folio.effects.liquid-glass.test");
+  const shadows = token?.$value as Array<{ inset: boolean }>;
+  assert.ok(
+    shadows.some((shadow) => shadow.inset === true),
+    "expected an INNER_SHADOW entry to survive as inset: true"
+  );
 });
 
-test("the real-shaped file exercises every ADR-0003 report kind", () => {
+// `redundant-style` / `mirrors-variable` and `unmapped-font-style` are absent by construction —
+// see the note at the bottom of this file. Both are covered synthetically.
+test("the real file exercises the ADR-0003 report kinds it can reach", () => {
   const kinds = new Set(run().report.entries.map((entry) => entry.kind));
-  for (const kind of ["collision", "unmappable-value", "partial-token", "redundant-style"]) {
+  for (const kind of ["collision", "unmappable-value", "partial-token"]) {
     assert.ok(kinds.has(kind as never), `expected a "${kind}" entry`);
   }
 
   const found = reasons();
   for (const reason of [
-    "mirrors-variable",
     "gradient-paint",
     "multi-paint",
     "unsupported-effect",
     "auto-line-height",
-    "unmapped-font-style",
     "cross-set",
   ]) {
     assert.ok(found.includes(reason), `expected a "${reason}" entry, got: ${found.join(", ")}`);
   }
 });
 
-test("the Variable wins the cross-source clash, and the style is not written", () => {
+test("a cross-set clash names both contenders and writes only the winner", () => {
   const result = run();
-  const clash = result.report.entries.filter(
-    (entry) => entry.reason === "cross-set" && entry.path === "tv.color.text.accent"
-  )[0];
+  const clash = result.report.entries.filter((entry) => entry.reason === "cross-set")[0];
 
-  assert.ok(clash, "expected the paint style to contest the Variable's path");
-  assert.equal(clash.winnerRule, "source-precedence");
-  assert.equal(clash.participants?.filter((p) => p.outcome === "written")[0].variableName, "tv/color/text/accent");
-  assert.equal(clash.participants?.filter((p) => p.outcome === "skipped")[0].styleId, "S:p2");
-  assert.equal(tokenAt(file("tokens/styles/paint.json"), "tv.color.text.accent"), undefined);
-});
-
-test("the provable mirror is reported as redundant rather than as a collision", () => {
-  const result = run();
-  const mirror = result.report.entries.filter((entry) => entry.reason === "mirrors-variable")[0];
-
-  assert.equal(mirror.kind, "redundant-style");
-  assert.equal(mirror.path, "tv.ref.palette.blue-500");
-  // And it is NOT also reported as a clash — that is the whole point of §4.
-  assert.equal(
-    result.report.entries.some(
-      (entry) => entry.reason === "cross-set" && entry.path === "tv.ref.palette.blue-500"
-    ),
-    false
-  );
+  assert.ok(clash, "expected at least one cross-set clash in the real data");
+  assert.equal(clash.kind, "collision");
+  assert.ok(clash.path);
+  assert.equal(clash.participants?.filter((p) => p.outcome === "written").length, 1);
+  assert.ok((clash.participants?.filter((p) => p.outcome === "skipped").length ?? 0) >= 1);
 });
 
 test("style tokens are mode-free and appear in every theme, in first position", () => {
@@ -220,3 +220,30 @@ test("the import is stable: the same scan twice produces the same bytes", () => 
   const second = run().files.map((output) => stableStringify(output.content)).join("");
   assert.equal(first, second);
 });
+
+// ---------------------------------------------------------------------------------------------
+// Known gaps in this fixture, and where the logic is covered instead.
+//
+// 1. `mirrors-variable` (ADR-0003 §4) and the cross-SOURCE clash it competes with.
+//    This fixture merges two halves captured from two DIFFERENT Figma files: the Variables half
+//    is Phase 2's frozen capture (namespace `tv/*`), the Styles half is Folio Design System
+//    (namespace `folio/*`). A paint style can only bind to a Variable in its own file, so no
+//    Folio style can ever bind — or collide on path — with a `tv/*` Variable. The mirror rule is
+//    structurally unreachable here, not merely unexercised. Recapturing the Variables half from
+//    Folio would fix that, but ADR-0003 never required the two halves to be single-file coherent,
+//    and Phase 2's committed capture is a regression baseline in its own right. So the mirror
+//    rule stays covered by `test/merge.test.ts`, on scans built to be single-file:
+//      - "a Variable beats a Style at the same path, and both are reported"
+//      - "the Variable wins even when its name sorts after the style's"
+//      - "a mirrored style is informational, not a collision"
+//    The `cross-set` clashes this file DOES exercise are Variable-vs-Variable ones, which is a
+//    real case, just not the cross-source one.
+//
+// 2. `unmapped-font-style` (ADR-0003 §6). The weight table recognises thin/hairline/extralight/
+//    ultralight/light/regular/normal/book/roman/medium/semibold/demibold/demi/bold/extrabold/
+//    ultrabold/black/heavy/extrablack/ultrablack, plus italic/oblique as slant. Triggering the
+//    fallback needs a font whose style name sits outside that list — a variable-width family's
+//    "Condensed" or "Expanded", say — and no such font was available in the captured library.
+//    Covered synthetically by "an unrecognised font style keeps the raw string and is flagged"
+//    in `test/styleValues.test.ts`. Worth re-checking against live data if such a font lands.
+// ---------------------------------------------------------------------------------------------

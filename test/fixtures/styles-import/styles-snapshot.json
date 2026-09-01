@@ -1,137 +1,464 @@
 {
   "boundVariableNames": {
-    "VariableID:1:3": "tv/ref/palette/blue-500",
-    "VariableID:1:7": "tv/global/space/4"
+    "VariableID:00467d1b6971db70b8910296d583463ad6ab75a1/8520:19": "Liquid Glass/Frost - Regular",
+    "VariableID:101:23": "folio/typography/font-size/100",
+    "VariableID:101:24": "folio/typography/font-size/110",
+    "VariableID:101:25": "folio/typography/font-size/120",
+    "VariableID:101:26": "folio/typography/font-size/130",
+    "VariableID:101:27": "folio/typography/font-size/140",
+    "VariableID:101:28": "folio/typography/font-size/150",
+    "VariableID:101:29": "folio/typography/font-line-height/100",
+    "VariableID:101:30": "folio/typography/font-line-height/110",
+    "VariableID:101:31": "folio/typography/font-line-height/120",
+    "VariableID:101:32": "folio/typography/font-line-height/130",
+    "VariableID:101:33": "folio/typography/font-line-height/140",
+    "VariableID:101:34": "folio/typography/font-line-height/150",
+    "VariableID:145:201": "folio/color/elevation/surface/base/0",
+    "VariableID:145:202": "folio/color/elevation/surface/base/1",
+    "VariableID:145:203": "folio/color/elevation/surface/base/2",
+    "VariableID:145:204": "folio/color/elevation/surface/base/3",
+    "VariableID:145:205": "folio/color/elevation/surface/lift/0",
+    "VariableID:145:206": "folio/color/elevation/surface/lift/1",
+    "VariableID:145:207": "folio/color/elevation/surface/lift/2",
+    "VariableID:145:208": "folio/color/elevation/surface/lift/3",
+    "VariableID:145:218": "folio/color/elevation/shadow/0",
+    "VariableID:145:326": "folio/color/elevation/shadow/1",
+    "VariableID:145:327": "folio/color/elevation/shadow/2",
+    "VariableID:145:328": "folio/color/elevation/shadow/3",
+    "VariableID:145:332": "folio/spacing/elevation/shadow/x-offset/0",
+    "VariableID:145:333": "folio/spacing/elevation/shadow/x-offset/1",
+    "VariableID:145:334": "folio/spacing/elevation/shadow/x-offset/2",
+    "VariableID:145:335": "folio/spacing/elevation/shadow/x-offset/3",
+    "VariableID:145:336": "folio/spacing/elevation/shadow/y-offset/0",
+    "VariableID:145:337": "folio/spacing/elevation/shadow/y-offset/1",
+    "VariableID:145:338": "folio/spacing/elevation/shadow/y-offset/2",
+    "VariableID:145:339": "folio/spacing/elevation/shadow/y-offset/3",
+    "VariableID:145:340": "folio/spacing/elevation/shadow/blur-radius/0",
+    "VariableID:145:341": "folio/spacing/elevation/shadow/blur-radius/1",
+    "VariableID:145:342": "folio/spacing/elevation/shadow/blur-radius/2",
+    "VariableID:145:343": "folio/spacing/elevation/shadow/blur-radius/3",
+    "VariableID:2:3": "folio/ref/palette/neutral/white",
+    "VariableID:40:186": "folio/typography/font-size/10",
+    "VariableID:40:187": "folio/typography/font-size/20",
+    "VariableID:40:188": "folio/typography/font-size/30",
+    "VariableID:40:189": "folio/typography/font-size/40",
+    "VariableID:40:190": "folio/typography/font-size/50",
+    "VariableID:40:191": "folio/typography/font-size/60",
+    "VariableID:40:192": "folio/typography/font-size/70",
+    "VariableID:40:193": "folio/typography/font-size/80",
+    "VariableID:40:194": "folio/typography/font-size/90",
+    "VariableID:41:10": "folio/typography/font-line-height/90",
+    "VariableID:41:2": "folio/typography/font-line-height/10",
+    "VariableID:41:24": "folio/typography/font-weight/20",
+    "VariableID:41:25": "folio/typography/font-weight/30",
+    "VariableID:41:26": "folio/typography/font-weight/40",
+    "VariableID:41:27": "folio/typography/font-weight/50",
+    "VariableID:41:28": "folio/typography/font-family/10",
+    "VariableID:41:29": "folio/typography/font-family/20",
+    "VariableID:41:3": "folio/typography/font-line-height/20",
+    "VariableID:41:4": "folio/typography/font-line-height/30",
+    "VariableID:41:5": "folio/typography/font-line-height/40",
+    "VariableID:41:6": "folio/typography/font-line-height/50",
+    "VariableID:41:7": "folio/typography/font-line-height/60",
+    "VariableID:41:8": "folio/typography/font-line-height/70",
+    "VariableID:41:9": "folio/typography/font-line-height/80",
+    "VariableID:427:9248": "folio/typography/font-size/8",
+    "VariableID:427:9249": "folio/typography/font-line-height/8",
+    "VariableID:427:9251": "folio/typography/font-size/5",
+    "VariableID:427:9252": "folio/typography/font-line-height/5",
+    "VariableID:b4e7dce055cacfdd72812c9fcdcc8f3f35696dc6/8520:18": "Liquid Glass/Frost - Medium"
   },
   "effect": [
     {
-      "description": "Resting elevation for cards.",
+      "description": "",
       "effects": [
         {
-          "boundVariables": {},
-          "color": { "a": 0.08, "b": 0.05, "g": 0.05, "r": 0.05 },
+          "boundVariables": {
+            "color": "VariableID:145:218",
+            "offsetX": "VariableID:145:332",
+            "offsetY": "VariableID:145:336",
+            "radius": "VariableID:145:340"
+          },
+          "color": {
+            "a": 0,
+            "b": 0.0941176488995552,
+            "g": 0.10980392247438431,
+            "r": 0.12156862765550613
+          },
           "offsetX": 0,
-          "offsetY": 1,
-          "radius": 2,
+          "offsetY": 0,
+          "radius": 0,
           "spread": 0,
-          "type": "DROP_SHADOW",
-          "visible": true
-        },
-        {
-          "boundVariables": {},
-          "color": { "a": 0.12, "b": 0.05, "g": 0.05, "r": 0.05 },
-          "offsetX": 0,
-          "offsetY": 4,
-          "radius": 12,
-          "spread": -2,
           "type": "DROP_SHADOW",
           "visible": true
         }
       ],
-      "id": "S:e1",
-      "key": "e1e1e1e1",
-      "name": "elevation/raised"
+      "id": "S:c0eccbdc2c1ba95eb9a51ec5334b859dde931f2e,",
+      "key": "c0eccbdc2c1ba95eb9a51ec5334b859dde931f2e",
+      "name": "folio/elevation/shadow/0"
+    },
+    {
+      "description": "",
+      "effects": [
+        {
+          "boundVariables": {
+            "color": "VariableID:145:326",
+            "offsetX": "VariableID:145:333",
+            "offsetY": "VariableID:145:337",
+            "radius": "VariableID:145:341"
+          },
+          "color": {
+            "a": 0.05000000074505806,
+            "b": 0.0941176488995552,
+            "g": 0.10980392247438431,
+            "r": 0.12156862765550613
+          },
+          "offsetX": 0,
+          "offsetY": 1,
+          "radius": 3,
+          "spread": 0,
+          "type": "DROP_SHADOW",
+          "visible": true
+        }
+      ],
+      "id": "S:1ac87d5ba2daab116a127f5cda807cc2667e810d,",
+      "key": "1ac87d5ba2daab116a127f5cda807cc2667e810d",
+      "name": "folio/elevation/shadow/1"
+    },
+    {
+      "description": "",
+      "effects": [
+        {
+          "boundVariables": {
+            "color": "VariableID:145:327",
+            "offsetX": "VariableID:145:334",
+            "offsetY": "VariableID:145:338",
+            "radius": "VariableID:145:342"
+          },
+          "color": {
+            "a": 0.10000000149011612,
+            "b": 0.0941176488995552,
+            "g": 0.10980392247438431,
+            "r": 0.12156862765550613
+          },
+          "offsetX": 0,
+          "offsetY": 2,
+          "radius": 8,
+          "spread": 0,
+          "type": "DROP_SHADOW",
+          "visible": true
+        }
+      ],
+      "id": "S:01d44c838a4d44f5d8095a250520325453a3fa07,",
+      "key": "01d44c838a4d44f5d8095a250520325453a3fa07",
+      "name": "folio/elevation/shadow/2"
+    },
+    {
+      "description": "",
+      "effects": [
+        {
+          "boundVariables": {
+            "color": "VariableID:145:328",
+            "offsetX": "VariableID:145:335",
+            "offsetY": "VariableID:145:339",
+            "radius": "VariableID:145:343"
+          },
+          "color": {
+            "a": 0.10000000149011612,
+            "b": 0.0941176488995552,
+            "g": 0.10980392247438431,
+            "r": 0.12156862765550613
+          },
+          "offsetX": 0,
+          "offsetY": 4,
+          "radius": 16,
+          "spread": 0,
+          "type": "DROP_SHADOW",
+          "visible": true
+        }
+      ],
+      "id": "S:1f205a126a055273d7a59ecebcf6b55763fca9a2,",
+      "key": "1f205a126a055273d7a59ecebcf6b55763fca9a2",
+      "name": "folio/elevation/shadow/3"
     },
     {
       "description": "",
       "effects": [
         {
           "boundVariables": {},
-          "color": { "a": 0.24, "b": 0, "g": 0, "r": 0 },
+          "color": {
+            "a": 0.11999999731779099,
+            "b": 0,
+            "g": 0,
+            "r": 0
+          },
           "offsetX": 0,
-          "offsetY": 2,
+          "offsetY": 8,
+          "radius": 40,
+          "spread": 0,
+          "type": "DROP_SHADOW",
+          "visible": true
+        }
+      ],
+      "id": "S:8d6345be869cda9aca94f6f9506610ce84d43f6f,",
+      "key": "8d6345be869cda9aca94f6f9506610ce84d43f6f",
+      "name": "folio/effects/liquid-glass-shadow"
+    },
+    {
+      "description": "",
+      "effects": [
+        {
+          "boundVariables": {
+            "radius": "VariableID:b4e7dce055cacfdd72812c9fcdcc8f3f35696dc6/8520:18"
+          },
+          "radius": 12,
+          "type": "GLASS",
+          "visible": true
+        }
+      ],
+      "id": "S:71f9a0e7a7f2ca5ed0276ea86f2cbdad2ec3d675,",
+      "key": "71f9a0e7a7f2ca5ed0276ea86f2cbdad2ec3d675",
+      "name": "folio/effects/liquid-glass/regular-medium"
+    },
+    {
+      "description": "",
+      "effects": [
+        {
+          "boundVariables": {
+            "radius": "VariableID:00467d1b6971db70b8910296d583463ad6ab75a1/8520:19"
+          },
+          "radius": 7,
+          "type": "GLASS",
+          "visible": true
+        }
+      ],
+      "id": "S:8fa63ccb3928f0bce1c10c3290292f6051954948,",
+      "key": "8fa63ccb3928f0bce1c10c3290292f6051954948",
+      "name": "folio/effects/liquid-glass/button"
+    },
+    {
+      "description": "",
+      "effects": [
+        {
+          "boundVariables": {},
+          "radius": 5,
+          "type": "GLASS",
+          "visible": true
+        },
+        {
+          "boundVariables": {},
+          "color": {
+            "a": 0.25,
+            "b": 0,
+            "g": 0,
+            "r": 0
+          },
+          "offsetX": 0,
+          "offsetY": 4,
           "radius": 4,
           "spread": 0,
           "type": "INNER_SHADOW",
           "visible": true
-        }
-      ],
-      "id": "S:e2",
-      "key": "e2e2e2e2",
-      "name": "elevation/inset"
-    },
-    {
-      "description": "",
-      "effects": [
+        },
         {
           "boundVariables": {},
-          "color": { "a": 0.2, "b": 0, "g": 0, "r": 0 },
+          "color": {
+            "a": 0.25,
+            "b": 0,
+            "g": 0,
+            "r": 0
+          },
           "offsetX": 0,
-          "offsetY": 0,
-          "radius": 6,
+          "offsetY": 4,
+          "radius": 4,
           "spread": 0,
           "type": "DROP_SHADOW",
           "visible": true
-        },
-        { "boundVariables": {}, "radius": 8, "type": "LAYER_BLUR", "visible": true }
-      ],
-      "id": "S:e3",
-      "key": "e3e3e3e3",
-      "name": "elevation/frosted"
-    },
-    {
-      "description": "",
-      "effects": [
-        { "boundVariables": {}, "radius": 24, "type": "BACKGROUND_BLUR", "visible": true }
-      ],
-      "id": "S:e4",
-      "key": "e4e4e4e4",
-      "name": "effect/scrim-blur"
-    },
-    {
-      "description": "",
-      "effects": [
-        {
-          "boundVariables": {},
-          "color": { "a": 0.5, "b": 0, "g": 0, "r": 0 },
-          "offsetX": 0,
-          "offsetY": 8,
-          "radius": 16,
-          "spread": 0,
-          "type": "DROP_SHADOW",
-          "visible": false
         }
       ],
-      "id": "S:e5",
-      "key": "e5e5e5e5",
-      "name": "effect/disabled-shadow"
+      "id": "S:aa1497fee32897f65c55a281b7b438d83f57aecd,",
+      "key": "aa1497fee32897f65c55a281b7b438d83f57aecd",
+      "name": "folio/effects/liquid-glass/test"
     }
   ],
   "grid": [
     {
       "description": "",
-      "id": "S:g1",
-      "key": "g1g1g1g1",
+      "id": "S:fbb8114d1cdef35e3f6d7bf9a6a171a9ed421f50,",
+      "key": "fbb8114d1cdef35e3f6d7bf9a6a171a9ed421f50",
       "layoutGrids": [
         {
           "alignment": "STRETCH",
-          "count": 12,
-          "gutterSize": 24,
-          "offset": 32,
+          "count": 4,
+          "gutterSize": 8,
+          "offset": 16,
           "pattern": "COLUMNS",
           "visible": true
         }
       ],
-      "name": "layout/desktop"
-    },
-    {
-      "description": "",
-      "id": "S:g2",
-      "key": "g2g2g2g2",
-      "layoutGrids": [{ "pattern": "GRID", "sectionSize": 8, "visible": true }],
-      "name": "layout/baseline"
+      "name": "Grid"
     }
   ],
   "paint": [
     {
       "description": "",
-      "id": "S:p1",
-      "key": "p1p1p1p1",
-      "name": "tv/ref/palette/blue-500",
+      "id": "S:ed6a3f12d21b26677895a86eab5fc142b8bea81e,",
+      "key": "ed6a3f12d21b26677895a86eab5fc142b8bea81e",
+      "name": "folio/elevation/surface/0",
       "paints": [
         {
-          "boundVariableId": "VariableID:1:3",
-          "color": { "b": 0.9764705882352941, "g": 0.4980392156862745, "r": 0.17647058823529413 },
+          "boundVariableId": "VariableID:145:201",
+          "color": {
+            "b": 0.8588235378265381,
+            "g": 0.8901960849761963,
+            "r": 0.95686274766922
+          },
+          "opacity": 1,
+          "type": "SOLID",
+          "visible": true
+        },
+        {
+          "boundVariableId": "VariableID:145:205",
+          "color": {
+            "b": 1,
+            "g": 1,
+            "r": 1
+          },
+          "opacity": 0,
+          "type": "SOLID",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "description": "",
+      "id": "S:ab6c3503f7495dcdcfd8a299d56e15a3eeafb5c7,",
+      "key": "ab6c3503f7495dcdcfd8a299d56e15a3eeafb5c7",
+      "name": "folio/elevation/surface/1",
+      "paints": [
+        {
+          "boundVariableId": "VariableID:145:202",
+          "color": {
+            "b": 0.9411764740943909,
+            "g": 0.9607843160629272,
+            "r": 0.9607843160629272
+          },
+          "opacity": 1,
+          "type": "SOLID",
+          "visible": true
+        },
+        {
+          "boundVariableId": "VariableID:145:206",
+          "color": {
+            "b": 1,
+            "g": 1,
+            "r": 1
+          },
+          "opacity": 0,
+          "type": "SOLID",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "description": "",
+      "id": "S:b399d623b262dd0b7a8df29284a4ebf0eedca8f3,",
+      "key": "b399d623b262dd0b7a8df29284a4ebf0eedca8f3",
+      "name": "folio/elevation/surface/2",
+      "paints": [
+        {
+          "boundVariableId": "VariableID:145:203",
+          "color": {
+            "b": 0.9686274528503418,
+            "g": 0.9764705896377563,
+            "r": 0.9764705896377563
+          },
+          "opacity": 1,
+          "type": "SOLID",
+          "visible": true
+        },
+        {
+          "boundVariableId": "VariableID:145:207",
+          "color": {
+            "b": 1,
+            "g": 1,
+            "r": 1
+          },
+          "opacity": 0,
+          "type": "SOLID",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "description": "",
+      "id": "S:e59a36674d9614819d7cddac8854492dc5cfc76f,",
+      "key": "e59a36674d9614819d7cddac8854492dc5cfc76f",
+      "name": "folio/elevation/surface/3",
+      "paints": [
+        {
+          "boundVariableId": "VariableID:145:204",
+          "color": {
+            "b": 1,
+            "g": 1,
+            "r": 1
+          },
+          "opacity": 1,
+          "type": "SOLID",
+          "visible": true
+        },
+        {
+          "boundVariableId": "VariableID:145:208",
+          "color": {
+            "b": 1,
+            "g": 1,
+            "r": 1
+          },
+          "opacity": 0,
+          "type": "SOLID",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "description": "",
+      "id": "S:ed75e0e1ee28e327c3aa220372ba487977316a75,",
+      "key": "ed75e0e1ee28e327c3aa220372ba487977316a75",
+      "name": "folio/gradient/edge-fade/top",
+      "paints": [
+        {
+          "opacity": 1,
+          "type": "GRADIENT_LINEAR",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "description": "",
+      "id": "S:26c7a81b2482cab32387fb56506b90867667d13d,",
+      "key": "26c7a81b2482cab32387fb56506b90867667d13d",
+      "name": "folio/gradient/edge-fade/bottom",
+      "paints": [
+        {
+          "opacity": 1,
+          "type": "GRADIENT_LINEAR",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "description": "",
+      "id": "S:ed05cf166dfaf373613d9a1eede12de6de73e964,",
+      "key": "ed05cf166dfaf373613d9a1eede12de6de73e964",
+      "name": "folio/ref/palette/neutral/white",
+      "paints": [
+        {
+          "boundVariableId": "VariableID:2:3",
+          "color": {
+            "b": 1,
+            "g": 1,
+            "r": 1
+          },
           "opacity": 1,
           "type": "SOLID",
           "visible": true
@@ -139,50 +466,18 @@
       ]
     },
     {
-      "description": "Legacy accent, kept for the old marketing pages.",
-      "id": "S:p2",
-      "key": "p2p2p2p2",
-      "name": "tv/color/text/accent",
+      "description": "",
+      "id": "S:c5e44881d0be9b54a33968d0d88536f1ffb0162a,",
+      "key": "c5e44881d0be9b54a33968d0d88536f1ffb0162a",
+      "name": "folio/ref/palette/neutral/black",
       "paints": [
         {
-          "color": { "b": 0.9764705882352941, "g": 0.4980392156862745, "r": 0.17647058823529413 },
+          "color": {
+            "b": 0,
+            "g": 0,
+            "r": 0
+          },
           "opacity": 1,
-          "type": "SOLID",
-          "visible": true
-        }
-      ]
-    },
-    {
-      "description": "",
-      "id": "S:p3",
-      "key": "p3p3p3p3",
-      "name": "legacy/scrim",
-      "paints": [
-        {
-          "color": { "b": 0, "g": 0, "r": 0 },
-          "opacity": 0.6,
-          "type": "SOLID",
-          "visible": true
-        }
-      ]
-    },
-    {
-      "description": "",
-      "id": "S:p4",
-      "key": "p4p4p4p4",
-      "name": "legacy/hero-gradient",
-      "paints": [{ "opacity": 1, "type": "GRADIENT_LINEAR", "visible": true }]
-    },
-    {
-      "description": "",
-      "id": "S:p5",
-      "key": "p5p5p5p5",
-      "name": "legacy/photo-wash",
-      "paints": [
-        { "opacity": 1, "type": "IMAGE", "visible": true },
-        {
-          "color": { "b": 0, "g": 0, "r": 0 },
-          "opacity": 0.3,
           "type": "SOLID",
           "visible": true
         }
@@ -191,20 +486,29 @@
   ],
   "text": [
     {
-      "boundVariables": {},
-      "description": "Page title.",
-      "fontFamily": "Inter",
-      "fontSize": 32,
-      "fontStyle": "Semibold",
+      "boundVariables": {
+        "fontFamily": "VariableID:41:29",
+        "fontSize": "VariableID:40:189",
+        "fontWeight": "VariableID:41:25"
+      },
+      "description": "",
+      "fontFamily": "Urbanist",
+      "fontSize": 14,
+      "fontStyle": "Medium",
       "hangingList": false,
       "hangingPunctuation": false,
-      "id": "S:t1",
-      "key": "t1t1t1t1",
+      "id": "S:637b67d3a3f7796fc6aeda417912f6b365d263c8,",
+      "key": "637b67d3a3f7796fc6aeda417912f6b365d263c8",
       "leadingTrim": "NONE",
-      "letterSpacing": { "unit": "PERCENT", "value": -1.5 },
-      "lineHeight": { "unit": "PERCENT", "value": 120 },
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "AUTO"
+      },
       "listSpacing": 0,
-      "name": "heading/xl",
+      "name": "test-text",
       "paragraphIndent": 0,
       "paragraphSpacing": 0,
       "textCase": "ORIGINAL",
@@ -212,41 +516,601 @@
       "textWrapStyle": "AUTO"
     },
     {
-      "boundVariables": { "paragraphSpacing": "VariableID:1:7" },
+      "boundVariables": {},
       "description": "",
       "fontFamily": "Inter",
-      "fontSize": 16,
+      "fontSize": 12,
       "fontStyle": "Regular",
       "hangingList": false,
       "hangingPunctuation": false,
-      "id": "S:t2",
-      "key": "t2t2t2t2",
+      "id": "S:d05998bd0decdd45d43b94e6d2a606157c1d4aa6,",
+      "key": "d05998bd0decdd45d43b94e6d2a606157c1d4aa6",
       "leadingTrim": "NONE",
-      "letterSpacing": { "unit": "PIXELS", "value": 0 },
-      "lineHeight": { "unit": "PIXELS", "value": 24 },
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "AUTO"
+      },
       "listSpacing": 0,
-      "name": "body/base",
+      "name": "test-text2",
       "paragraphIndent": 0,
-      "paragraphSpacing": 4,
+      "paragraphSpacing": 0,
       "textCase": "ORIGINAL",
       "textDecoration": "NONE",
       "textWrapStyle": "AUTO"
     },
     {
-      "boundVariables": {},
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:101:28",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:101:34"
+      },
       "description": "",
-      "fontFamily": "Inter",
-      "fontSize": 14,
+      "fontFamily": "Fraunces",
+      "fontSize": 52,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:c59120da0ef687782f14243edbae5c8820fe3054,",
+      "key": "c59120da0ef687782f14243edbae5c8820fe3054",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 64
+      },
+      "listSpacing": 0,
+      "name": "Display/Display Large",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:101:27",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:101:33"
+      },
+      "description": "",
+      "fontFamily": "Fraunces",
+      "fontSize": 46,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:0b63dc5aa510c494d24ca8be76756e3e7cf1ffd4,",
+      "key": "0b63dc5aa510c494d24ca8be76756e3e7cf1ffd4",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 56
+      },
+      "listSpacing": 0,
+      "name": "Display/Display Medium",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:101:26",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:101:32"
+      },
+      "description": "",
+      "fontFamily": "Fraunces",
+      "fontSize": 41,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:d44ff64d5cf56825b3ecea77b06b7384709d3c13,",
+      "key": "d44ff64d5cf56825b3ecea77b06b7384709d3c13",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 52
+      },
+      "listSpacing": 0,
+      "name": "Display/Display Small",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:101:25",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:101:31"
+      },
+      "description": "",
+      "fontFamily": "Fraunces",
+      "fontSize": 36,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:a55047dfdcfb4f0a59966669fe17da31d36600e0,",
+      "key": "a55047dfdcfb4f0a59966669fe17da31d36600e0",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 44
+      },
+      "listSpacing": 0,
+      "name": "Title/Title Screen",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:101:24",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:101:30"
+      },
+      "description": "",
+      "fontFamily": "Fraunces",
+      "fontSize": 32,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:c349a451293f5b2c6630d91fda8d55c1ed5a7860,",
+      "key": "c349a451293f5b2c6630d91fda8d55c1ed5a7860",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 40
+      },
+      "listSpacing": 0,
+      "name": "Title/Title Section",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:101:23",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:101:29"
+      },
+      "description": "",
+      "fontFamily": "Fraunces",
+      "fontSize": 29,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:24cdb942a72335ee76bf506fffd6a166eecc4bce,",
+      "key": "24cdb942a72335ee76bf506fffd6a166eecc4bce",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 36
+      },
+      "listSpacing": 0,
+      "name": "Title/Title Subsection",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:40:194",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:41:10"
+      },
+      "description": "",
+      "fontFamily": "Fraunces",
+      "fontSize": 26,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:4f48d8f434b0f7767ae4a601e8bfdb23f56a7ae2,",
+      "key": "4f48d8f434b0f7767ae4a601e8bfdb23f56a7ae2",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 32
+      },
+      "listSpacing": 0,
+      "name": "Title/Title Body",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:40:193",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:41:9"
+      },
+      "description": "",
+      "fontFamily": "Fraunces",
+      "fontSize": 23,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:2a56e57c7e09c2023ffe79a2b00b62dad4f65192,",
+      "key": "2a56e57c7e09c2023ffe79a2b00b62dad4f65192",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 28
+      },
+      "listSpacing": 0,
+      "name": "Title/Title Group",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:40:191",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:41:7"
+      },
+      "description": "",
+      "fontFamily": "Fraunces",
+      "fontSize": 18,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:1b704946cc95a9f56802bcfad19677fff1a9df26,",
+      "key": "1b704946cc95a9f56802bcfad19677fff1a9df26",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 20
+      },
+      "listSpacing": 0,
+      "name": "Title/Title Subgroup",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:40:190",
+        "fontWeight": "VariableID:41:27",
+        "lineHeight": "VariableID:41:6"
+      },
+      "description": "Fraunces SemiBold Italic, 16/20. Primary title style for Regular-size Typographic Covers. Use only on the cover surface \u2014 for in-app titles use Title Body or Title Group.",
+      "fontFamily": "Fraunces",
+      "fontSize": 16,
       "fontStyle": "Bold Italic",
       "hangingList": false,
       "hangingPunctuation": false,
-      "id": "S:t3",
-      "key": "t3t3t3t3",
+      "id": "S:4e45916657246a2234b44cb423be84d56320ad55,",
+      "key": "4e45916657246a2234b44cb423be84d56320ad55",
       "leadingTrim": "NONE",
-      "letterSpacing": { "unit": "PIXELS", "value": 0.2 },
-      "lineHeight": { "unit": "AUTO" },
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 20
+      },
       "listSpacing": 0,
-      "name": "body/emphasis",
+      "name": "Title/Title Cover Medium",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:427:9248",
+        "fontWeight": "VariableID:41:27",
+        "lineHeight": "VariableID:427:9249"
+      },
+      "description": "Decorative texture only \u2014 meant as word-shape abstraction, not legible type. Readers recognize the shape of a title from across a shelf; this style preserves that shape at thumbnail scale without pretending to be readable. Use exclusively on Typographic Cover compact / horizontal renders. Do not use for any content type, label, metadata, or anywhere a user might try to read it.",
+      "fontFamily": "Fraunces",
+      "fontSize": 8,
+      "fontStyle": "Bold Italic",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:2181edc49f1317886230232be3a0497732d74d86,",
+      "key": "2181edc49f1317886230232be3a0497732d74d86",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 9
+      },
+      "listSpacing": 0,
+      "name": "Title/Title Cover Small",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:29",
+        "fontSize": "VariableID:40:192",
+        "fontWeight": "VariableID:41:25",
+        "lineHeight": "VariableID:41:8"
+      },
+      "description": "",
+      "fontFamily": "Urbanist",
+      "fontSize": 20,
+      "fontStyle": "Medium",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:f26d663b3a8ffb42d02f670d478f2e767f44ca00,",
+      "key": "f26d663b3a8ffb42d02f670d478f2e767f44ca00",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 24
+      },
+      "listSpacing": 0,
+      "name": "Body/Body Large",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:29",
+        "fontSize": "VariableID:40:192",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:41:8"
+      },
+      "description": "",
+      "fontFamily": "Urbanist",
+      "fontSize": 20,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:21ca4f05eb36af17e82d10af4d9bc000cb1783e9,",
+      "key": "21ca4f05eb36af17e82d10af4d9bc000cb1783e9",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 24
+      },
+      "listSpacing": 0,
+      "name": "Body/Body Large Bold",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:29",
+        "fontSize": "VariableID:40:191",
+        "fontWeight": "VariableID:41:25",
+        "lineHeight": "VariableID:41:7"
+      },
+      "description": "",
+      "fontFamily": "Urbanist",
+      "fontSize": 18,
+      "fontStyle": "Medium",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:c0e7270196b4df83885f3c6bf4e5bb34a67b2eb0,",
+      "key": "c0e7270196b4df83885f3c6bf4e5bb34a67b2eb0",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 20
+      },
+      "listSpacing": 0,
+      "name": "Body/Body Medium",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:29",
+        "fontSize": "VariableID:40:191",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:41:7"
+      },
+      "description": "",
+      "fontFamily": "Urbanist",
+      "fontSize": 18,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:9b40248d3dbafd24a43bd8e82a933b1a073a1e1c,",
+      "key": "9b40248d3dbafd24a43bd8e82a933b1a073a1e1c",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 20
+      },
+      "listSpacing": 0,
+      "name": "Body/Body Medium Bold",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:29",
+        "fontSize": "VariableID:40:190",
+        "fontWeight": "VariableID:41:25",
+        "lineHeight": "VariableID:41:6"
+      },
+      "description": "",
+      "fontFamily": "Urbanist",
+      "fontSize": 16,
+      "fontStyle": "Medium",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:1bc6f9e45c5ae5cbf9cad3896dda8bb8047978c2,",
+      "key": "1bc6f9e45c5ae5cbf9cad3896dda8bb8047978c2",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 20
+      },
+      "listSpacing": 0,
+      "name": "Body/Body Small",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:29",
+        "fontSize": "VariableID:40:190",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:41:6"
+      },
+      "description": "",
+      "fontFamily": "Urbanist",
+      "fontSize": 16,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:86f3a1e4cce5f8433ee7176d95d130e3747108fb,",
+      "key": "86f3a1e4cce5f8433ee7176d95d130e3747108fb",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 20
+      },
+      "listSpacing": 0,
+      "name": "Body/Body Small Bold",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:29",
+        "fontSize": "VariableID:40:192",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:41:8"
+      },
+      "description": "",
+      "fontFamily": "Urbanist",
+      "fontSize": 20,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:32050d56208aa2357caf98d48bb62eca3baf6249,",
+      "key": "32050d56208aa2357caf98d48bb62eca3baf6249",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 24
+      },
+      "listSpacing": 0,
+      "name": "Link/Link Large",
       "paragraphIndent": 0,
       "paragraphSpacing": 0,
       "textCase": "ORIGINAL",
@@ -254,41 +1118,382 @@
       "textWrapStyle": "AUTO"
     },
     {
-      "boundVariables": {},
+      "boundVariables": {
+        "fontFamily": "VariableID:41:29",
+        "fontSize": "VariableID:40:191",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:41:7"
+      },
       "description": "",
-      "fontFamily": "Söhne Breit",
-      "fontSize": 12,
-      "fontStyle": "Kräftig",
+      "fontFamily": "Urbanist",
+      "fontSize": 18,
+      "fontStyle": "SemiBold",
       "hangingList": false,
       "hangingPunctuation": false,
-      "id": "S:t4",
-      "key": "t4t4t4t4",
-      "leadingTrim": "CAP_HEIGHT",
-      "letterSpacing": { "unit": "PERCENT", "value": 4 },
-      "lineHeight": { "unit": "PERCENT", "value": 100 },
+      "id": "S:db0625a1efe3f84b6bb4fd6f8093a92867720fe2,",
+      "key": "db0625a1efe3f84b6bb4fd6f8093a92867720fe2",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 20
+      },
       "listSpacing": 0,
-      "name": "label/caps",
+      "name": "Link/Link Medium",
       "paragraphIndent": 0,
       "paragraphSpacing": 0,
-      "textCase": "UPPER",
+      "textCase": "ORIGINAL",
+      "textDecoration": "UNDERLINE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:29",
+        "fontSize": "VariableID:40:190",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:41:6"
+      },
+      "description": "",
+      "fontFamily": "Urbanist",
+      "fontSize": 16,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:3561a932c61792a684516ba1a351f4ac18b33461,",
+      "key": "3561a932c61792a684516ba1a351f4ac18b33461",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 20
+      },
+      "listSpacing": 0,
+      "name": "Link/Link Small",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "UNDERLINE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:40:192",
+        "fontWeight": "VariableID:41:24",
+        "lineHeight": "VariableID:41:8"
+      },
+      "description": "",
+      "fontFamily": "Fraunces",
+      "fontSize": 20,
+      "fontStyle": "Italic",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:0df02c4df937d362485d2c83a13cc346ab305eea,",
+      "key": "0df02c4df937d362485d2c83a13cc346ab305eea",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 24
+      },
+      "listSpacing": 0,
+      "name": "Callout/Callout Large",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
       "textDecoration": "NONE",
       "textWrapStyle": "AUTO"
     },
     {
-      "boundVariables": {},
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:40:190",
+        "fontWeight": "VariableID:41:24",
+        "lineHeight": "VariableID:41:6"
+      },
       "description": "",
-      "fontFamily": "Inter",
+      "fontFamily": "Fraunces",
       "fontSize": 16,
+      "fontStyle": "Italic",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:4556157fe8e1033144fccbb4f883629f928a6d31,",
+      "key": "4556157fe8e1033144fccbb4f883629f928a6d31",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 20
+      },
+      "listSpacing": 0,
+      "name": "Callout/Callout Medium",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:40:189",
+        "lineHeight": "VariableID:41:5"
+      },
+      "description": "",
+      "fontFamily": "Fraunces",
+      "fontSize": 14,
+      "fontStyle": "Italic",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:8a260a1c9e42014154417ce14209f295e6c45add,",
+      "key": "8a260a1c9e42014154417ce14209f295e6c45add",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 16
+      },
+      "listSpacing": 0,
+      "name": "Callout/Callout Small",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:29",
+        "fontSize": "VariableID:40:189",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:41:5"
+      },
+      "description": "",
+      "fontFamily": "Urbanist",
+      "fontSize": 14,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:728d5e98dfc3e9054b6c4bc04157fd1b02cfadff,",
+      "key": "728d5e98dfc3e9054b6c4bc04157fd1b02cfadff",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 16
+      },
+      "listSpacing": 0,
+      "name": "Subhead/Subhead Large",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:29",
+        "fontSize": "VariableID:40:188",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:41:4"
+      },
+      "description": "",
+      "fontFamily": "Urbanist",
+      "fontSize": 13,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:ef9e2cde930424818a8d8546d2a78f7432e0a9c8,",
+      "key": "ef9e2cde930424818a8d8546d2a78f7432e0a9c8",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 16
+      },
+      "listSpacing": 0,
+      "name": "Subhead/Subhead Medium",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:29",
+        "fontSize": "VariableID:40:186",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:41:2"
+      },
+      "description": "",
+      "fontFamily": "Urbanist",
+      "fontSize": 10,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:bf14976c51028844f375f46f80dc3825d1e30ba7,",
+      "key": "bf14976c51028844f375f46f80dc3825d1e30ba7",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 12
+      },
+      "listSpacing": 0,
+      "name": "Subhead/Subhead Small",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:40:187",
+        "fontWeight": "VariableID:41:25",
+        "lineHeight": "VariableID:41:3"
+      },
+      "description": "",
+      "fontFamily": "Fraunces",
+      "fontSize": 11,
       "fontStyle": "Regular",
       "hangingList": false,
       "hangingPunctuation": false,
-      "id": "S:t5",
-      "key": "t5t5t5t5",
+      "id": "S:196c82faf13bbc0ff16d69232a0e07079bef10eb,",
+      "key": "196c82faf13bbc0ff16d69232a0e07079bef10eb",
       "leadingTrim": "NONE",
-      "letterSpacing": { "unit": "PIXELS", "value": 0 },
-      "lineHeight": { "unit": "PERCENT", "value": 150 },
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 12
+      },
       "listSpacing": 0,
-      "name": "legacy/scrim",
+      "name": "Footnote/Footnote",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:28",
+        "fontSize": "VariableID:40:186",
+        "fontWeight": "VariableID:41:25",
+        "lineHeight": "VariableID:41:2"
+      },
+      "description": "",
+      "fontFamily": "Fraunces",
+      "fontSize": 10,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:5aeb4ccdc792c1afe5ff647e2b7af64c3f081942,",
+      "key": "5aeb4ccdc792c1afe5ff647e2b7af64c3f081942",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 12
+      },
+      "listSpacing": 0,
+      "name": "Caption/Caption 1",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:29",
+        "fontSize": "VariableID:40:186",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:41:2"
+      },
+      "description": "",
+      "fontFamily": "Urbanist",
+      "fontSize": 10,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:11e32ed75cbb4fc6030d097b2cdd89acd2b81b7d,",
+      "key": "11e32ed75cbb4fc6030d097b2cdd89acd2b81b7d",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 12
+      },
+      "listSpacing": 0,
+      "name": "Caption/Caption 2",
+      "paragraphIndent": 0,
+      "paragraphSpacing": 0,
+      "textCase": "ORIGINAL",
+      "textDecoration": "NONE",
+      "textWrapStyle": "AUTO"
+    },
+    {
+      "boundVariables": {
+        "fontFamily": "VariableID:41:29",
+        "fontSize": "VariableID:427:9251",
+        "fontWeight": "VariableID:41:26",
+        "lineHeight": "VariableID:427:9252"
+      },
+      "description": "Decorative texture only \u2014 meant as word-shape abstraction, not legible type. Pairs with Title Cover Small on compact Typographic Covers as the byline equivalent. Do not use for captions, metadata, legal text, or any readable label. Caption 1 and Caption 2 are the readable scales.",
+      "fontFamily": "Urbanist",
+      "fontSize": 6,
+      "fontStyle": "SemiBold",
+      "hangingList": false,
+      "hangingPunctuation": false,
+      "id": "S:19343fd27364cb72be5a3eb65058ff3b1d7b1b2d,",
+      "key": "19343fd27364cb72be5a3eb65058ff3b1d7b1b2d",
+      "leadingTrim": "NONE",
+      "letterSpacing": {
+        "unit": "PERCENT",
+        "value": 0
+      },
+      "lineHeight": {
+        "unit": "PIXELS",
+        "value": 7
+      },
+      "listSpacing": 0,
+      "name": "Caption/Caption 3",
       "paragraphIndent": 0,
       "paragraphSpacing": 0,
       "textCase": "ORIGINAL",

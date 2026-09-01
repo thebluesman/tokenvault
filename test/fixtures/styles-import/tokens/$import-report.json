@@ -1,64 +1,12 @@
 {
   "counts": {
-    "flagged": 13,
+    "flagged": 15,
     "partialTokens": 3,
-    "styles": 17,
-    "tokens": 31,
+    "styles": 49,
+    "tokens": 62,
     "unconfirmedSubtypes": 1
   },
   "entries": [
-    {
-      "kind": "collision",
-      "message": "2 styles across 2 style sets produce the token path \"legacy.scrim\", which would clash when their sets are merged into one theme. Kept \"Styles/Paint\" → \"legacy/scrim\" (no signal to separate them — decided by name order); the rest were not written.",
-      "participants": [
-        {
-          "collectionId": "",
-          "collectionName": "",
-          "outcome": "written",
-          "styleId": "S:p3",
-          "styleName": "legacy/scrim",
-          "variableId": "",
-          "variableName": ""
-        },
-        {
-          "collectionId": "",
-          "collectionName": "",
-          "outcome": "skipped",
-          "styleId": "S:t5",
-          "styleName": "legacy/scrim",
-          "variableId": "",
-          "variableName": ""
-        }
-      ],
-      "path": "legacy.scrim",
-      "reason": "cross-set",
-      "winnerRule": "name-order"
-    },
-    {
-      "kind": "collision",
-      "message": "2 tokens across 2 sources produce the token path \"tv.color.text.accent\", which would clash when their sets are merged into one theme. Kept \"Theme\" → \"tv/color/text/accent\" (a Variable outranks a Style at the same path); the rest were not written.",
-      "participants": [
-        {
-          "collectionId": "",
-          "collectionName": "",
-          "outcome": "skipped",
-          "styleId": "S:p2",
-          "styleName": "tv/color/text/accent",
-          "variableId": "",
-          "variableName": ""
-        },
-        {
-          "collectionId": "VariableCollectionId:1:14",
-          "collectionName": "Theme",
-          "outcome": "written",
-          "variableId": "VariableID:1:16",
-          "variableName": "tv/color/text/accent"
-        }
-      ],
-      "path": "tv.color.text.accent",
-      "reason": "cross-set",
-      "winnerRule": "source-precedence"
-    },
     {
       "kind": "collision",
       "message": "2 variables across 2 collections produce the token path \"tv.ref.palette.white\", which would clash when their sets are merged into one theme. Kept \"Core\" → \"tv/ref/palette/white\" (most referenced by other variables); the rest were not written.",
@@ -129,8 +77,26 @@
       "winnerRule": "name-order"
     },
     {
+      "kind": "dangling-reference",
+      "message": "Paint style \"folio/ref/palette/neutral/white\" references \"folio/ref/palette/neutral/white\", which was not written to the token files, so the reference will not resolve until that is fixed in Figma.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "written",
+          "styleId": "S:ed05cf166dfaf373613d9a1eede12de6de73e964,",
+          "styleName": "folio/ref/palette/neutral/white",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.ref.palette.neutral.white",
+      "reason": "alias-target-skipped",
+      "set": "Styles/Paint"
+    },
+    {
       "kind": "partial-token",
-      "message": "Text style \"body/emphasis\" was written, but its line height is AUTO, which is a Figma layout behaviour rather than a value.",
+      "message": "Text style \"test-text\" was written, but its line height is AUTO, which is a Figma layout behaviour rather than a value.",
       "omitted": [
         "lineHeight"
       ],
@@ -139,142 +105,199 @@
           "collectionId": "",
           "collectionName": "",
           "outcome": "written",
-          "styleId": "S:t3",
-          "styleName": "body/emphasis",
+          "styleId": "S:637b67d3a3f7796fc6aeda417912f6b365d263c8,",
+          "styleName": "test-text",
           "variableId": "",
           "variableName": ""
         }
       ],
-      "path": "body.emphasis",
+      "path": "test-text",
       "reason": "auto-line-height",
       "set": "Styles/Text"
     },
     {
       "kind": "partial-token",
-      "message": "Text style \"label/caps\" was written, but the font style \"Kräftig\" is not in the weight keyword table, so fontWeight kept the raw string instead of a 100–900 number.",
+      "message": "Text style \"test-text2\" was written, but its line height is AUTO, which is a Figma layout behaviour rather than a value.",
+      "omitted": [
+        "lineHeight"
+      ],
       "participants": [
         {
           "collectionId": "",
           "collectionName": "",
           "outcome": "written",
-          "styleId": "S:t4",
-          "styleName": "label/caps",
+          "styleId": "S:d05998bd0decdd45d43b94e6d2a606157c1d4aa6,",
+          "styleName": "test-text2",
           "variableId": "",
           "variableName": ""
         }
       ],
-      "path": "label.caps",
-      "reason": "unmapped-font-style",
+      "path": "test-text2",
+      "reason": "auto-line-height",
       "set": "Styles/Text"
     },
     {
       "kind": "partial-token",
-      "message": "Effect style \"elevation/frosted\" was written, but 1 effect (layer blur) has no DTCG representation and was left out of the shadow token.",
+      "message": "Effect style \"folio/effects/liquid-glass/test\" was written, but 1 effect (glass) has no DTCG representation and was left out of the shadow token.",
       "omitted": [
-        "LAYER_BLUR"
+        "GLASS"
       ],
       "participants": [
         {
           "collectionId": "",
           "collectionName": "",
           "outcome": "written",
-          "styleId": "S:e3",
-          "styleName": "elevation/frosted",
+          "styleId": "S:aa1497fee32897f65c55a281b7b438d83f57aecd,",
+          "styleName": "folio/effects/liquid-glass/test",
           "variableId": "",
           "variableName": ""
         }
       ],
-      "path": "elevation.frosted",
+      "path": "folio.effects.liquid-glass.test",
       "reason": "unsupported-effect",
       "set": "Styles/Effect"
     },
     {
-      "kind": "redundant-style",
-      "message": "Paint style \"tv/ref/palette/blue-500\" is bound to the variable \"tv/ref/palette/blue-500\", which already writes the token \"tv.ref.palette.blue-500\". The style adds nothing, so no duplicate token was written.",
-      "participants": [
-        {
-          "collectionId": "",
-          "collectionName": "",
-          "outcome": "skipped",
-          "styleId": "S:p1",
-          "styleName": "tv/ref/palette/blue-500",
-          "variableId": "",
-          "variableName": ""
-        }
-      ],
-      "path": "tv.ref.palette.blue-500",
-      "reason": "mirrors-variable",
-      "set": "Styles/Paint"
-    },
-    {
       "kind": "unmappable-value",
-      "message": "Paint style \"legacy/hero-gradient\" is a gradient linear, and DTCG's gradient type is still draft, so Phase 3 does not write one. Not written.",
+      "message": "Paint style \"folio/gradient/edge-fade/bottom\" is a gradient linear, and DTCG's gradient type is still draft, so Phase 3 does not write one. Not written.",
       "participants": [
         {
           "collectionId": "",
           "collectionName": "",
           "outcome": "skipped",
-          "styleId": "S:p4",
-          "styleName": "legacy/hero-gradient",
+          "styleId": "S:26c7a81b2482cab32387fb56506b90867667d13d,",
+          "styleName": "folio/gradient/edge-fade/bottom",
           "variableId": "",
           "variableName": ""
         }
       ],
-      "path": "legacy.hero-gradient",
+      "path": "folio.gradient.edge-fade.bottom",
       "reason": "gradient-paint",
       "set": "Styles/Paint"
     },
     {
       "kind": "unmappable-value",
-      "message": "Paint style \"legacy/photo-wash\" has 2 visible paints stacked, which a single colour token cannot represent. Not written.",
+      "message": "Paint style \"folio/gradient/edge-fade/top\" is a gradient linear, and DTCG's gradient type is still draft, so Phase 3 does not write one. Not written.",
       "participants": [
         {
           "collectionId": "",
           "collectionName": "",
           "outcome": "skipped",
-          "styleId": "S:p5",
-          "styleName": "legacy/photo-wash",
+          "styleId": "S:ed75e0e1ee28e327c3aa220372ba487977316a75,",
+          "styleName": "folio/gradient/edge-fade/top",
           "variableId": "",
           "variableName": ""
         }
       ],
-      "path": "legacy.photo-wash",
+      "path": "folio.gradient.edge-fade.top",
+      "reason": "gradient-paint",
+      "set": "Styles/Paint"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Paint style \"folio/elevation/surface/0\" has 2 visible paints stacked, which a single colour token cannot represent. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:ed6a3f12d21b26677895a86eab5fc142b8bea81e,",
+          "styleName": "folio/elevation/surface/0",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.elevation.surface.0",
       "reason": "multi-paint",
       "set": "Styles/Paint"
     },
     {
       "kind": "unmappable-value",
-      "message": "Effect style \"effect/disabled-shadow\" has no visible effects. Not written.",
+      "message": "Paint style \"folio/elevation/surface/1\" has 2 visible paints stacked, which a single colour token cannot represent. Not written.",
       "participants": [
         {
           "collectionId": "",
           "collectionName": "",
           "outcome": "skipped",
-          "styleId": "S:e5",
-          "styleName": "effect/disabled-shadow",
+          "styleId": "S:ab6c3503f7495dcdcfd8a299d56e15a3eeafb5c7,",
+          "styleName": "folio/elevation/surface/1",
           "variableId": "",
           "variableName": ""
         }
       ],
-      "path": "effect.disabled-shadow",
+      "path": "folio.elevation.surface.1",
+      "reason": "multi-paint",
+      "set": "Styles/Paint"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Paint style \"folio/elevation/surface/2\" has 2 visible paints stacked, which a single colour token cannot represent. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:b399d623b262dd0b7a8df29284a4ebf0eedca8f3,",
+          "styleName": "folio/elevation/surface/2",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.elevation.surface.2",
+      "reason": "multi-paint",
+      "set": "Styles/Paint"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Paint style \"folio/elevation/surface/3\" has 2 visible paints stacked, which a single colour token cannot represent. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:e59a36674d9614819d7cddac8854492dc5cfc76f,",
+          "styleName": "folio/elevation/surface/3",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.elevation.surface.3",
+      "reason": "multi-paint",
+      "set": "Styles/Paint"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Effect style \"folio/effects/liquid-glass/button\" has only 1 effect (glass), none of which DTCG's shadow type can represent. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:8fa63ccb3928f0bce1c10c3290292f6051954948,",
+          "styleName": "folio/effects/liquid-glass/button",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.effects.liquid-glass.button",
       "reason": "unsupported-effect",
       "set": "Styles/Effect"
     },
     {
       "kind": "unmappable-value",
-      "message": "Effect style \"effect/scrim-blur\" has only 1 effect (background blur), none of which DTCG's shadow type can represent. Not written.",
+      "message": "Effect style \"folio/effects/liquid-glass/regular-medium\" has only 1 effect (glass), none of which DTCG's shadow type can represent. Not written.",
       "participants": [
         {
           "collectionId": "",
           "collectionName": "",
           "outcome": "skipped",
-          "styleId": "S:e4",
-          "styleName": "effect/scrim-blur",
+          "styleId": "S:71f9a0e7a7f2ca5ed0276ea86f2cbdad2ec3d675,",
+          "styleName": "folio/effects/liquid-glass/regular-medium",
           "variableId": "",
           "variableName": ""
         }
       ],
-      "path": "effect.scrim-blur",
+      "path": "folio.effects.liquid-glass.regular-medium",
       "reason": "unsupported-effect",
       "set": "Styles/Effect"
     }

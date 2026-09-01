@@ -1,88 +1,79 @@
 {
-  "elevation": {
-    "frosted": {
-      "$extensions": {
-        "com.tokenvault": {
-          "figma": {
-            "styleId": "S:e3",
-            "styleKey": "e3e3e3e3",
-            "styleType": "EFFECT"
-          }
+  "folio": {
+    "effects": {
+      "liquid-glass": {
+        "test": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "styleId": "S:aa1497fee32897f65c55a281b7b438d83f57aecd,",
+                "styleKey": "aa1497fee32897f65c55a281b7b438d83f57aecd",
+                "styleType": "EFFECT"
+              }
+            }
+          },
+          "$type": "shadow",
+          "$value": [
+            {
+              "blur": {
+                "unit": "px",
+                "value": 4
+              },
+              "color": "#00000040",
+              "inset": true,
+              "offsetX": {
+                "unit": "px",
+                "value": 0
+              },
+              "offsetY": {
+                "unit": "px",
+                "value": 4
+              },
+              "spread": {
+                "unit": "px",
+                "value": 0
+              }
+            },
+            {
+              "blur": {
+                "unit": "px",
+                "value": 4
+              },
+              "color": "#00000040",
+              "inset": false,
+              "offsetX": {
+                "unit": "px",
+                "value": 0
+              },
+              "offsetY": {
+                "unit": "px",
+                "value": 4
+              },
+              "spread": {
+                "unit": "px",
+                "value": 0
+              }
+            }
+          ]
         }
       },
-      "$type": "shadow",
-      "$value": {
-        "blur": {
-          "unit": "px",
-          "value": 6
-        },
-        "color": "#00000033",
-        "inset": false,
-        "offsetX": {
-          "unit": "px",
-          "value": 0
-        },
-        "offsetY": {
-          "unit": "px",
-          "value": 0
-        },
-        "spread": {
-          "unit": "px",
-          "value": 0
-        }
-      }
-    },
-    "inset": {
-      "$extensions": {
-        "com.tokenvault": {
-          "figma": {
-            "styleId": "S:e2",
-            "styleKey": "e2e2e2e2",
-            "styleType": "EFFECT"
+      "liquid-glass-shadow": {
+        "$extensions": {
+          "com.tokenvault": {
+            "figma": {
+              "styleId": "S:8d6345be869cda9aca94f6f9506610ce84d43f6f,",
+              "styleKey": "8d6345be869cda9aca94f6f9506610ce84d43f6f",
+              "styleType": "EFFECT"
+            }
           }
-        }
-      },
-      "$type": "shadow",
-      "$value": {
-        "blur": {
-          "unit": "px",
-          "value": 4
         },
-        "color": "#0000003d",
-        "inset": true,
-        "offsetX": {
-          "unit": "px",
-          "value": 0
-        },
-        "offsetY": {
-          "unit": "px",
-          "value": 2
-        },
-        "spread": {
-          "unit": "px",
-          "value": 0
-        }
-      }
-    },
-    "raised": {
-      "$description": "Resting elevation for cards.",
-      "$extensions": {
-        "com.tokenvault": {
-          "figma": {
-            "styleId": "S:e1",
-            "styleKey": "e1e1e1e1",
-            "styleType": "EFFECT"
-          }
-        }
-      },
-      "$type": "shadow",
-      "$value": [
-        {
+        "$type": "shadow",
+        "$value": {
           "blur": {
             "unit": "px",
-            "value": 2
+            "value": 40
           },
-          "color": "#0d0d0d14",
+          "color": "#0000001f",
           "inset": false,
           "offsetX": {
             "unit": "px",
@@ -90,34 +81,146 @@
           },
           "offsetY": {
             "unit": "px",
-            "value": 1
+            "value": 8
           },
           "spread": {
             "unit": "px",
             "value": 0
-          }
-        },
-        {
-          "blur": {
-            "unit": "px",
-            "value": 12
-          },
-          "color": "#0d0d0d1f",
-          "inset": false,
-          "offsetX": {
-            "unit": "px",
-            "value": 0
-          },
-          "offsetY": {
-            "unit": "px",
-            "value": 4
-          },
-          "spread": {
-            "unit": "px",
-            "value": -2
           }
         }
-      ]
+      }
+    },
+    "elevation": {
+      "shadow": {
+        "0": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "styleId": "S:c0eccbdc2c1ba95eb9a51ec5334b859dde931f2e,",
+                "styleKey": "c0eccbdc2c1ba95eb9a51ec5334b859dde931f2e",
+                "styleType": "EFFECT"
+              }
+            }
+          },
+          "$type": "shadow",
+          "$value": {
+            "blur": {
+              "unit": "px",
+              "value": 0
+            },
+            "color": "#1f1c1800",
+            "inset": false,
+            "offsetX": {
+              "unit": "px",
+              "value": 0
+            },
+            "offsetY": {
+              "unit": "px",
+              "value": 0
+            },
+            "spread": {
+              "unit": "px",
+              "value": 0
+            }
+          }
+        },
+        "1": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "styleId": "S:1ac87d5ba2daab116a127f5cda807cc2667e810d,",
+                "styleKey": "1ac87d5ba2daab116a127f5cda807cc2667e810d",
+                "styleType": "EFFECT"
+              }
+            }
+          },
+          "$type": "shadow",
+          "$value": {
+            "blur": {
+              "unit": "px",
+              "value": 3
+            },
+            "color": "#1f1c180d",
+            "inset": false,
+            "offsetX": {
+              "unit": "px",
+              "value": 0
+            },
+            "offsetY": {
+              "unit": "px",
+              "value": 1
+            },
+            "spread": {
+              "unit": "px",
+              "value": 0
+            }
+          }
+        },
+        "2": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "styleId": "S:01d44c838a4d44f5d8095a250520325453a3fa07,",
+                "styleKey": "01d44c838a4d44f5d8095a250520325453a3fa07",
+                "styleType": "EFFECT"
+              }
+            }
+          },
+          "$type": "shadow",
+          "$value": {
+            "blur": {
+              "unit": "px",
+              "value": 8
+            },
+            "color": "#1f1c181a",
+            "inset": false,
+            "offsetX": {
+              "unit": "px",
+              "value": 0
+            },
+            "offsetY": {
+              "unit": "px",
+              "value": 2
+            },
+            "spread": {
+              "unit": "px",
+              "value": 0
+            }
+          }
+        },
+        "3": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "styleId": "S:1f205a126a055273d7a59ecebcf6b55763fca9a2,",
+                "styleKey": "1f205a126a055273d7a59ecebcf6b55763fca9a2",
+                "styleType": "EFFECT"
+              }
+            }
+          },
+          "$type": "shadow",
+          "$value": {
+            "blur": {
+              "unit": "px",
+              "value": 16
+            },
+            "color": "#1f1c181a",
+            "inset": false,
+            "offsetX": {
+              "unit": "px",
+              "value": 0
+            },
+            "offsetY": {
+              "unit": "px",
+              "value": 4
+            },
+            "spread": {
+              "unit": "px",
+              "value": 0
+            }
+          }
+        }
+      }
     }
   }
 }
