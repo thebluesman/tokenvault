@@ -1,0 +1,2167 @@
+{
+  "folio": {
+    "color": {
+      "border": {
+        "accent": {
+          "default": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "STROKE_COLOR"
+                  ],
+                  "variableId": "VariableID:109:372"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-warm.50}"
+          },
+          "strong": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "STROKE_COLOR"
+                  ],
+                  "variableId": "VariableID:167:6460"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-warm-vivid.50}"
+          },
+          "subtle": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "STROKE_COLOR"
+                  ],
+                  "variableId": "VariableID:109:373"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.red-warm.50.30}"
+          }
+        },
+        "destructive": {
+          "default": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "STROKE_COLOR"
+                  ],
+                  "variableId": "VariableID:182:7559"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-cool.50}"
+          },
+          "strong": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "STROKE_COLOR"
+                  ],
+                  "variableId": "VariableID:167:6461"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-cool-vivid.50}"
+          },
+          "subtle": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "STROKE_COLOR"
+                  ],
+                  "variableId": "VariableID:182:7560"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.red-cool-vivid.50.30}"
+          }
+        },
+        "neutral": {
+          "default": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "STROKE_COLOR"
+                  ],
+                  "variableId": "VariableID:182:7565"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-warm.80}"
+          },
+          "strong": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "STROKE_COLOR"
+                  ],
+                  "variableId": "VariableID:182:7564"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-warm.90}"
+          },
+          "subtle": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "STROKE_COLOR"
+                  ],
+                  "variableId": "VariableID:182:7566"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.red-warm.80.50}"
+          }
+        }
+      },
+      "elevation": {
+        "shadow": {
+          "0": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "ALL_SCOPES"
+                  ],
+                  "variableId": "VariableID:145:218"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.red-warm.90.0}"
+          },
+          "1": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "ALL_SCOPES"
+                  ],
+                  "variableId": "VariableID:145:326"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.red-warm.90.5}"
+          },
+          "2": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "ALL_SCOPES"
+                  ],
+                  "variableId": "VariableID:145:327"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.red-warm.90.10}"
+          },
+          "3": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "ALL_SCOPES"
+                  ],
+                  "variableId": "VariableID:145:328"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.red-warm.90.10}"
+          }
+        },
+        "surface": {
+          "base": {
+            "0": {
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "ALL_SCOPES"
+                    ],
+                    "variableId": "VariableID:145:201"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "{folio.ref.palette.red-warm.10}"
+            },
+            "1": {
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "ALL_SCOPES"
+                    ],
+                    "variableId": "VariableID:145:202"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "{folio.ref.palette.gray-warm.4}"
+            },
+            "2": {
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "ALL_SCOPES"
+                    ],
+                    "variableId": "VariableID:145:203"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "{folio.ref.palette.gray-warm.2}"
+            },
+            "3": {
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "ALL_SCOPES"
+                    ],
+                    "variableId": "VariableID:145:204"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "{folio.ref.palette.neutral.white}"
+            }
+          },
+          "lift": {
+            "0": {
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "ALL_SCOPES"
+                    ],
+                    "variableId": "VariableID:145:205"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "{folio.ref.palette.transparent.white.0}"
+            },
+            "1": {
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "ALL_SCOPES"
+                    ],
+                    "variableId": "VariableID:145:206"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "{folio.ref.palette.transparent.white.0}"
+            },
+            "2": {
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "ALL_SCOPES"
+                    ],
+                    "variableId": "VariableID:145:207"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "{folio.ref.palette.transparent.white.0}"
+            },
+            "3": {
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "ALL_SCOPES"
+                    ],
+                    "variableId": "VariableID:145:208"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "{folio.ref.palette.transparent.white.0}"
+            }
+          }
+        }
+      },
+      "fill": {
+        "button": {
+          "accent": {
+            "prominent": {
+              "disabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:114:1780"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-warm-vivid.50.30}"
+              },
+              "enabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:6:276"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.red-warm.50}"
+              },
+              "hover": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:9:68"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.red-warm-vivid.50}"
+              },
+              "liquid-glass": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:162:1143"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-warm.50.90}"
+              },
+              "pressed": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:9:69"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.red-warm-vivid.60}"
+              }
+            }
+          },
+          "destructive": {
+            "prominent": {
+              "disabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:160:2009"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-cool-vivid.50.30}"
+              },
+              "enabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:160:2006"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.red-cool-vivid.50}"
+              },
+              "hover": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:160:2007"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.red-cool-vivid.60}"
+              },
+              "liquid-glass": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:165:2364"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-cool-vivid.50.90}"
+              },
+              "pressed": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:160:2008"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.red-cool-vivid.70}"
+              }
+            },
+            "soft": {
+              "disabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:160:2118"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-cool-vivid.20.10}"
+              },
+              "enabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:160:2115"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.red-cool-vivid.10}"
+              },
+              "hover": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:160:2116"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-cool-vivid.20.50}"
+              },
+              "liquid-glass": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:165:2365"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-cool-vivid.10.90}"
+              },
+              "pressed": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:160:2117"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-cool-vivid.20.80}"
+              }
+            }
+          },
+          "neutral": {
+            "soft": {
+              "disabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:114:1781"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-warm.20.10}"
+              },
+              "enabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:6:330"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.red-warm.10}"
+              },
+              "hover": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:9:76"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-warm.20.50}"
+              },
+              "liquid-glass": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:162:1144"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-warm.10.90}"
+              },
+              "pressed": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "FRAME_FILL",
+                        "SHAPE_FILL"
+                      ],
+                      "variableId": "VariableID:9:77"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-warm.20.80}"
+              }
+            }
+          }
+        },
+        "input": {
+          "destructive": {
+            "editing": {
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "FRAME_FILL",
+                      "SHAPE_FILL"
+                    ],
+                    "variableId": "VariableID:172:6110"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "{folio.ref.palette.transparent.red-cool-vivid.20.10}"
+            },
+            "enabled": {
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "FRAME_FILL",
+                      "SHAPE_FILL"
+                    ],
+                    "variableId": "VariableID:172:6107"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "{folio.ref.palette.red-cool-vivid.10}"
+            },
+            "hover": {
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "FRAME_FILL",
+                      "SHAPE_FILL"
+                    ],
+                    "variableId": "VariableID:172:6108"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "{folio.ref.palette.transparent.red-cool-vivid.20.50}"
+            }
+          },
+          "neutral": {
+            "editing": {
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "FRAME_FILL",
+                      "SHAPE_FILL"
+                    ],
+                    "variableId": "VariableID:172:6179"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "{folio.ref.palette.transparent.red-warm.20.10}"
+            },
+            "enabled": {
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "FRAME_FILL",
+                      "SHAPE_FILL"
+                    ],
+                    "variableId": "VariableID:172:6097"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "{folio.ref.palette.red-warm.10}"
+            },
+            "hover": {
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "FRAME_FILL",
+                      "SHAPE_FILL"
+                    ],
+                    "variableId": "VariableID:172:6098"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "{folio.ref.palette.transparent.red-warm.20.50}"
+            }
+          }
+        },
+        "inverse": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:6:270",
+                "modeId": "6:0",
+                "scopes": [
+                  "FRAME_FILL",
+                  "SHAPE_FILL"
+                ],
+                "variableId": "VariableID:109:1222"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "{folio.ref.palette.red-warm.90}"
+        },
+        "on-cover": {
+          "subtle": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL",
+                    "SHAPE_FILL"
+                  ],
+                  "variableId": "VariableID:590:11517"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.white.10}"
+          }
+        },
+        "primary": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:6:270",
+                "modeId": "6:0",
+                "scopes": [
+                  "FRAME_FILL",
+                  "SHAPE_FILL"
+                ],
+                "variableId": "VariableID:6:271"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "{folio.ref.palette.red-warm.5}"
+        },
+        "secondary": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:6:270",
+                "modeId": "6:0",
+                "scopes": [
+                  "FRAME_FILL",
+                  "SHAPE_FILL"
+                ],
+                "variableId": "VariableID:6:272"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "{folio.ref.palette.red-warm.10}"
+        },
+        "tertiary": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:6:270",
+                "modeId": "6:0",
+                "scopes": [
+                  "FRAME_FILL",
+                  "SHAPE_FILL"
+                ],
+                "variableId": "VariableID:114:1617"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "{folio.ref.palette.transparent.red-warm.50.20}"
+        }
+      },
+      "focus": {
+        "ring": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:6:270",
+                "modeId": "6:0",
+                "scopes": [
+                  "ALL_SCOPES"
+                ],
+                "variableId": "VariableID:109:375"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "{folio.ref.palette.red-warm.50}"
+        }
+      },
+      "gradient-stop": {
+        "edge-fade": {
+          "1": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "ALL_SCOPES"
+                  ],
+                  "variableId": "VariableID:472:10430"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-warm.5}"
+          },
+          "2": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "ALL_SCOPES"
+                  ],
+                  "variableId": "VariableID:472:10431"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.red-warm.5.0}"
+          }
+        }
+      },
+      "ink": {
+        "accent": {
+          "default": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:172:6234"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-warm.50}"
+          },
+          "strong": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:172:6412"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-warm-vivid.50}"
+          },
+          "subtle": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:172:6235"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.red-warm.50.30}"
+          }
+        },
+        "button": {
+          "accent": {
+            "on-page": {
+              "disabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "SHAPE_FILL",
+                        "TEXT_FILL"
+                      ],
+                      "variableId": "VariableID:159:41"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-warm.50.30}"
+              },
+              "enabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "SHAPE_FILL",
+                        "TEXT_FILL"
+                      ],
+                      "variableId": "VariableID:159:40"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.red-warm.50}"
+              }
+            },
+            "on-soft": {
+              "disabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "SHAPE_FILL",
+                        "TEXT_FILL"
+                      ],
+                      "variableId": "VariableID:159:43"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-warm-vivid.60.30}"
+              },
+              "enabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "SHAPE_FILL",
+                        "TEXT_FILL"
+                      ],
+                      "variableId": "VariableID:159:42"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.red-warm-vivid.60}"
+              }
+            }
+          },
+          "destructive": {
+            "on-page": {
+              "disabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "SHAPE_FILL",
+                        "TEXT_FILL"
+                      ],
+                      "variableId": "VariableID:160:2226"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-cool-vivid.50.30}"
+              },
+              "enabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "SHAPE_FILL",
+                        "TEXT_FILL"
+                      ],
+                      "variableId": "VariableID:160:2225"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.red-cool-vivid.50}"
+              }
+            },
+            "on-soft": {
+              "disabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "SHAPE_FILL",
+                        "TEXT_FILL"
+                      ],
+                      "variableId": "VariableID:160:2224"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-cool-vivid.60.30}"
+              },
+              "enabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "SHAPE_FILL",
+                        "TEXT_FILL"
+                      ],
+                      "variableId": "VariableID:160:2223"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.red-cool-vivid.60}"
+              }
+            }
+          },
+          "neutral": {
+            "on-prominent": {
+              "disabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "SHAPE_FILL",
+                        "TEXT_FILL"
+                      ],
+                      "variableId": "VariableID:114:1796"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.white.70}"
+              },
+              "enabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "SHAPE_FILL",
+                        "TEXT_FILL"
+                      ],
+                      "variableId": "VariableID:6:277"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.neutral.white}"
+              }
+            },
+            "on-soft": {
+              "disabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "SHAPE_FILL",
+                        "TEXT_FILL"
+                      ],
+                      "variableId": "VariableID:114:1797"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.transparent.red-warm.80.30}"
+              },
+              "enabled": {
+                "$extensions": {
+                  "com.tokenvault": {
+                    "figma": {
+                      "collectionId": "VariableCollectionId:6:270",
+                      "modeId": "6:0",
+                      "scopes": [
+                        "SHAPE_FILL",
+                        "TEXT_FILL"
+                      ],
+                      "variableId": "VariableID:6:331"
+                    }
+                  }
+                },
+                "$type": "color",
+                "$value": "{folio.ref.palette.red-warm.80}"
+              }
+            }
+          }
+        },
+        "destructive": {
+          "default": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:172:6238"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-cool-vivid.60}"
+          },
+          "disabled": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:172:6239"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.red-cool-vivid.60.30}"
+          },
+          "strong": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:172:6407"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-cool-vivid.50}"
+          },
+          "subtle": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:181:6432"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.red-cool-vivid.60.50}"
+          }
+        },
+        "inverse": {
+          "default": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:109:1249"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-warm.10}"
+          },
+          "strong": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:174:11849"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.neutral.white}"
+          },
+          "subtle": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:174:11850"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.red-warm.10.50}"
+          }
+        },
+        "neutral": {
+          "default": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:6:274"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-warm.70}"
+          },
+          "disabled": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:172:6233"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.red-warm.90.30}"
+          },
+          "strong": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:172:6232"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-warm.90}"
+          },
+          "subtle": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:172:13731"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.red-warm.70.50}"
+          }
+        },
+        "on-cover": {
+          "author": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:590:11309"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.transparent.white.80}"
+          },
+          "title": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "SHAPE_FILL",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:590:11308"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.neutral.white}"
+          }
+        }
+      },
+      "paper": {
+        "blush": {
+          "fill": {
+            "$description": "Cover-fallback surface family for the Typographic Cover atom. Surface-vs-mark framing: paper is the ground, ink is the mark. Each swatch ships a fill, an ink/primary, and an ink/secondary tuned to sit on it without contrast collision. In dark mode the grounds invert to chalkboard tones and the inks shift to chalk-colored counterparts. Use exclusively as cover grounds — these are not general surface colors and should not appear behind UI.",
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL"
+                  ],
+                  "variableId": "VariableID:425:9324"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "#e5cfc5"
+          },
+          "ink": {
+            "primary": {
+              "$description": "Cover-fallback surface family for the Typographic Cover atom. Surface-vs-mark framing: paper is the ground, ink is the mark. Each swatch ships a fill, an ink/primary, and an ink/secondary tuned to sit on it without contrast collision. In dark mode the grounds invert to chalkboard tones and the inks shift to chalk-colored counterparts. Use exclusively as cover grounds — these are not general surface colors and should not appear behind UI.",
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "STROKE_COLOR",
+                      "TEXT_FILL"
+                    ],
+                    "variableId": "VariableID:425:9325"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "#412e2c"
+            },
+            "secondary": {
+              "$description": "Cover-fallback surface family for the Typographic Cover atom. Surface-vs-mark framing: paper is the ground, ink is the mark. Each swatch ships a fill, an ink/primary, and an ink/secondary tuned to sit on it without contrast collision. In dark mode the grounds invert to chalkboard tones and the inks shift to chalk-colored counterparts. Use exclusively as cover grounds — these are not general surface colors and should not appear behind UI.",
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "STROKE_COLOR",
+                      "TEXT_FILL"
+                    ],
+                    "variableId": "VariableID:425:9326"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "#6a564d"
+            }
+          }
+        },
+        "oat": {
+          "fill": {
+            "$description": "Cover-fallback surface family for the Typographic Cover atom. Surface-vs-mark framing: paper is the ground, ink is the mark. Each swatch ships a fill, an ink/primary, and an ink/secondary tuned to sit on it without contrast collision. In dark mode the grounds invert to chalkboard tones and the inks shift to chalk-colored counterparts. Use exclusively as cover grounds — these are not general surface colors and should not appear behind UI.",
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL"
+                  ],
+                  "variableId": "VariableID:425:9312"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "#e8dec6"
+          },
+          "ink": {
+            "primary": {
+              "$description": "Cover-fallback surface family for the Typographic Cover atom. Surface-vs-mark framing: paper is the ground, ink is the mark. Each swatch ships a fill, an ink/primary, and an ink/secondary tuned to sit on it without contrast collision. In dark mode the grounds invert to chalkboard tones and the inks shift to chalk-colored counterparts. Use exclusively as cover grounds — these are not general surface colors and should not appear behind UI.",
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "STROKE_COLOR",
+                      "TEXT_FILL"
+                    ],
+                    "variableId": "VariableID:425:9313"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "#413b2f"
+            },
+            "secondary": {
+              "$description": "Cover-fallback surface family for the Typographic Cover atom. Surface-vs-mark framing: paper is the ground, ink is the mark. Each swatch ships a fill, an ink/primary, and an ink/secondary tuned to sit on it without contrast collision. In dark mode the grounds invert to chalkboard tones and the inks shift to chalk-colored counterparts. Use exclusively as cover grounds — these are not general surface colors and should not appear behind UI.",
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "STROKE_COLOR",
+                      "TEXT_FILL"
+                    ],
+                    "variableId": "VariableID:425:9314"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "#676256"
+            }
+          }
+        },
+        "sage": {
+          "fill": {
+            "$description": "Cover-fallback surface family for the Typographic Cover atom. Surface-vs-mark framing: paper is the ground, ink is the mark. Each swatch ships a fill, an ink/primary, and an ink/secondary tuned to sit on it without contrast collision. In dark mode the grounds invert to chalkboard tones and the inks shift to chalk-colored counterparts. Use exclusively as cover grounds — these are not general surface colors and should not appear behind UI.",
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL"
+                  ],
+                  "variableId": "VariableID:425:9321"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "#d6d9c2"
+          },
+          "ink": {
+            "primary": {
+              "$description": "Cover-fallback surface family for the Typographic Cover atom. Surface-vs-mark framing: paper is the ground, ink is the mark. Each swatch ships a fill, an ink/primary, and an ink/secondary tuned to sit on it without contrast collision. In dark mode the grounds invert to chalkboard tones and the inks shift to chalk-colored counterparts. Use exclusively as cover grounds — these are not general surface colors and should not appear behind UI.",
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "STROKE_COLOR",
+                      "TEXT_FILL"
+                    ],
+                    "variableId": "VariableID:425:9322"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "#3b3e26"
+            },
+            "secondary": {
+              "$description": "Cover-fallback surface family for the Typographic Cover atom. Surface-vs-mark framing: paper is the ground, ink is the mark. Each swatch ships a fill, an ink/primary, and an ink/secondary tuned to sit on it without contrast collision. In dark mode the grounds invert to chalkboard tones and the inks shift to chalk-colored counterparts. Use exclusively as cover grounds — these are not general surface colors and should not appear behind UI.",
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "STROKE_COLOR",
+                      "TEXT_FILL"
+                    ],
+                    "variableId": "VariableID:425:9323"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "#5b5f43"
+            }
+          }
+        },
+        "sand": {
+          "fill": {
+            "$description": "Cover-fallback surface family for the Typographic Cover atom. Surface-vs-mark framing: paper is the ground, ink is the mark. Each swatch ships a fill, an ink/primary, and an ink/secondary tuned to sit on it without contrast collision. In dark mode the grounds invert to chalkboard tones and the inks shift to chalk-colored counterparts. Use exclusively as cover grounds — these are not general surface colors and should not appear behind UI.",
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL"
+                  ],
+                  "variableId": "VariableID:425:9318"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "#d8be99"
+          },
+          "ink": {
+            "primary": {
+              "$description": "Cover-fallback surface family for the Typographic Cover atom. Surface-vs-mark framing: paper is the ground, ink is the mark. Each swatch ships a fill, an ink/primary, and an ink/secondary tuned to sit on it without contrast collision. In dark mode the grounds invert to chalkboard tones and the inks shift to chalk-colored counterparts. Use exclusively as cover grounds — these are not general surface colors and should not appear behind UI.",
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "STROKE_COLOR",
+                      "TEXT_FILL"
+                    ],
+                    "variableId": "VariableID:425:9319"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "#44341f"
+            },
+            "secondary": {
+              "$description": "Cover-fallback surface family for the Typographic Cover atom. Surface-vs-mark framing: paper is the ground, ink is the mark. Each swatch ships a fill, an ink/primary, and an ink/secondary tuned to sit on it without contrast collision. In dark mode the grounds invert to chalkboard tones and the inks shift to chalk-colored counterparts. Use exclusively as cover grounds — these are not general surface colors and should not appear behind UI.",
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "STROKE_COLOR",
+                      "TEXT_FILL"
+                    ],
+                    "variableId": "VariableID:425:9320"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "#705c40"
+            }
+          }
+        },
+        "stone": {
+          "fill": {
+            "$description": "Cover-fallback surface family for the Typographic Cover atom. Surface-vs-mark framing: paper is the ground, ink is the mark. Each swatch ships a fill, an ink/primary, and an ink/secondary tuned to sit on it without contrast collision. In dark mode the grounds invert to chalkboard tones and the inks shift to chalk-colored counterparts. Use exclusively as cover grounds — these are not general surface colors and should not appear behind UI.",
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL"
+                  ],
+                  "variableId": "VariableID:425:9315"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "#c9cfd0"
+          },
+          "ink": {
+            "primary": {
+              "$description": "Cover-fallback surface family for the Typographic Cover atom. Surface-vs-mark framing: paper is the ground, ink is the mark. Each swatch ships a fill, an ink/primary, and an ink/secondary tuned to sit on it without contrast collision. In dark mode the grounds invert to chalkboard tones and the inks shift to chalk-colored counterparts. Use exclusively as cover grounds — these are not general surface colors and should not appear behind UI.",
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "STROKE_COLOR",
+                      "TEXT_FILL"
+                    ],
+                    "variableId": "VariableID:425:9316"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "#32323a"
+            },
+            "secondary": {
+              "$description": "Cover-fallback surface family for the Typographic Cover atom. Surface-vs-mark framing: paper is the ground, ink is the mark. Each swatch ships a fill, an ink/primary, and an ink/secondary tuned to sit on it without contrast collision. In dark mode the grounds invert to chalkboard tones and the inks shift to chalk-colored counterparts. Use exclusively as cover grounds — these are not general surface colors and should not appear behind UI.",
+              "$extensions": {
+                "com.tokenvault": {
+                  "figma": {
+                    "collectionId": "VariableCollectionId:6:270",
+                    "modeId": "6:0",
+                    "scopes": [
+                      "STROKE_COLOR",
+                      "TEXT_FILL"
+                    ],
+                    "variableId": "VariableID:425:9317"
+                  }
+                }
+              },
+              "$type": "color",
+              "$value": "#636377"
+            }
+          }
+        }
+      },
+      "stamp-ink": {
+        "coffee": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:6:270",
+                "modeId": "6:0",
+                "scopes": [
+                  "ALL_SCOPES"
+                ],
+                "variableId": "VariableID:109:568"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "#6b4423"
+        },
+        "crimson": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:6:270",
+                "modeId": "6:0",
+                "scopes": [
+                  "ALL_SCOPES"
+                ],
+                "variableId": "VariableID:109:566"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "#a81b34"
+        },
+        "forest": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:6:270",
+                "modeId": "6:0",
+                "scopes": [
+                  "ALL_SCOPES"
+                ],
+                "variableId": "VariableID:109:567"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "#2d4f33"
+        },
+        "navy": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:6:270",
+                "modeId": "6:0",
+                "scopes": [
+                  "ALL_SCOPES"
+                ],
+                "variableId": "VariableID:109:565"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "#1a2b44"
+        },
+        "plum": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:6:270",
+                "modeId": "6:0",
+                "scopes": [
+                  "ALL_SCOPES"
+                ],
+                "variableId": "VariableID:109:569"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "#6d435a"
+        },
+        "rust": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:6:270",
+                "modeId": "6:0",
+                "scopes": [
+                  "ALL_SCOPES"
+                ],
+                "variableId": "VariableID:109:572"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "#9b411d"
+        },
+        "slate": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:6:270",
+                "modeId": "6:0",
+                "scopes": [
+                  "ALL_SCOPES"
+                ],
+                "variableId": "VariableID:109:571"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "#52606d"
+        },
+        "squid": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:6:270",
+                "modeId": "6:0",
+                "scopes": [
+                  "ALL_SCOPES"
+                ],
+                "variableId": "VariableID:109:573"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "#2a2723"
+        },
+        "teal": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:6:270",
+                "modeId": "6:0",
+                "scopes": [
+                  "ALL_SCOPES"
+                ],
+                "variableId": "VariableID:109:570"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "#1f5e5e"
+        },
+        "terracotta": {
+          "$extensions": {
+            "com.tokenvault": {
+              "figma": {
+                "collectionId": "VariableCollectionId:6:270",
+                "modeId": "6:0",
+                "scopes": [
+                  "ALL_SCOPES"
+                ],
+                "variableId": "VariableID:109:564"
+              }
+            }
+          },
+          "$type": "color",
+          "$value": "#c3512c"
+        }
+      },
+      "status": {
+        "anticipation": {
+          "soft": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL",
+                    "SHAPE_FILL",
+                    "STROKE_COLOR",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:591:89"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.violet-warm.10}"
+          },
+          "strong": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL",
+                    "SHAPE_FILL",
+                    "STROKE_COLOR",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:591:88"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.violet-warm.70}"
+          }
+        },
+        "borrowed": {
+          "soft": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL",
+                    "SHAPE_FILL",
+                    "STROKE_COLOR",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:596:11334"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.indigo-cool.10}"
+          },
+          "strong": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL",
+                    "SHAPE_FILL",
+                    "STROKE_COLOR",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:596:11333"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.indigo-cool.70}"
+          }
+        },
+        "error": {
+          "soft": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL",
+                    "SHAPE_FILL",
+                    "STROKE_COLOR",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:259:7"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-cool.10}"
+          },
+          "strong": {
+            "$description": "Error state — strong fill/text/stroke. Sourced from non-vivid red-cool ramp (vividness reserved for destructive actions per Button composition notes). Light: red-cool/60 (#9e394b, 5.88:1 on cream paper — AA normal). Dark: red-cool/40 (#e16b80, 5.35:1 on dark surface — AA normal). Aimed one rung darker on Light than initial proposal after @brand-designer ratification 2026-05-08 — original /50 read at 4.08:1, just under AA-normal and visually under-alarming on warm paper.",
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL",
+                    "SHAPE_FILL",
+                    "STROKE_COLOR",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:259:6"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.red-cool.60}"
+          }
+        },
+        "info": {
+          "soft": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL",
+                    "SHAPE_FILL",
+                    "STROKE_COLOR",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:259:9"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.blue-cool.10}"
+          },
+          "strong": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL",
+                    "SHAPE_FILL",
+                    "STROKE_COLOR",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:259:8"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.blue-cool-vivid.50}"
+          }
+        },
+        "success": {
+          "soft": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL",
+                    "SHAPE_FILL",
+                    "STROKE_COLOR",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:259:3"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.green-warm.10}"
+          },
+          "strong": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL",
+                    "SHAPE_FILL",
+                    "STROKE_COLOR",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:259:2"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.green-warm-vivid.50}"
+          }
+        },
+        "warning": {
+          "soft": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL",
+                    "SHAPE_FILL",
+                    "STROKE_COLOR",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:259:5"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.gold.10}"
+          },
+          "strong": {
+            "$extensions": {
+              "com.tokenvault": {
+                "figma": {
+                  "collectionId": "VariableCollectionId:6:270",
+                  "modeId": "6:0",
+                  "scopes": [
+                    "FRAME_FILL",
+                    "SHAPE_FILL",
+                    "STROKE_COLOR",
+                    "TEXT_FILL"
+                  ],
+                  "variableId": "VariableID:259:4"
+                }
+              }
+            },
+            "$type": "color",
+            "$value": "{folio.ref.palette.gold-vivid.40}"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,1541 @@
+{
+  "Body": {
+    "Body Large": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.20}",
+              "fontSize": "{folio.typography.font-size.70}",
+              "fontWeight": "{folio.typography.font-weight.30}",
+              "lineHeight": "{folio.typography.font-line-height.70}"
+            },
+            "fontStyle": "Medium",
+            "styleId": "S:f26d663b3a8ffb42d02f670d478f2e767f44ca00,",
+            "styleKey": "f26d663b3a8ffb42d02f670d478f2e767f44ca00",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Urbanist",
+        "fontSize": {
+          "unit": "px",
+          "value": 20
+        },
+        "fontWeight": 500,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 24
+        }
+      }
+    },
+    "Body Large Bold": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.20}",
+              "fontSize": "{folio.typography.font-size.70}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.70}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:21ca4f05eb36af17e82d10af4d9bc000cb1783e9,",
+            "styleKey": "21ca4f05eb36af17e82d10af4d9bc000cb1783e9",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Urbanist",
+        "fontSize": {
+          "unit": "px",
+          "value": 20
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 24
+        }
+      }
+    },
+    "Body Medium": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.20}",
+              "fontSize": "{folio.typography.font-size.60}",
+              "fontWeight": "{folio.typography.font-weight.30}",
+              "lineHeight": "{folio.typography.font-line-height.60}"
+            },
+            "fontStyle": "Medium",
+            "styleId": "S:c0e7270196b4df83885f3c6bf4e5bb34a67b2eb0,",
+            "styleKey": "c0e7270196b4df83885f3c6bf4e5bb34a67b2eb0",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Urbanist",
+        "fontSize": {
+          "unit": "px",
+          "value": 18
+        },
+        "fontWeight": 500,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 20
+        }
+      }
+    },
+    "Body Medium Bold": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.20}",
+              "fontSize": "{folio.typography.font-size.60}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.60}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:9b40248d3dbafd24a43bd8e82a933b1a073a1e1c,",
+            "styleKey": "9b40248d3dbafd24a43bd8e82a933b1a073a1e1c",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Urbanist",
+        "fontSize": {
+          "unit": "px",
+          "value": 18
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 20
+        }
+      }
+    },
+    "Body Small": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.20}",
+              "fontSize": "{folio.typography.font-size.50}",
+              "fontWeight": "{folio.typography.font-weight.30}",
+              "lineHeight": "{folio.typography.font-line-height.50}"
+            },
+            "fontStyle": "Medium",
+            "styleId": "S:1bc6f9e45c5ae5cbf9cad3896dda8bb8047978c2,",
+            "styleKey": "1bc6f9e45c5ae5cbf9cad3896dda8bb8047978c2",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Urbanist",
+        "fontSize": {
+          "unit": "px",
+          "value": 16
+        },
+        "fontWeight": 500,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 20
+        }
+      }
+    },
+    "Body Small Bold": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.20}",
+              "fontSize": "{folio.typography.font-size.50}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.50}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:86f3a1e4cce5f8433ee7176d95d130e3747108fb,",
+            "styleKey": "86f3a1e4cce5f8433ee7176d95d130e3747108fb",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Urbanist",
+        "fontSize": {
+          "unit": "px",
+          "value": 16
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 20
+        }
+      }
+    }
+  },
+  "Callout": {
+    "Callout Large": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.70}",
+              "fontWeight": "{folio.typography.font-weight.20}",
+              "lineHeight": "{folio.typography.font-line-height.70}"
+            },
+            "fontStyle": "Italic",
+            "styleId": "S:0df02c4df937d362485d2c83a13cc346ab305eea,",
+            "styleKey": "0df02c4df937d362485d2c83a13cc346ab305eea",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 20
+        },
+        "fontWeight": 400,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 24
+        }
+      }
+    },
+    "Callout Medium": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.50}",
+              "fontWeight": "{folio.typography.font-weight.20}",
+              "lineHeight": "{folio.typography.font-line-height.50}"
+            },
+            "fontStyle": "Italic",
+            "styleId": "S:4556157fe8e1033144fccbb4f883629f928a6d31,",
+            "styleKey": "4556157fe8e1033144fccbb4f883629f928a6d31",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 16
+        },
+        "fontWeight": 400,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 20
+        }
+      }
+    },
+    "Callout Small": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.40}",
+              "lineHeight": "{folio.typography.font-line-height.40}"
+            },
+            "fontStyle": "Italic",
+            "styleId": "S:8a260a1c9e42014154417ce14209f295e6c45add,",
+            "styleKey": "8a260a1c9e42014154417ce14209f295e6c45add",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 14
+        },
+        "fontWeight": 400,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 16
+        }
+      }
+    }
+  },
+  "Caption": {
+    "Caption 1": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.10}",
+              "fontWeight": "{folio.typography.font-weight.30}",
+              "lineHeight": "{folio.typography.font-line-height.10}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:5aeb4ccdc792c1afe5ff647e2b7af64c3f081942,",
+            "styleKey": "5aeb4ccdc792c1afe5ff647e2b7af64c3f081942",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 10
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 12
+        }
+      }
+    },
+    "Caption 2": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.20}",
+              "fontSize": "{folio.typography.font-size.10}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.10}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:11e32ed75cbb4fc6030d097b2cdd89acd2b81b7d,",
+            "styleKey": "11e32ed75cbb4fc6030d097b2cdd89acd2b81b7d",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Urbanist",
+        "fontSize": {
+          "unit": "px",
+          "value": 10
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 12
+        }
+      }
+    },
+    "Caption 3": {
+      "$description": "Decorative texture only — meant as word-shape abstraction, not legible type. Pairs with Title Cover Small on compact Typographic Covers as the byline equivalent. Do not use for captions, metadata, legal text, or any readable label. Caption 1 and Caption 2 are the readable scales.",
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.20}",
+              "fontSize": "{folio.typography.font-size.5}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.5}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:19343fd27364cb72be5a3eb65058ff3b1d7b1b2d,",
+            "styleKey": "19343fd27364cb72be5a3eb65058ff3b1d7b1b2d",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Urbanist",
+        "fontSize": {
+          "unit": "px",
+          "value": 6
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 7
+        }
+      }
+    }
+  },
+  "Display": {
+    "Display Large": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.150}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.150}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:c59120da0ef687782f14243edbae5c8820fe3054,",
+            "styleKey": "c59120da0ef687782f14243edbae5c8820fe3054",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 52
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 64
+        }
+      }
+    },
+    "Display Medium": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.140}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.140}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:0b63dc5aa510c494d24ca8be76756e3e7cf1ffd4,",
+            "styleKey": "0b63dc5aa510c494d24ca8be76756e3e7cf1ffd4",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 46
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 56
+        }
+      }
+    },
+    "Display Small": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.130}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.130}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:d44ff64d5cf56825b3ecea77b06b7384709d3c13,",
+            "styleKey": "d44ff64d5cf56825b3ecea77b06b7384709d3c13",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 41
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 52
+        }
+      }
+    }
+  },
+  "Footnote": {
+    "Footnote": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.20}",
+              "fontWeight": "{folio.typography.font-weight.30}",
+              "lineHeight": "{folio.typography.font-line-height.20}"
+            },
+            "fontStyle": "Regular",
+            "styleId": "S:196c82faf13bbc0ff16d69232a0e07079bef10eb,",
+            "styleKey": "196c82faf13bbc0ff16d69232a0e07079bef10eb",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 11
+        },
+        "fontWeight": 400,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 12
+        }
+      }
+    }
+  },
+  "Link": {
+    "Link Large": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.20}",
+              "fontSize": "{folio.typography.font-size.70}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.70}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:32050d56208aa2357caf98d48bb62eca3baf6249,",
+            "styleKey": "32050d56208aa2357caf98d48bb62eca3baf6249",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "UNDERLINE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Urbanist",
+        "fontSize": {
+          "unit": "px",
+          "value": 20
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 24
+        }
+      }
+    },
+    "Link Medium": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.20}",
+              "fontSize": "{folio.typography.font-size.60}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.60}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:db0625a1efe3f84b6bb4fd6f8093a92867720fe2,",
+            "styleKey": "db0625a1efe3f84b6bb4fd6f8093a92867720fe2",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "UNDERLINE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Urbanist",
+        "fontSize": {
+          "unit": "px",
+          "value": 18
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 20
+        }
+      }
+    },
+    "Link Small": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.20}",
+              "fontSize": "{folio.typography.font-size.50}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.50}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:3561a932c61792a684516ba1a351f4ac18b33461,",
+            "styleKey": "3561a932c61792a684516ba1a351f4ac18b33461",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "UNDERLINE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Urbanist",
+        "fontSize": {
+          "unit": "px",
+          "value": 16
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 20
+        }
+      }
+    }
+  },
+  "Subhead": {
+    "Subhead Large": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.20}",
+              "fontSize": "{folio.typography.font-size.40}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.40}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:728d5e98dfc3e9054b6c4bc04157fd1b02cfadff,",
+            "styleKey": "728d5e98dfc3e9054b6c4bc04157fd1b02cfadff",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Urbanist",
+        "fontSize": {
+          "unit": "px",
+          "value": 14
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 16
+        }
+      }
+    },
+    "Subhead Medium": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.20}",
+              "fontSize": "{folio.typography.font-size.30}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.30}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:ef9e2cde930424818a8d8546d2a78f7432e0a9c8,",
+            "styleKey": "ef9e2cde930424818a8d8546d2a78f7432e0a9c8",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Urbanist",
+        "fontSize": {
+          "unit": "px",
+          "value": 13
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 16
+        }
+      }
+    },
+    "Subhead Small": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.20}",
+              "fontSize": "{folio.typography.font-size.10}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.10}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:bf14976c51028844f375f46f80dc3825d1e30ba7,",
+            "styleKey": "bf14976c51028844f375f46f80dc3825d1e30ba7",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Urbanist",
+        "fontSize": {
+          "unit": "px",
+          "value": 10
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 12
+        }
+      }
+    }
+  },
+  "Title": {
+    "Title Body": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.90}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.90}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:4f48d8f434b0f7767ae4a601e8bfdb23f56a7ae2,",
+            "styleKey": "4f48d8f434b0f7767ae4a601e8bfdb23f56a7ae2",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 26
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 32
+        }
+      }
+    },
+    "Title Cover Medium": {
+      "$description": "Fraunces SemiBold Italic, 16/20. Primary title style for Regular-size Typographic Covers. Use only on the cover surface — for in-app titles use Title Body or Title Group.",
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.50}",
+              "fontWeight": "{folio.typography.font-weight.50}",
+              "lineHeight": "{folio.typography.font-line-height.50}"
+            },
+            "fontStyle": "Bold Italic",
+            "styleId": "S:4e45916657246a2234b44cb423be84d56320ad55,",
+            "styleKey": "4e45916657246a2234b44cb423be84d56320ad55",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 16
+        },
+        "fontWeight": 700,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 20
+        }
+      }
+    },
+    "Title Cover Small": {
+      "$description": "Decorative texture only — meant as word-shape abstraction, not legible type. Readers recognize the shape of a title from across a shelf; this style preserves that shape at thumbnail scale without pretending to be readable. Use exclusively on Typographic Cover compact / horizontal renders. Do not use for any content type, label, metadata, or anywhere a user might try to read it.",
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.8}",
+              "fontWeight": "{folio.typography.font-weight.50}",
+              "lineHeight": "{folio.typography.font-line-height.8}"
+            },
+            "fontStyle": "Bold Italic",
+            "styleId": "S:2181edc49f1317886230232be3a0497732d74d86,",
+            "styleKey": "2181edc49f1317886230232be3a0497732d74d86",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 8
+        },
+        "fontWeight": 700,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 9
+        }
+      }
+    },
+    "Title Group": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.80}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.80}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:2a56e57c7e09c2023ffe79a2b00b62dad4f65192,",
+            "styleKey": "2a56e57c7e09c2023ffe79a2b00b62dad4f65192",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 23
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 28
+        }
+      }
+    },
+    "Title Screen": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.120}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.120}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:a55047dfdcfb4f0a59966669fe17da31d36600e0,",
+            "styleKey": "a55047dfdcfb4f0a59966669fe17da31d36600e0",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 36
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 44
+        }
+      }
+    },
+    "Title Section": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.110}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.110}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:c349a451293f5b2c6630d91fda8d55c1ed5a7860,",
+            "styleKey": "c349a451293f5b2c6630d91fda8d55c1ed5a7860",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 32
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 40
+        }
+      }
+    },
+    "Title Subgroup": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.60}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.60}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:1b704946cc95a9f56802bcfad19677fff1a9df26,",
+            "styleKey": "1b704946cc95a9f56802bcfad19677fff1a9df26",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 18
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 20
+        }
+      }
+    },
+    "Title Subsection": {
+      "$extensions": {
+        "com.tokenvault": {
+          "figma": {
+            "boundVariables": {
+              "fontFamily": "{folio.typography.font-family.10}",
+              "fontSize": "{folio.typography.font-size.100}",
+              "fontWeight": "{folio.typography.font-weight.40}",
+              "lineHeight": "{folio.typography.font-line-height.100}"
+            },
+            "fontStyle": "SemiBold",
+            "styleId": "S:24cdb942a72335ee76bf506fffd6a166eecc4bce,",
+            "styleKey": "24cdb942a72335ee76bf506fffd6a166eecc4bce",
+            "styleType": "TEXT",
+            "text": {
+              "hangingList": false,
+              "hangingPunctuation": false,
+              "leadingTrim": "NONE",
+              "letterSpacingUnit": "PERCENT",
+              "lineHeightUnit": "PIXELS",
+              "listSpacing": 0,
+              "paragraphIndent": 0,
+              "paragraphSpacing": 0,
+              "textCase": "ORIGINAL",
+              "textDecoration": "NONE",
+              "textWrapStyle": "AUTO"
+            }
+          }
+        }
+      },
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "Fraunces",
+        "fontSize": {
+          "unit": "px",
+          "value": 29
+        },
+        "fontWeight": 600,
+        "letterSpacing": {
+          "unit": "em",
+          "value": 0
+        },
+        "lineHeight": {
+          "unit": "px",
+          "value": 36
+        }
+      }
+    }
+  },
+  "test-text": {
+    "$extensions": {
+      "com.tokenvault": {
+        "figma": {
+          "boundVariables": {
+            "fontFamily": "{folio.typography.font-family.20}",
+            "fontSize": "{folio.typography.font-size.40}",
+            "fontWeight": "{folio.typography.font-weight.30}"
+          },
+          "fontStyle": "Medium",
+          "styleId": "S:637b67d3a3f7796fc6aeda417912f6b365d263c8,",
+          "styleKey": "637b67d3a3f7796fc6aeda417912f6b365d263c8",
+          "styleType": "TEXT",
+          "text": {
+            "hangingList": false,
+            "hangingPunctuation": false,
+            "leadingTrim": "NONE",
+            "letterSpacingUnit": "PERCENT",
+            "lineHeightUnit": "AUTO",
+            "listSpacing": 0,
+            "paragraphIndent": 0,
+            "paragraphSpacing": 0,
+            "textCase": "ORIGINAL",
+            "textDecoration": "NONE",
+            "textWrapStyle": "AUTO"
+          }
+        }
+      }
+    },
+    "$type": "typography",
+    "$value": {
+      "fontFamily": "Urbanist",
+      "fontSize": {
+        "unit": "px",
+        "value": 14
+      },
+      "fontWeight": 500,
+      "letterSpacing": {
+        "unit": "em",
+        "value": 0
+      }
+    }
+  },
+  "test-text2": {
+    "$extensions": {
+      "com.tokenvault": {
+        "figma": {
+          "fontStyle": "Roman",
+          "styleId": "S:d05998bd0decdd45d43b94e6d2a606157c1d4aa6,",
+          "styleKey": "d05998bd0decdd45d43b94e6d2a606157c1d4aa6",
+          "styleType": "TEXT",
+          "text": {
+            "hangingList": false,
+            "hangingPunctuation": false,
+            "leadingTrim": "NONE",
+            "letterSpacingUnit": "PERCENT",
+            "lineHeightUnit": "AUTO",
+            "listSpacing": 0,
+            "paragraphIndent": 0,
+            "paragraphSpacing": 0,
+            "textCase": "ORIGINAL",
+            "textDecoration": "NONE",
+            "textWrapStyle": "AUTO"
+          }
+        }
+      }
+    },
+    "$type": "typography",
+    "$value": {
+      "fontFamily": "Avenir",
+      "fontSize": {
+        "unit": "px",
+        "value": 12
+      },
+      "fontWeight": 400,
+      "letterSpacing": {
+        "unit": "em",
+        "value": 0
+      }
+    }
+  }
+}

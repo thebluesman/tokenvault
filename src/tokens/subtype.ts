@@ -1,6 +1,13 @@
 // Number/string subtype tagging — ADR-0002 §3, PRD §6.1.
 
-import type { Subtype, SubtypeSelection, SubtypeSource, TokenGroup, Token } from "./types";
+import type {
+  Subtype,
+  SubtypeSelection,
+  SubtypeSource,
+  TokenGroup,
+  Token,
+  TokenType,
+} from "./types";
 import { isToken } from "./paths";
 
 export const NUMBER_SUBTYPES: Subtype[] = [
@@ -50,12 +57,14 @@ export interface SubtypeTag {
  * they can only ever arrive as `subtypeSource: "user"` (PRD §6.1, commits e7098cf/eb32ea9).
  */
 export function resolveSubtype(
-  tokenType: "color" | "number" | "boolean" | "string",
+  tokenType: TokenType,
   scopes: string[],
   userSubtype: SubtypeSelection | undefined
 ): SubtypeTag {
   if (tokenType !== "number" && tokenType !== "string") {
-    // Colours and booleans have no subtype dimension.
+    // Colours and booleans have no subtype dimension, and neither do the composite style types:
+    // `typography`, `shadow` and `grid` are self-describing, so ADR-0003 §2 gives them no
+    // subtype/subtypeSource keys and no confirm step.
     return {};
   }
 

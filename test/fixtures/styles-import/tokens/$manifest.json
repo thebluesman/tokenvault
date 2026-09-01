@@ -1,0 +1,145 @@
+{
+  "collections": [
+    {
+      "$figmaCollectionId": "VariableCollectionId:2:2",
+      "modes": [
+        {
+          "$figmaModeId": "2:0",
+          "file": "base/mode-1.json",
+          "name": "Mode 1",
+          "set": "Base/Mode 1",
+          "slug": "mode-1"
+        }
+      ],
+      "name": "Base",
+      "slug": "base"
+    },
+    {
+      "$figmaCollectionId": "VariableCollectionId:40:184",
+      "modes": [
+        {
+          "$figmaModeId": "40:1",
+          "file": "sizing/mode-1.json",
+          "name": "Mode 1",
+          "set": "Sizing/Mode 1",
+          "slug": "mode-1"
+        }
+      ],
+      "name": "Sizing",
+      "slug": "sizing"
+    },
+    {
+      "$figmaCollectionId": "VariableCollectionId:40:183",
+      "modes": [
+        {
+          "$figmaModeId": "40:0",
+          "file": "spacing/mode-1.json",
+          "name": "Mode 1",
+          "set": "Spacing/Mode 1",
+          "slug": "mode-1"
+        }
+      ],
+      "name": "Spacing",
+      "slug": "spacing"
+    },
+    {
+      "$figmaCollectionId": "VariableCollectionId:6:270",
+      "modes": [
+        {
+          "$figmaModeId": "6:0",
+          "file": "theme/light.json",
+          "name": "Light",
+          "set": "Theme/Light",
+          "slug": "light"
+        },
+        {
+          "$figmaModeId": "6:1",
+          "file": "theme/dark.json",
+          "name": "Dark",
+          "set": "Theme/Dark",
+          "slug": "dark"
+        }
+      ],
+      "name": "Theme",
+      "slug": "theme"
+    },
+    {
+      "$figmaCollectionId": "VariableCollectionId:40:185",
+      "modes": [
+        {
+          "$figmaModeId": "40:2",
+          "file": "typography/mode-1.json",
+          "name": "Mode 1",
+          "set": "Typography/Mode 1",
+          "slug": "mode-1"
+        }
+      ],
+      "name": "Typography",
+      "slug": "typography"
+    }
+  ],
+  "generatedBy": "tokenvault",
+  "styleSets": [
+    {
+      "file": "styles/text.json",
+      "kind": "TEXT",
+      "name": "Text",
+      "set": "Styles/Text",
+      "slug": "text"
+    },
+    {
+      "file": "styles/effect.json",
+      "kind": "EFFECT",
+      "name": "Effect",
+      "set": "Styles/Effect",
+      "slug": "effect"
+    },
+    {
+      "file": "styles/grid.json",
+      "kind": "GRID",
+      "name": "Grid",
+      "set": "Styles/Grid",
+      "slug": "grid"
+    }
+  ],
+  "themes": [
+    {
+      "name": "Light",
+      "selectedTokenSets": [
+        "Styles/Text",
+        "Styles/Effect",
+        "Styles/Grid",
+        "Base/Mode 1",
+        "Sizing/Mode 1",
+        "Spacing/Mode 1",
+        "Theme/Light",
+        "Typography/Mode 1"
+      ]
+    },
+    {
+      "name": "Dark",
+      "selectedTokenSets": [
+        "Styles/Text",
+        "Styles/Effect",
+        "Styles/Grid",
+        "Base/Mode 1",
+        "Sizing/Mode 1",
+        "Spacing/Mode 1",
+        "Theme/Dark",
+        "Typography/Mode 1"
+      ]
+    }
+  ],
+  "tokenSetOrder": [
+    "Base/Mode 1",
+    "Sizing/Mode 1",
+    "Spacing/Mode 1",
+    "Theme/Light",
+    "Theme/Dark",
+    "Typography/Mode 1",
+    "Styles/Text",
+    "Styles/Effect",
+    "Styles/Grid"
+  ],
+  "version": 2
+}

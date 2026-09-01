@@ -1,8 +1,9 @@
 import type { ImportPayload, PluginToUiMessage, SerializedFile, UiToPluginMessage } from "./messages";
-import type { FileSnapshot, SubtypeSelection } from "./tokens/types";
-import { buildImport } from "./tokens/build";
+import type { FileScan, SubtypeSelection } from "./tokens/types";
+import { buildMergedImport } from "./tokens/merge";
 import { stableStringify } from "./tokens/serialize";
 import { scanFile } from "./figma/scan";
+import { scanStyles } from "./figma/scanStyles";
 
 /**
  * Where user subtype tags live until Phase 6 gives us a git working copy.
@@ -24,7 +25,7 @@ const FILE_ID_PLUGIN_DATA_KEY = "tokenvault:file-id";
 
 figma.showUI(__html__, { width: 460, height: 640 });
 
-let snapshot: FileSnapshot | null = null;
+let snapshot: FileScan | null = null;
 let userSubtypes: Record<string, SubtypeSelection> = {};
 let storageKey: string | null = null;
 
@@ -83,7 +84,7 @@ async function loadUserSubtypes(): Promise<Record<string, SubtypeSelection>> {
 function emitImport(): void {
   if (!snapshot) return;
 
-  const result = buildImport(snapshot, {
+  const result = buildMergedImport(snapshot, {
     userSubtypes,
     // Stamped from the last real scan, never from a subtype edit: `importedAt` claims the Figma
     // file was read at that moment, and retagging hours later does not re-read anything.
@@ -98,7 +99,7 @@ function emitImport(): void {
   post({
     type: "import-result",
     payload: {
-      fileName: snapshot.fileName,
+      fileName: snapshot.variables.fileName,
       importedAt: lastScanAt ?? "",
       counts: result.counts,
       candidates: result.candidates,
@@ -113,10 +114,12 @@ async function handleScan(): Promise<void> {
   scanning = true;
 
   try {
-    const next = await scanFile();
+    // One Figma-side read covering both sources (ADR-0003 §7). Issued together because they are
+    // independent round trips and a partial pair is useless: the merge needs both.
+    const [variables, styles] = await Promise.all([scanFile(), scanStyles()]);
     // A newer scan started while this one was in flight — let that one win.
     if (sequence !== scanSequence) return;
-    snapshot = next;
+    snapshot = { variables, styles };
     lastScanAt = new Date().toISOString();
   } finally {
     if (sequence === scanSequence) scanning = false;
@@ -154,6 +157,12 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
     }
     if (message.type === "set-subtypes") {
       await handleSetSubtypes(message.subtypes);
+      return;
+    }
+    if (message.type === "copy-scan") {
+      // `stableStringify` rather than `JSON.stringify` so a captured fixture has the same key
+      // ordering as everything else in the repo and re-capturing it produces a readable diff.
+      post({ type: "scan-snapshot", json: snapshot === null ? null : stableStringify(snapshot) });
     }
   };
 

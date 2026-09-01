@@ -1,0 +1,29 @@
+{
+  "Grid": {
+    "$extensions": {
+      "com.tokenvault": {
+        "figma": {
+          "styleId": "S:fbb8114d1cdef35e3f6d7bf9a6a171a9ed421f50,",
+          "styleKey": "fbb8114d1cdef35e3f6d7bf9a6a171a9ed421f50",
+          "styleType": "GRID"
+        }
+      }
+    },
+    "$type": "grid",
+    "$value": [
+      {
+        "alignment": "stretch",
+        "count": 4,
+        "gutter": {
+          "unit": "px",
+          "value": 8
+        },
+        "offset": {
+          "unit": "px",
+          "value": 16
+        },
+        "pattern": "columns"
+      }
+    ]
+  }
+}

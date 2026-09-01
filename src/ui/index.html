@@ -156,6 +156,18 @@
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         color: var(--warn);
       }
+      /* partial-token / redundant-style: imported, not lost — so not styled as a failure. */
+      .entry.info {
+        border-left-color: var(--border);
+      }
+      .entry.info .kind {
+        color: var(--muted);
+      }
+      .entry > div:first-child {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
       details.file {
         border: 1px solid var(--border);
         border-radius: 4px;
@@ -214,12 +226,13 @@
   <body>
     <header>
       <h1 id="file-name">Tokenvault</h1>
-      <button id="scan" class="primary">Scan Variables</button>
+      <button id="scan" class="primary">Scan file</button>
     </header>
     <main id="content">
       <p class="empty" id="intro">
-        Reads every variable collection and mode in this file and generates the DTCG token tree
-        (ADR-0002). Nothing is written to Figma or to git — git sync lands in Phase 6.
+        Reads every variable collection and mode (ADR-0002) and every paint, text, effect and grid
+        style (ADR-0003) in this file, and generates the merged DTCG token tree. Nothing is written
+        to Figma or to git — git sync lands in Phase 6.
       </p>
     </main>
     <div id="toast"></div>

@@ -1,0 +1,264 @@
+{
+  "counts": {
+    "flagged": 13,
+    "partialTokens": 3,
+    "styles": 49,
+    "tokens": 1316,
+    "unconfirmedSubtypes": 132
+  },
+  "entries": [
+    {
+      "kind": "collision",
+      "message": "2 tokens across 2 sources produce the token path \"folio.ref.palette.neutral.black\", which would clash when their sets are merged into one theme. Kept \"Base\" → \"folio/ref/palette/neutral/black\" (a Variable outranks a Style at the same path); the rest were not written.",
+      "participants": [
+        {
+          "collectionId": "VariableCollectionId:2:2",
+          "collectionName": "Base",
+          "outcome": "written",
+          "variableId": "VariableID:2:4",
+          "variableName": "folio/ref/palette/neutral/black"
+        },
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:c5e44881d0be9b54a33968d0d88536f1ffb0162a,",
+          "styleName": "folio/ref/palette/neutral/black",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.ref.palette.neutral.black",
+      "reason": "cross-set",
+      "winnerRule": "source-precedence"
+    },
+    {
+      "kind": "partial-token",
+      "message": "Text style \"test-text\" was written, but its line height is AUTO, which is a Figma layout behaviour rather than a value.",
+      "omitted": [
+        "lineHeight"
+      ],
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "written",
+          "styleId": "S:637b67d3a3f7796fc6aeda417912f6b365d263c8,",
+          "styleName": "test-text",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "test-text",
+      "reason": "auto-line-height",
+      "set": "Styles/Text"
+    },
+    {
+      "kind": "partial-token",
+      "message": "Text style \"test-text2\" was written, but its line height is AUTO, which is a Figma layout behaviour rather than a value.",
+      "omitted": [
+        "lineHeight"
+      ],
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "written",
+          "styleId": "S:d05998bd0decdd45d43b94e6d2a606157c1d4aa6,",
+          "styleName": "test-text2",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "test-text2",
+      "reason": "auto-line-height",
+      "set": "Styles/Text"
+    },
+    {
+      "kind": "partial-token",
+      "message": "Effect style \"folio/effects/liquid-glass/test\" was written, but 1 effect (glass) has no DTCG representation and was left out of the shadow token.",
+      "omitted": [
+        "GLASS"
+      ],
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "written",
+          "styleId": "S:aa1497fee32897f65c55a281b7b438d83f57aecd,",
+          "styleName": "folio/effects/liquid-glass/test",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.effects.liquid-glass.test",
+      "reason": "unsupported-effect",
+      "set": "Styles/Effect"
+    },
+    {
+      "kind": "redundant-style",
+      "message": "Paint style \"folio/ref/palette/neutral/white\" is bound to the variable \"folio/ref/palette/neutral/white\", which already writes the token \"folio.ref.palette.neutral.white\". The style adds nothing, so no duplicate token was written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:ed05cf166dfaf373613d9a1eede12de6de73e964,",
+          "styleName": "folio/ref/palette/neutral/white",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.ref.palette.neutral.white",
+      "reason": "mirrors-variable",
+      "set": "Styles/Paint"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Paint style \"folio/gradient/edge-fade/bottom\" is a gradient linear, and DTCG's gradient type is still draft, so Phase 3 does not write one. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:26c7a81b2482cab32387fb56506b90867667d13d,",
+          "styleName": "folio/gradient/edge-fade/bottom",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.gradient.edge-fade.bottom",
+      "reason": "gradient-paint",
+      "set": "Styles/Paint"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Paint style \"folio/gradient/edge-fade/top\" is a gradient linear, and DTCG's gradient type is still draft, so Phase 3 does not write one. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:ed75e0e1ee28e327c3aa220372ba487977316a75,",
+          "styleName": "folio/gradient/edge-fade/top",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.gradient.edge-fade.top",
+      "reason": "gradient-paint",
+      "set": "Styles/Paint"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Paint style \"folio/elevation/surface/0\" has 2 visible paints stacked, which a single colour token cannot represent. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:ed6a3f12d21b26677895a86eab5fc142b8bea81e,",
+          "styleName": "folio/elevation/surface/0",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.elevation.surface.0",
+      "reason": "multi-paint",
+      "set": "Styles/Paint"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Paint style \"folio/elevation/surface/1\" has 2 visible paints stacked, which a single colour token cannot represent. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:ab6c3503f7495dcdcfd8a299d56e15a3eeafb5c7,",
+          "styleName": "folio/elevation/surface/1",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.elevation.surface.1",
+      "reason": "multi-paint",
+      "set": "Styles/Paint"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Paint style \"folio/elevation/surface/2\" has 2 visible paints stacked, which a single colour token cannot represent. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:b399d623b262dd0b7a8df29284a4ebf0eedca8f3,",
+          "styleName": "folio/elevation/surface/2",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.elevation.surface.2",
+      "reason": "multi-paint",
+      "set": "Styles/Paint"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Paint style \"folio/elevation/surface/3\" has 2 visible paints stacked, which a single colour token cannot represent. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:e59a36674d9614819d7cddac8854492dc5cfc76f,",
+          "styleName": "folio/elevation/surface/3",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.elevation.surface.3",
+      "reason": "multi-paint",
+      "set": "Styles/Paint"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Effect style \"folio/effects/liquid-glass/button\" has only 1 effect (glass), none of which DTCG's shadow type can represent. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:8fa63ccb3928f0bce1c10c3290292f6051954948,",
+          "styleName": "folio/effects/liquid-glass/button",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.effects.liquid-glass.button",
+      "reason": "unsupported-effect",
+      "set": "Styles/Effect"
+    },
+    {
+      "kind": "unmappable-value",
+      "message": "Effect style \"folio/effects/liquid-glass/regular-medium\" has only 1 effect (glass), none of which DTCG's shadow type can represent. Not written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:71f9a0e7a7f2ca5ed0276ea86f2cbdad2ec3d675,",
+          "styleName": "folio/effects/liquid-glass/regular-medium",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.effects.liquid-glass.regular-medium",
+      "reason": "unsupported-effect",
+      "set": "Styles/Effect"
+    }
+  ],
+  "figmaFileKey": "",
+  "importedAt": "2026-09-01T00:00:00.000Z",
+  "version": 1
+}
