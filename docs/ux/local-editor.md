@@ -14,7 +14,7 @@ Not a hypothetical token file. The Phase 3 fixture is a real capture of the Foli
 | Fact | Source | What it forces |
 |---|---|---|
 | **1,316 tokens** in one import | `$import-report.json` counts | A flat list is unusable. Grouping and search are load-bearing, not nice-to-have. |
-| **11 sets** across 4 collections + 4 style kinds | `$manifest.json` | The set is the primary navigation axis, above the group tree. |
+| **11 sets** across 4 collections + 4 style kinds | `$manifest.json` | Sets overlap on path: `Theme/Light` and `Theme/Dark` hold the same 289 dotted paths with different values. A merged browser (§10.2) has to fold those into one row instead of listing them twice. |
 | Panel is **460 × 640 px** | `src/code.ts` `figma.showUI` | No two-pane master/detail. One column, with the editor as an overlay. |
 | Token paths are **6–7 segments deep** (`folio.ref.palette.transparent.red-warm.50.30`) | `theme/light.json` | Full paths don't fit on a row. The tree has to carry the prefix so the row only shows the leaf. |
 | **132 unconfirmed subtypes**, **13 flagged**, **3 partial** | report counts | Import-quality state has to be visible *inside* the browser, not only on the post-scan report screen. |
@@ -42,7 +42,7 @@ The `figma` block is **provenance, not user content**. It's the re-import matchi
 ## 2. Scope
 
 ### In scope (Phase 4)
-Browse, search, edit, delete tokens in the imported tree, across sets and groups, in-plugin.
+Browse, search, edit, delete tokens in the imported tree, in-plugin, in one merged view spanning every set (§10.2).
 
 ### Explicitly out of scope — do not build these in Phase 4
 
@@ -64,19 +64,19 @@ The one place this line gets blurry is **references**. They are in the data toda
 ```
 Import (existing, Phase 2/3)      Editor (new, Phase 4)
 ┌────────────────────────┐        ┌────────────────────────┐
-│ Scan file              │        │ Set ▾   ⌕ search      │  A. Browser
-│ Summary counts         │───────▶│ ▸ folio               │
-│ Subtype confirm        │        │   ▾ color             │
+│ Scan file              │        │ ⌕ search   [Sets ▾]   │  A. Browser
+│ Summary counts         │───────▶│ ▸ folio               │  (one merged tree,
+│ Subtype confirm        │        │   ▾ color             │   all sets at once)
 │ Flagged report         │        │     ▸ border   12     │
-│ Generated files        │        │       accent   #C3…   │
+│ Generated files        │        │       accent  L ■ D ■ │
 └────────────────────────┘        └────────────────────────┘
                                             │ tap row
                                             ▼
                                   ┌────────────────────────┐
                                   │ ← accent.default    ⋯ │  B. Token detail / editor
-                                  │ $type  color           │     (full-panel overlay)
-                                  │ $value [#C33A2E]       │
-                                  │ Source  Variable ⧉     │
+                                  │ Theme/Light  [#C33A2E] │     (full-panel overlay)
+                                  │ Theme/Dark   [#F0A19A] │     one section per set
+                                  │ Source  Variable ⧉     │     holding this path
                                   └────────────────────────┘
 ```
 
@@ -88,59 +88,92 @@ The Tokens tab is disabled with the copy *"Scan the file first"* until an import
 
 ## 4. A. Browsing
 
+**One merged tree across every set.** Shyam's call, §10.2 — there is no "current set" and no set-at-a-time mode. Everything below is built around that.
+
+The problem the merge creates, and which the rest of §4 exists to solve: `Theme/Light` and `Theme/Dark` hold **the same 289 dotted paths**. A naive merge lists `folio.color.border.accent.default` twice, adjacent, differing only in a colour swatch — 289 times over. That reads as duplicate spam and it destroys scanning. So the merged tree is **keyed by dotted path, not by token**: one row per unique path, with each set that defines that path contributing a value line inside it.
+
 ### 4.1 Layout
 
 ```
 ┌──────────────────────────────────────────────┐
 │ Folio design system            Import│Tokens │  header (existing)
 ├──────────────────────────────────────────────┤
-│ [ Theme / Light          ▾ ]                 │  set switcher
 │ [ ⌕ Filter tokens                        ]   │  search
-│ [ All types ▾ ] [ ⚑ 12 ] [ ● 4 unconfirmed ] │  filter chips
+│ [ All sets ▾ ][ All types ▾ ][ ⚑ 12 ][ ● 4 ] │  filter chips
 ├──────────────────────────────────────────────┤
 │ ▾ folio                              412     │
 │   ▾ color                            287     │
 │     ▾ border                          12     │
-│       ■ accent.default   {…red-warm.50}  ↗  │
-│       ■ accent.strong    {…red-warm-v…}  ↗  │
-│       ■ subtle           #C33A2E33          │
+│       ■ accent.default                       │  ← multi-set path
+│           Light  {…red-warm.50}         ↗    │
+│           Dark   {…red-warm-v…}         ↗    │
+│       ■ accent.strong                        │
+│           Light  #c33a2e                     │
+│           Dark   #f0a19a                     │
+│       ■ subtle        #c33a2e33      Light   │  ← single-set path
 │     ▸ background                      64     │
 │   ▸ spacing                           38  ⚑  │
 └──────────────────────────────────────────────┘
 ```
 
-### 4.2 Set switcher — the primary axis
+### 4.2 The merged row — path first, sets inside it
 
-A single-select dropdown in the header, listing sets in `manifest.tokenSetOrder`, grouped by origin:
+Two row shapes, chosen per path by how many sets define it:
+
+**Single-set path** (the majority — `Base`, the spacing/sizing collections, and all four style kinds are unique paths). One line, exactly the row that exists today: type glyph, leaf segment, value preview, state badge — plus a **muted set code** right-aligned. Same height, same density, no cost paid for the merge.
+
+**Multi-set path.** A name line carrying the glyph and leaf segment, then one indented **value line per set**: set code, value preview, state badge. The path is stated once, the values sit stacked under it, and the visual connection between them is the indent — no repeated path text anywhere.
 
 ```
-Variables
-  Base / Mode 1                      612
-  Theme / Light                      289
-  Theme / Dark                       289
-  Spacing / Mode 1                    24
-  Sizing / Mode 1                     18
+■ accent.default
+    Light  {…red-warm.50}    ↗
+    Dark   {…red-warm-v…}    ↗
+```
+
+Why stacked lines and not a Light | Dark column pair: there are **11 sets, not 2**. A column layout has to pick which sets get columns, breaks the moment a path appears in three, and at 460px a second value column leaves ~90px for the token name — which is the one thing the user is actually scanning. Stacking generalizes to any number of sets, costs width only for the set code, and degrades to today's row for the common single-set case.
+
+Cost of the stack: multi-set paths are 2–3 lines tall, so **the tree is variable-height** and virtualization has to handle that (build note in §11). Rough arithmetic on the fixture: 1,316 tokens minus the 289 paths `Theme/Dark` duplicates from `Theme/Light` gives roughly **1,027 rows** — the real figure falls out of the merge, but the shape is "a thousand rows, most of them one line".
+
+**Set codes.** Short labels derived from `manifest.tokenSetOrder`, dropping the collection prefix where the mode name is unambiguous and dropping `Mode 1` entirely: `Base`, `Light`, `Dark`, `Spacing`, `Sizing`, `Text`, `Effect`, `Grid`. Full set name on hover. Style-derived codes are styled as the derived things they are (ADR-0003 §1) — muted, italic — because the user never authored a set called "Text".
+
+**When two sets disagree on `$type`** at the same path, the name line drops its shared glyph and each value line carries its own. No badge, no new report kind — it's a visual signal that these are not really the same token, not an error we have a vocabulary for.
+
+**Ordering.** Value lines follow `manifest.tokenSetOrder`, always — so `Light` precedes `Dark` on every row in the tree, and the eye can rely on position instead of re-reading the code each time.
+
+### 4.3 The set filter — what's left of the switcher
+
+The switcher is gone as a navigation control; it comes back as a **filter chip**, `[ All sets ▾ ]`, opening the same grouped list it used to be, now multi-select with all sets on by default:
+
+```
+Variables                        ☑ all
+  ☑ Base / Mode 1                    612
+  ☑ Theme / Light                    289
+  ☑ Theme / Dark                     289
+  ☑ Spacing / Mode 1                  24
+  ☑ Sizing / Mode 1                   18
 Styles
-  Text                                31
-  Effect                              12
-  Grid                                 1
+  ☑ Text                              31
+  ☑ Effect                            12
+  ☑ Grid                               1
 ```
 
-Single-select, not Tokens Studio's multi-select checkbox column. Tokens Studio's checkboxes do double duty — they pick what you're *looking at* and what a theme *composes from*. Phase 4 has no theme composition (Phase 7), so overloading them now would ship half a control that means the wrong thing. One set at a time, chosen deliberately, is also the honest model for the data: `Theme/Light` and `Theme/Dark` hold the same 289 paths with different values, and merging them into one list is a lie about the token count.
+Deselecting a set removes its value lines; a path left with no lines drops out of the tree. Turning off everything but `Light` and `Dark` is the "compare the two themes" view, and turning off everything but one set reproduces the old single-set browse — as a filter the user reached for, not a mode they're stuck in. The chip reads `All sets` or `2 of 11 sets`, so a filtered tree can never be mistaken for the whole tree.
 
-Style sets are labelled by kind and shown under a **Styles** heading because they're synthetic and mode-free (ADR-0003 §1) — the user never created a set called "Text", so it needs to read as derived, not authored.
+This is closer to Tokens Studio's multi-select checkbox column than the single-select we originally proposed, but it deliberately does **only** the "what am I looking at" half. Tokens Studio's checkboxes also pick what a theme composes from; Phase 4 has no theme composition (Phase 7), so this control never claims to.
 
-### 4.3 The tree
+Counts in the popover are **token counts per set** (they sum to 1,316), which is why they don't match the tree's row counts. Group rows in the tree count **paths**.
 
-Nested disclosure rows following the DTCG group nesting exactly, since a node is a group iff it has no `$value` (`isToken` in `paths.ts`).
+### 4.4 The tree
 
-- **Group rows**: caret, segment name, descendant token count on the right. A `⚑` badge if any descendant has a report entry.
-- **Token rows**: type swatch/glyph, **leaf segment only**, value preview, a right-aligned state badge.
-- Default expansion: top level expanded, everything below collapsed. At 1,316 tokens, opening fully expanded is a wall of text.
+Nested disclosure rows following the DTCG group nesting exactly, since a node is a group iff it has no `$value` (`isToken` in `paths.ts`). Groups merge by name across sets, the same way paths do: `folio.color.border` is one group row even though four sets contribute tokens under it.
+
+- **Group rows**: caret, segment name, descendant **path** count on the right. A `⚑` badge if any descendant has a report entry, in any set.
+- **Token rows**: the two shapes in §4.2.
+- Default expansion: top level expanded, everything below collapsed. At ~1,027 rows, opening fully expanded is a wall of text.
 - Expansion state persists while the panel is open. It resets on rescan (the tree may not have the same shape).
-- Long lists virtualize. 612 rows in one set is normal here.
+- Long lists virtualize, with variable row heights.
 
-### 4.4 Value previews on a row
+### 4.5 Value previews on a line
 
 | `$type` | Preview | Notes |
 |---|---|---|
@@ -153,14 +186,15 @@ Nested disclosure rows following the DTCG group nesting exactly, since a node is
 | `grid` | `columns · 4 · 8px` | |
 | reference | `{folio.ref.palette.red-warm.50}` in monospace, muted, with a `↗` link glyph | The path is truncated **from the left** (`{…palette.red-warm.50}`) — the tail carries the meaning. |
 
-### 4.5 Search and filter
+### 4.6 Search and filter
 
-- **Search** matches the full dotted path and `$description`, case-insensitive, substring (not fuzzy — with paths this structured, fuzzy matching produces noise). While searching, the tree flattens to a result list showing full dotted paths, with matched substrings emphasised. Group headers disappear; hierarchy stops being the point once you've typed.
-- **Type filter**: a multi-select of the seven `TokenType`s present in the current set, each with a count.
+- **Search** covers **everything in view** — there's no "current set" left to scope to, and no cross-set opt-in, because the merge already removed the reason we wanted one. The old worry was that searching `accent.default` would return a `Theme/Light` hit and a `Theme/Dark` hit that look like duplicates; under §4.2 that's one result row with two value lines, which is exactly what the user wanted to see.
+- Matching is against the full dotted path and `$description`, case-insensitive, substring (not fuzzy — with paths this structured, fuzzy matching produces noise). While searching, the tree flattens to a result list showing full dotted paths, with matched substrings emphasised, each result keeping its value lines. Group headers disappear; hierarchy stops being the point once you've typed.
+- Search runs **after** the set filter, so a filtered tree searches only what it's showing. When a query has hits in sets the filter is hiding, a secondary line says so rather than silently under-reporting: *"18 more in 3 hidden sets — show all sets"*.
+- **Type filter**: a multi-select of the seven `TokenType`s present in the tree, each with a count.
 - **Two state chips**, toggling filters rather than opening dialogs:
-  - `⚑ 12 flagged` — tokens with a report entry at their path (`collision`, `partial-token`, `dangling-reference`, `redundant-style`, and after a rescan, `edit-conflict` / `orphaned-edit` — see §5.5).
+  - `⚑ 12 flagged` — tokens with a report entry at their path (`collision`, `partial-token`, `dangling-reference`, `redundant-style`, and after a rescan, `edit-conflict` / `orphaned-edit` — see §5.5). Flags land on the **value line**, not the path: a token can be flagged in `Dark` and clean in `Light`, and filtering to flagged keeps the path row but shows only its flagged lines.
   - `● 4 unconfirmed` — number/string tokens with `subtypeSource: "default"`. Deep-links back to the Import tab's confirm step rather than duplicating that control here; it already works and there's no reason to build a second one.
-- Search scope defaults to the current set. A secondary line appears when there are matches elsewhere: *"18 more in other sets — search all sets"*. Cross-set search is opt-in because a path like `folio.color.border.accent.default` legitimately exists in both `Theme/Light` and `Theme/Dark`, and showing both by default makes every result look duplicated.
 
 ---
 
@@ -168,9 +202,11 @@ Nested disclosure rows following the DTCG group nesting exactly, since a node is
 
 ### 5.1 Inline vs. overlay — the split
 
-**Inline on the row** for `color`, `number`, `boolean`, `string`: one value, one field. Click the value, it becomes an input in place; Enter or blur commits, Escape reverts.
+**Inline on the value line** for `color`, `number`, `boolean`, `string`: one value, one field. Click the value, it becomes an input in place; Enter or blur commits, Escape reverts. On a multi-set path each value line edits **its own set's token** — editing the `Dark` line never touches `Light`. This is the merged view's main payoff: retuning a colour in both themes is two clicks on two adjacent lines instead of two trips through a set switcher.
 
-**Full-panel overlay** for `typography`, `shadow`, `grid`, and for *any* token where the user wants description, subtype, or provenance. Reached by clicking the row's name (as opposed to its value), or via `⋯ → Edit`.
+**Full-panel overlay** for `typography`, `shadow`, `grid`, and for *any* token where the user wants description, subtype, or provenance. Reached by clicking the path name (as opposed to a value), or via `⋯ → Edit`.
+
+**A multi-set path opens one overlay covering all its sets** — the path as the title, then one section per set in `tokenSetOrder`, each with that set's value editor, description, subtype, and Source block. Opening a separate overlay per set would make the user back out and re-enter to compare `Light` against `Dark`, which is the thing the merged view was chosen to make easy. `⋯ → Edit` on an individual value line opens the same overlay scrolled to that set's section.
 
 Tokens Studio puts everything in a modal. We diverge for scalars because the dominant Phase 4 task is "nudge a spacing value" and a modal round-trip for one number is three clicks too many in a 460px panel. We keep the overlay for composites because typography carries 5 editable fields plus 11 read-only `text` extras, which cannot be a row.
 
@@ -228,7 +264,7 @@ No dialog before the scan. Afterwards, a **summary banner above the tree** (the 
 - Zero edits in the overlay: no banner, no toast. The rescan is just a rescan.
 - `[ Review ]` sets the `⚑ flagged` chip to the two new kinds, so the tree filters to exactly the rows that need a decision. Resolution happens in the tree, at leisure — there is no wizard and no per-token prompt during the scan.
 
-**`edit-conflict`** — both your edit and Figma moved from the same base. The row keeps its normal value preview showing **your** value (local wins), plus a `⚑ conflict` badge. The overlay/expanded row shows both sides:
+**`edit-conflict`** — both your edit and Figma moved from the same base. The affected **value line** keeps its normal preview showing **your** value (local wins), plus a `⚑ conflict` badge; sibling lines on the same path are untouched. The overlay's section for that set shows both sides:
 
 ```
 ┌──────────────────────────────────────────────┐
@@ -262,29 +298,38 @@ Nothing else in Phase 4 depends on it: every token in the tree arrives from impo
 
 ## 7. D. Deleting a token
 
-`⋯ → Delete` on a row, or from the detail overlay.
+`⋯ → Delete` on a value line (deletes that set's token) or on the path name (deletes the path from every set it's in), or from the detail overlay.
 
-**Confirmation is one step, and its content depends on inbound references.** Before showing it, scan every set for `{<dotted.path>}` in any `$value` (including inside composite sub-values and `boundVariables`).
+**Delete is blocked while anything references the token.** Shyam's call, §10.3. Before offering the action, scan every set for `{<dotted.path>}` in any `$value` (including inside composite sub-values and `boundVariables`).
 
-**No inbound references:**
+**No inbound references — delete proceeds:**
 
 > Delete `folio.color.border.accent.hover`?
 > `[ Cancel ] [ Delete ]`
 
 A single tap-through, with an **Undo** in the toast for 10 seconds. No typed confirmation — this is a local, unsynced, single-user tree and a typing gate would be theatre.
 
-**With inbound references:**
+**With inbound references — the action is disabled.** The `⋯` menu still lists *Delete*, greyed, with the count inline (`Delete — 7 references`); choosing it opens an explanation panel rather than a confirmation:
 
-> **Delete `folio.ref.palette.red-warm.50`?**
-> **7 tokens reference it** and would be left pointing at nothing:
-> `folio.color.border.accent.default` (Theme/Light)
-> `folio.color.border.accent.default` (Theme/Dark)
-> …and 5 more
-> `[ Cancel ] [ Delete anyway ]`
+> **Can't delete `folio.ref.palette.red-warm.50` yet.**
+> **7 tokens still reference it.** Deleting it would leave them pointing at nothing.
+>
+> `folio.color.border.accent.default` — Light, Dark
+> `folio.color.border.accent.strong` — Light, Dark
+> `folio.color.bg.surface` — Light, Dark
+> `folio.color.text.danger` — Light
+>
+> Phase 4 can't edit a reference, so the only way to clear these is to delete the referencing tokens first — deepest first, since they may have references of their own. Repointing them lands with aliasing (Phase 7).
+>
+> `[ Close ]`
 
-Deleting anyway is allowed, and the dependents get the existing `dangling-reference` badge — the same vocabulary the import report already uses (`ReportEntryKind`), so the user learns one concept, not two. There's no "rewrite the 7 references" option; that's aliasing surgery and belongs to Phase 7.
+The referrer list is the whole point of the panel, so it is not truncated to "…and 5 more": each entry is a **tap target that navigates to that token** in the tree, with the sets it references from shown as set codes. A path referencing from both `Light` and `Dark` is one entry, matching §4.2 — the list is the merged tree's vocabulary, not a second one.
 
-**Deleting a group**: allowed from a group row, confirmation names the count (`Delete folio.color.border and its 12 tokens?`) and aggregates inbound references across all of them. Undo restores the whole subtree. Mechanically this is one tombstone per descendant token, not a single group-level one (ADR-0004 §2), which has a user-visible consequence worth knowing: a token *added to that group in Figma later* comes back on the next scan rather than being swallowed by the old deletion.
+**Be honest that this can be a dead end.** There is deliberately **no** "remove all references" or "delete the whole dependency chain" button. Both are reference surgery, which Phase 4 cannot do — the first rewrites `$value`s, the second needs a resolved dependency graph to order the deletions safely, and neither has an overlay op in ADR-0004. So a token deep in the alias graph may simply be undeletable in Phase 4, and the panel says that in as many words rather than dangling an affordance that doesn't exist.
+
+This lines up with rename (§10.5): both are blocked for the same reason — Phase 4 can't safely touch cross-references — and both open up in Phase 7 when references become editable. Blocking rather than warning also means the tree never contains a dangling reference the *user* created; the only `dangling-reference` entries are ones the import found, which keeps that badge meaning exactly one thing.
+
+**Deleting a group**: allowed from a group row, and blocked by the same rule — the confirmation names the count (`Delete folio.color.border and its 12 tokens?`) and aggregates inbound references from **outside the group** across all of them. References *within* the group being deleted don't block, since they're going away together. If anything outside points in, the whole group delete is blocked and the explanation panel lists the external referrers. Undo restores the whole subtree. Mechanically this is one tombstone per descendant token, not a single group-level one (ADR-0004 §2), which has a user-visible consequence worth knowing: a token *added to that group in Figma later* comes back on the next scan rather than being swallowed by the old deletion.
 
 **Style-derived and Variable-derived tokens delete like any other** — which, with creation deferred (§6), is every token in the tree. Nothing is removed from Figma (Phase 5), and the deletion persists as a tombstone in the overlay, so a rescan does **not** bring the token back. The confirmation says both halves:
 
@@ -303,11 +348,11 @@ Undo lives in the toast for 10 seconds; after that, the way back is *Undo all* o
 | Tokens tab, nothing imported, no local edits | **No tokens yet.** Scan the file on the Import tab to read its Variables and Styles. `[ Go to Import ]` |
 | Tokens tab, no cached import, **but the overlay has edits** (the cache was evicted or another file was opened — ADR-0004 §1) | **Scan the file to see your tokens.** Your 7 local edits are still here and will reapply after the scan. `[ Go to Import ]` — never let this read as "your edits are gone"; the overlay is durable and the import is the part that's re-derivable. |
 | Scan produced zero tokens | **Nothing importable in this file.** No Variables or Styles mapped to a token — see the Import tab's report for what was skipped. |
-| Set has no tokens | **This set is empty.** Every token in it was dropped as a collision — see the report. `[ Go to Import ]` |
-| Search, no matches in set | **No tokens match "shadw" in Theme/Light.** `[ Search all sets ]` |
+| Set filter leaves nothing | **No tokens in the sets you've selected.** `[ Show all sets ]` |
+| Search, no matches in the filtered sets | **No tokens match "shadw" in the 2 sets you've selected.** `[ Search all sets ]` |
 | Search, no matches anywhere | **No tokens match "shadw".** Search covers token paths and descriptions. |
-| Type/state filter empties the list | **No `boolean` tokens in this set.** `[ Clear filters ]` |
-| All flagged entries cleared | **Nothing flagged in this set.** |
+| Type/state filter empties the list | **No `boolean` tokens match your filters.** `[ Clear filters ]` |
+| All flagged entries cleared | **Nothing flagged.** |
 
 ### Error and degraded states
 
@@ -324,6 +369,8 @@ Undo lives in the toast for 10 seconds; after that, the way back is *Undo all* o
 | `orphaned-edit` | `⚠`, in the pinned "orphaned edits" section, not the tree | `The Variable this edit changed was deleted in Figma.` |
 | Overlay write failed (storage full) | `.entry` amber block, edit stays applied in-session | `Couldn't save your edits — plugin storage is full. Copy the tree as JSON before closing.` |
 | Editing a reference | Disabled field + chip | see §5.3 |
+| Delete blocked by inbound references | `⋯ → Delete` greyed with the count inline; explanation panel listing the referrers, no destructive button on it | `7 tokens still reference it. Phase 4 can't edit a reference — delete those tokens first.` see §7 |
+| Two sets disagree on `$type` at one path | Per-line type glyphs, no shared glyph on the name line. No badge — not a report kind. | — |
 | Tree too large to render | Never surfaced — virtualize instead | — |
 
 **Circular references and math errors are not Phase 4 states.** PRD §6.3 puts them in Phase 7, and Phase 4 cannot create a cycle because it can neither author a token nor edit a reference. If one arrives in imported data, it renders as an ordinary reference chip. Don't build cycle detection here.
@@ -342,7 +389,7 @@ Undo lives in the toast for 10 seconds; after that, the way back is *Undo all* o
 - The existing toast is the undo surface, and the surface for the silent-success rescan summary.
 - The header's right slot holds the **Local edits · N** chip in Phase 4, and is where Phase 6's sync pill lands. Same slot, same role — "what state is my work in" — so the chip isn't a placeholder that gets evicted; it's the first occupant of a permanent one.
 
-Two things Phase 4 has to add: a **disclosure/caret row** for groups, and a **colour swatch** with a checkerboard alpha backing.
+Three things Phase 4 has to add: a **disclosure/caret row** for groups, a **colour swatch** with a checkerboard alpha backing, and the merged view's **value line** — an indented, slightly shorter variant of `.row` with no bottom border, so a path's stacked lines read as one block rather than three list items. The set code on it is a `.badge`-weight muted label, not a new colour: which set a value came from is neutral information, never a state that needs you.
 
 ---
 
@@ -350,8 +397,10 @@ Two things Phase 4 has to add: a **disclosure/caret row** for groups, and a **co
 
 1. ~~**Does the edited tree persist between plugin sessions** (`clientStorage`), or is it session-only until Phase 6's git sync gives it a real home? Changes §5.4's warning and whether "unsaved" is even the right word. *(Also a tech-lead question — flagging, not deciding.)*~~
    **Resolved 2026-09-01 — Shyam: persist to clientStorage; mechanics in ADR-0004.** Edits are stored as intent, keyed by Figma provenance id, and three-way-merged on rescan. Consequences already folded in above: §5.4's blocking rescan dialog is gone (replaced by §5.5's post-scan summary), the header chip reads **local edits** rather than "unsaved changes", deletion is a persistent tombstone (§7), and two new report kinds — `edit-conflict` and `orphaned-edit` — are designed in §5.5 and §8.
-2. **Single-set browsing vs. a merged view.** §4.2 argues for one set at a time. If you routinely need to compare `Theme/Light` against `Theme/Dark` side by side, that's a different screen and worth knowing now.
-3. **Should delete be blocked outright when references exist**, rather than warning and allowing? §7 allows it because the report already models `dangling-reference`, but that's a taste call about how much the tool should protect you from yourself.
+2. ~~**Single-set browsing vs. a merged view.** §4.2 argues for one set at a time. If you routinely need to compare `Theme/Light` against `Theme/Dark` side by side, that's a different screen and worth knowing now.~~
+   **Resolved 2026-09-01 — Shyam: merged view across all sets (reverses this doc's original single-set recommendation).** §4 is rebuilt around it: the tree is keyed by **dotted path**, not by token, so the 289 paths `Theme/Light` and `Theme/Dark` share appear once with a stacked value line per set (§4.2) instead of twice. The set switcher survives only as a multi-select **filter chip** (§4.3) — deselecting down to one set reproduces the old browse as a filter, not a mode. Search now covers everything with no cross-set opt-in (§4.6), the detail overlay covers all of a path's sets in one screen (§5.1), and flags/conflicts attach to the value line rather than the path (§4.6, §5.5).
+3. ~~**Should delete be blocked outright when references exist**, rather than warning and allowing? §7 allows it because the report already models `dangling-reference`, but that's a taste call about how much the tool should protect you from yourself.~~
+   **Resolved 2026-09-01 — Shyam: block outright until unreferenced.** §7 disables the delete action while inbound references exist and shows an explanation panel listing the referrers; there is no "delete anyway" and no one-click reference cleanup, because clearing references means editing them and Phase 4 can't. Same reason rename is deferred to Phase 7 (§10.5): Phase 4 has no safe way to touch cross-references, so the honest move is to block rather than to let the user manufacture dangling references — which also keeps that badge meaning only "the import found this".
 4. ~~**Are hand-created (`Local`) tokens actually wanted in Phase 4**, given nothing can be applied to Figma until Phase 5 and nothing can be committed until Phase 6? The PRD asks for create; it may in practice be dead weight for two phases. Worth confirming before it's built.~~
    **Resolved 2026-09-01 — Shyam: defer.** Creation is out of Phase 4 (§2). Phase 4 is browse/edit/delete over imported tokens only. Creation returns as its own ticket once Phase 5 or 6 gives a hand-made token somewhere to go. §6 is kept as a stub pointer.
 5. ~~**Renaming a token's path** isn't specified above. It's mechanically a delete + create with the same reference consequences, but it also breaks every inbound reference at once. Is rename in Phase 4, or does it wait for Phase 7 where references can be rewritten? *(Sharper now that create is deferred: rename would be the only way to get a token onto a path Figma didn't produce, so shipping it would partly reopen the door §2 just closed.)*~~
@@ -362,6 +411,10 @@ Two things Phase 4 has to add: a **disclosure/caret row** for groups, and a **co
 ## 11. Build notes for `@frontend-engineer`
 
 - Don't call Figma. Nothing in this doc reads or writes the canvas.
+- **The browser's view model is a path-keyed merge, not a set's tree.** Build one index from `normalizePathKey`'d dotted path → list of `{ setId, token }` in `tokenSetOrder`, and render from that. Don't render per-set trees and reconcile them in the UI.
+- Virtualization must handle **variable row heights** — a path with three contributing sets is a taller row than a path with one (§4.2).
+- Edits, deletes and flags are keyed to `{ path, setId }`, never to path alone — the merged row is a display construct, and ADR-0004's overlay entries stay keyed by `variableId + modeId` / `styleId` exactly as specified.
+- Inbound-reference lookup is needed for delete-blocking (§7) and wants to be an index built once per import, not a scan per delete: `{referenced.path}` → list of `{ path, setId }` referrers, walking composite sub-values and `boundVariables`.
 - **Persistence follows ADR-0004, not this doc.** Two `clientStorage` keys, edit-intent entries keyed by `variableId + modeId` / `styleId`, the merge table in §4, and the `edit-conflict` / `orphaned-edit` report kinds are all pinned there. This doc specifies only how those states read.
 - Subtype changes keep writing `userSubtypes` (ADR-0004 §3) — the subtype dropdown is *not* an overlay op, so it doesn't count toward the **Local edits · N** chip.
 - Preserve `$extensions."com.tokenvault"` byte-for-byte on every edit path. ADR-0002 §7's byte-identical re-import guarantee is the thing most easily broken by an editor that round-trips through a form.
