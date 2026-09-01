@@ -83,16 +83,21 @@ export async function scanFile(): Promise<FileSnapshot> {
     });
   }
 
+  // Independent round trips — a file with heavy cross-collection aliasing can have many, and
+  // awaiting them one at a time serializes the whole lot for no reason. Each settles into its
+  // own key with its own catch, so there is nothing to race.
   const aliasTargetNames: Record<string, string> = {};
-  for (const id of Array.from(aliasTargetIds)) {
-    try {
-      const target = await figma.variables.getVariableByIdAsync(id);
-      if (target) aliasTargetNames[id] = target.name;
-    } catch {
-      // Unresolvable target (deleted, or a library the file can no longer reach). Left out, so
-      // buildImport reports it as `alias-target-unknown` rather than writing a bogus reference.
-    }
-  }
+  await Promise.all(
+    Array.from(aliasTargetIds).map(async (id) => {
+      try {
+        const target = await figma.variables.getVariableByIdAsync(id);
+        if (target) aliasTargetNames[id] = target.name;
+      } catch {
+        // Unresolvable target (deleted, or a library the file can no longer reach). Left out, so
+        // buildImport reports it as `alias-target-unknown` rather than writing a bogus reference.
+      }
+    })
+  );
 
   return {
     fileName: figma.root.name,

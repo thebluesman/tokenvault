@@ -5,10 +5,13 @@
 // editor and diff view are Phase 4/6 and belong to @ux-designer, not to this file.
 
 import type { ImportPayload, PluginToUiMessage, UiToPluginMessage } from "../messages";
-import type { ReportEntry, Subtype, SubtypeCandidate } from "../tokens/types";
+import type { ReportEntry, Subtype, SubtypeCandidate, SubtypeSelection } from "../tokens/types";
 
 const NUMBER_SUBTYPES: Subtype[] = ["spacing", "sizing", "radius", "opacity", "duration", "unitless"];
 const STRING_SUBTYPES: Subtype[] = ["easing"];
+
+/** Dropdown sentinel for "clear my choice and auto-detect again" — distinct from "untagged". */
+const RESET = "__reset";
 
 const fileNameEl = document.getElementById("file-name") as HTMLHeadingElement;
 const scanButton = document.getElementById("scan") as HTMLButtonElement;
@@ -18,6 +21,12 @@ const clipboardEl = document.getElementById("clipboard") as HTMLTextAreaElement;
 
 let payload: ImportPayload | null = null;
 let onlyUnconfirmed = true;
+/**
+ * True from the moment Scan is clicked until a result or error lands. Every control that would
+ * rebuild against the snapshot is disabled meanwhile — a tag edit mid-scan would otherwise be
+ * applied to Figma data that is about to be replaced.
+ */
+let scanning = false;
 
 function send(message: UiToPluginMessage): void {
   parent.postMessage({ pluginMessage: message }, "*");
@@ -74,6 +83,11 @@ function renderCounts(data: ImportPayload): HTMLElement {
   section.appendChild(el("h2", undefined, "Summary"));
   const grid = el("div", "counts");
 
+  if (data.importedAt !== "") {
+    const read = el("p", "empty", `Figma file read at ${data.importedAt}`);
+    section.appendChild(read);
+  }
+
   const stats: Array<[string, number]> = [
     ["Collections", data.counts.collections],
     ["Modes", data.counts.modes],
@@ -124,15 +138,16 @@ function renderSubtypes(candidates: SubtypeCandidate[]): HTMLElement {
 
   const bulkSelect = el("select");
   bulkSelect.appendChild(new Option("Set all shown to…", ""));
+  bulkSelect.appendChild(new Option("untagged", "untagged"));
   for (const subtype of NUMBER_SUBTYPES) bulkSelect.appendChild(new Option(subtype, subtype));
   for (const subtype of STRING_SUBTYPES) bulkSelect.appendChild(new Option(subtype, subtype));
+  bulkSelect.disabled = scanning;
   bulkSelect.addEventListener("change", () => {
-    const chosen = bulkSelect.value as Subtype | "";
+    const chosen = bulkSelect.value as SubtypeSelection | "";
     if (chosen === "") return;
-    const updates: Record<string, Subtype | null> = {};
+    const updates: Record<string, SubtypeSelection | null> = {};
     for (const candidate of shown) {
-      const allowed = candidate.tokenType === "number" ? NUMBER_SUBTYPES : STRING_SUBTYPES;
-      if (allowed.indexOf(chosen) !== -1) updates[candidate.variableId] = chosen;
+      if (isSelectable(chosen, candidate.tokenType)) updates[candidate.variableId] = chosen;
     }
     bulkSelect.value = "";
     if (Object.keys(updates).length > 0) send({ type: "set-subtypes", subtypes: updates });
@@ -140,9 +155,9 @@ function renderSubtypes(candidates: SubtypeCandidate[]): HTMLElement {
   toolbar.appendChild(bulkSelect);
 
   const confirmAll = el("button", undefined, "Confirm all guesses as-is");
-  confirmAll.disabled = unconfirmed.length === 0;
+  confirmAll.disabled = scanning || unconfirmed.length === 0;
   confirmAll.addEventListener("click", () => {
-    const updates: Record<string, Subtype | null> = {};
+    const updates: Record<string, SubtypeSelection | null> = {};
     for (const candidate of unconfirmed) {
       if (candidate.subtype !== undefined) updates[candidate.variableId] = candidate.subtype;
     }
@@ -179,16 +194,27 @@ function renderCandidateRow(candidate: SubtypeCandidate): HTMLElement {
 
   const select = el("select");
   const allowed = candidate.tokenType === "number" ? NUMBER_SUBTYPES : STRING_SUBTYPES;
-  select.appendChild(new Option("untagged", ""));
+  // Three states, matching what the importer can represent: hand it back to auto-detection,
+  // deliberately give it no subtype, or name one.
+  select.appendChild(new Option("auto-detect", RESET));
+  select.appendChild(new Option("untagged", "untagged"));
   for (const subtype of allowed) select.appendChild(new Option(subtype, subtype));
-  select.value = candidate.subtype ?? "";
+  select.value =
+    candidate.subtype ?? (candidate.subtypeSource === "user" ? "untagged" : RESET);
+  select.disabled = scanning;
   select.addEventListener("change", () => {
-    const chosen = select.value === "" ? null : (select.value as Subtype);
+    const chosen = select.value === RESET ? null : (select.value as SubtypeSelection);
     send({ type: "set-subtypes", subtypes: { [candidate.variableId]: chosen } });
   });
   row.appendChild(select);
 
   return row;
+}
+
+function isSelectable(selection: SubtypeSelection, tokenType: "number" | "string"): boolean {
+  if (selection === "untagged") return true;
+  const allowed = tokenType === "number" ? NUMBER_SUBTYPES : STRING_SUBTYPES;
+  return allowed.indexOf(selection) !== -1;
 }
 
 function renderReport(entries: ReportEntry[]): HTMLElement {
@@ -258,8 +284,11 @@ function renderFiles(data: ImportPayload): HTMLElement {
 // ---------------------------------------------------------------------------
 
 scanButton.addEventListener("click", () => {
+  scanning = true;
   scanButton.disabled = true;
   scanButton.textContent = "Scanning…";
+  // Re-render so the subtype controls disable too, not just this button.
+  render();
   send({ type: "scan" });
 });
 
@@ -273,6 +302,7 @@ window.onmessage = (event: MessageEvent) => {
   }
 
   if (message.type === "import-result") {
+    scanning = false;
     scanButton.disabled = false;
     scanButton.textContent = "Rescan";
     payload = message.payload;
@@ -281,6 +311,7 @@ window.onmessage = (event: MessageEvent) => {
   }
 
   if (message.type === "import-error") {
+    scanning = false;
     scanButton.disabled = false;
     scanButton.textContent = "Scan Variables";
     contentEl.textContent = "";

@@ -1,6 +1,6 @@
 // Message contract between the plugin controller (code.ts) and the UI iframe (ui/main.ts).
 
-import type { ReportEntry, Subtype, SubtypeCandidate } from "./tokens/types";
+import type { ReportEntry, SubtypeCandidate, SubtypeSelection } from "./tokens/types";
 
 /** One generated file, already serialized deterministically, ready to display or copy. */
 export interface SerializedFile {
@@ -10,6 +10,8 @@ export interface SerializedFile {
 
 export interface ImportPayload {
   fileName: string;
+  /** ISO timestamp of the last real read of the Figma file; "" before the first scan. */
+  importedAt: string;
   counts: {
     collections: number;
     modes: number;
@@ -28,10 +30,11 @@ export type UiToPluginMessage =
   /** Re-read the Figma file from scratch. */
   | { type: "scan" }
   /**
-   * Re-run the conversion with a changed set of user subtype tags, without re-reading Figma.
-   * A `null` value clears the tag and lets auto-detection take over again.
+   * Re-run the conversion with a changed set of user subtype choices, without re-reading Figma.
+   * `null` clears the choice and hands the variable back to auto-detection; `"untagged"` is the
+   * deliberate choice of no subtype, which is a different thing and is remembered as one.
    */
-  | { type: "set-subtypes"; subtypes: Record<string, Subtype | null> };
+  | { type: "set-subtypes"; subtypes: Record<string, SubtypeSelection | null> };
 
 export type PluginToUiMessage =
   | { type: "plugin-ready"; fileName: string }
