@@ -55,13 +55,23 @@ pbpaste > /tmp/tree.json
 node scripts/write-tokens.mjs /tmp/tree.json .
 ```
 
-**Copy Figma scan (fixture input)** copies the raw scan instead, which is what
-`test/fixtures/*/`'s regression fixtures are rebuilt from:
+**Copy Figma scan (fixture input)** copies the raw scan instead — a whole `FileScan`, both halves
+— which is what `test/fixtures/*/`'s regression fixtures are rebuilt from:
 
 ```
-pbpaste > test/fixtures/styles-import/styles-snapshot.json   # the `styles` half of the scan
+pbpaste > /tmp/scan.json
+node -e 'const s=require("/tmp/scan.json"),w=(p,v)=>require("fs").writeFileSync(p,JSON.stringify(v,null,2));
+  w("test/fixtures/styles-import/variables-snapshot.json", s.variables);
+  w("test/fixtures/styles-import/styles-snapshot.json", s.styles);'
 UPDATE_FIXTURE=1 npm test
 ```
+
+Both halves must come from **one** Figma file. A style can only bind to a Variable in its own
+file, so the mirror rule and the cross-source clash are unreachable — silently, with the tests
+still green — if the two snapshots are captured from different files. `fixtureStyles.test.ts`
+guards this with an explicit same-file assertion, but recapture both halves together regardless.
+If a collection was renamed or removed, delete `test/fixtures/styles-import/tokens/` before
+regenerating so no stale set is left behind.
 
 ### Layout
 

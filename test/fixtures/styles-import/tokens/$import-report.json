@@ -1,98 +1,36 @@
 {
   "counts": {
-    "flagged": 15,
+    "flagged": 13,
     "partialTokens": 3,
     "styles": 49,
-    "tokens": 62,
-    "unconfirmedSubtypes": 1
+    "tokens": 1316,
+    "unconfirmedSubtypes": 132
   },
   "entries": [
     {
       "kind": "collision",
-      "message": "2 variables across 2 collections produce the token path \"tv.ref.palette.white\", which would clash when their sets are merged into one theme. Kept \"Core\" → \"tv/ref/palette/white\" (most referenced by other variables); the rest were not written.",
+      "message": "2 tokens across 2 sources produce the token path \"folio.ref.palette.neutral.black\", which would clash when their sets are merged into one theme. Kept \"Base\" → \"folio/ref/palette/neutral/black\" (a Variable outranks a Style at the same path); the rest were not written.",
       "participants": [
         {
-          "collectionId": "VariableCollectionId:1:2",
-          "collectionName": "Core",
+          "collectionId": "VariableCollectionId:2:2",
+          "collectionName": "Base",
           "outcome": "written",
-          "variableId": "VariableID:1:4",
-          "variableName": "tv/ref/palette/white"
+          "variableId": "VariableID:2:4",
+          "variableName": "folio/ref/palette/neutral/black"
         },
-        {
-          "collectionId": "VariableCollectionId:1:19",
-          "collectionName": "Lab",
-          "outcome": "skipped",
-          "variableId": "VariableID:1:24",
-          "variableName": "tv/ref/palette/white"
-        }
-      ],
-      "path": "tv.ref.palette.white",
-      "reason": "cross-set",
-      "winnerRule": "alias-references"
-    },
-    {
-      "kind": "collision",
-      "message": "2 variables in \"Lab\" produce the token path \"lab.color.Brand\" (names differ only by case). Kept \"lab/color/Brand\" (no signal to separate them — decided by name order); the rest were not written.",
-      "participants": [
-        {
-          "collectionId": "VariableCollectionId:1:19",
-          "collectionName": "Lab",
-          "outcome": "written",
-          "variableId": "VariableID:1:20",
-          "variableName": "lab/color/Brand"
-        },
-        {
-          "collectionId": "VariableCollectionId:1:19",
-          "collectionName": "Lab",
-          "outcome": "skipped",
-          "variableId": "VariableID:1:21",
-          "variableName": "lab/color/brand"
-        }
-      ],
-      "path": "lab.color.Brand",
-      "reason": "same-set-case",
-      "winnerRule": "name-order"
-    },
-    {
-      "kind": "collision",
-      "message": "Token path \"lab.color.token\" is also a group prefix of 1 other token; DTCG cannot represent a node that is both. Kept \"Lab\" → \"lab/color/token\" (no signal to separate them — decided by name order); the rest were not written.",
-      "participants": [
-        {
-          "collectionId": "VariableCollectionId:1:19",
-          "collectionName": "Lab",
-          "outcome": "written",
-          "variableId": "VariableID:1:22",
-          "variableName": "lab/color/token"
-        },
-        {
-          "collectionId": "VariableCollectionId:1:19",
-          "collectionName": "Lab",
-          "outcome": "skipped",
-          "variableId": "VariableID:1:23",
-          "variableName": "lab/color/token/nested"
-        }
-      ],
-      "path": "lab.color.token",
-      "reason": "token-group",
-      "winnerRule": "name-order"
-    },
-    {
-      "kind": "dangling-reference",
-      "message": "Paint style \"folio/ref/palette/neutral/white\" references \"folio/ref/palette/neutral/white\", which was not written to the token files, so the reference will not resolve until that is fixed in Figma.",
-      "participants": [
         {
           "collectionId": "",
           "collectionName": "",
-          "outcome": "written",
-          "styleId": "S:ed05cf166dfaf373613d9a1eede12de6de73e964,",
-          "styleName": "folio/ref/palette/neutral/white",
+          "outcome": "skipped",
+          "styleId": "S:c5e44881d0be9b54a33968d0d88536f1ffb0162a,",
+          "styleName": "folio/ref/palette/neutral/black",
           "variableId": "",
           "variableName": ""
         }
       ],
-      "path": "folio.ref.palette.neutral.white",
-      "reason": "alias-target-skipped",
-      "set": "Styles/Paint"
+      "path": "folio.ref.palette.neutral.black",
+      "reason": "cross-set",
+      "winnerRule": "source-precedence"
     },
     {
       "kind": "partial-token",
@@ -156,6 +94,24 @@
       "path": "folio.effects.liquid-glass.test",
       "reason": "unsupported-effect",
       "set": "Styles/Effect"
+    },
+    {
+      "kind": "redundant-style",
+      "message": "Paint style \"folio/ref/palette/neutral/white\" is bound to the variable \"folio/ref/palette/neutral/white\", which already writes the token \"folio.ref.palette.neutral.white\". The style adds nothing, so no duplicate token was written.",
+      "participants": [
+        {
+          "collectionId": "",
+          "collectionName": "",
+          "outcome": "skipped",
+          "styleId": "S:ed05cf166dfaf373613d9a1eede12de6de73e964,",
+          "styleName": "folio/ref/palette/neutral/white",
+          "variableId": "",
+          "variableName": ""
+        }
+      ],
+      "path": "folio.ref.palette.neutral.white",
+      "reason": "mirrors-variable",
+      "set": "Styles/Paint"
     },
     {
       "kind": "unmappable-value",
@@ -302,7 +258,7 @@
       "set": "Styles/Effect"
     }
   ],
-  "figmaFileKey": "1ttG81lWKg74GUHq4aBnxl",
+  "figmaFileKey": "",
   "importedAt": "2026-09-01T00:00:00.000Z",
   "version": 1
 }

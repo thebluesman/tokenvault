@@ -1504,7 +1504,7 @@
     "$extensions": {
       "com.tokenvault": {
         "figma": {
-          "fontStyle": "Regular",
+          "fontStyle": "Roman",
           "styleId": "S:d05998bd0decdd45d43b94e6d2a606157c1d4aa6,",
           "styleKey": "d05998bd0decdd45d43b94e6d2a606157c1d4aa6",
           "styleType": "TEXT",
@@ -1526,7 +1526,7 @@
     },
     "$type": "typography",
     "$value": {
-      "fontFamily": "Inter",
+      "fontFamily": "Avenir",
       "fontSize": {
         "unit": "px",
         "value": 12
