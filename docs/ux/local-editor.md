@@ -3,7 +3,7 @@
 **Status:** Provisional — a starting design, to be revised once it's used live in Figma.
 **Owner:** `@ux-designer`
 **Covers:** PRD §6.1 (token CRUD, minus create — deferred, see §2), §6.7 (plugin panel), build plan §9 Phase 4.
-**Grounded in:** `src/tokens/types.ts`, ADR-0002 (rev 2), ADR-0003, and the real import fixture in `test/fixtures/styles-import/`.
+**Grounded in:** `src/tokens/types.ts`, ADR-0002 (rev 2), ADR-0003, ADR-0004 (local edit persistence), and the real import fixture in `test/fixtures/styles-import/`.
 
 ---
 
@@ -51,9 +51,9 @@ Browse, search, edit, delete tokens in the imported tree, across sets and groups
 | **Creating a token by hand** | Its own future ticket, once Phase 5/6 exist | Nothing could consume a hand-authored token: it can't be applied to Figma until Phase 5 or committed until Phase 6. Every token in Phase 4 arrives from import, so every token has `figma` provenance. *(Shyam, 2026-09-01 — see §10.4.)* |
 | Writing tokens back to Figma Variables/Styles | Phase 5 (§6.5.2) | Editing a token changes **nothing** on the canvas. The panel must say so, not imply live application. |
 | Drift detection | Phase 5 (§6.5.3) | No "this diverged from Figma" state. Provenance is displayed, not diffed. |
-| Git push/pull, commit, diff view | Phase 6 (§6.4) | No sync status pill in the header. Reserve the slot; leave it empty. |
+| Git push/pull, commit, diff view | Phase 6 (§6.4) | No sync status pill in the header. The header's state slot holds the **Local edits · N** chip (§5.4) instead — which is the honest Phase 4 reading of the same slot, and the state Phase 6's pill will eventually absorb as "uncommitted". |
 | Theme composition, aliasing UI, math expressions | Phase 7 (§6.2, §6.3) | Existing reference values are **displayed and preserved verbatim**, and are read-only in the value editor. No reference picker, no `{a} * 2` evaluation, no circular-reference checking. |
-| Style Dictionary export | Phase 8 | The existing "Copy whole tree as JSON" stays the only way tokens leave the plugin. |
+| Style Dictionary export | Phase 8 | The existing "Copy whole tree as JSON" stays the only way tokens leave the plugin — and, per ADR-0004, the only *durable* one: the edit overlay lives in `clientStorage`, which is per-device and clearable. |
 
 The one place this line gets blurry is **references**. They are in the data today, so Phase 4 has to show them. The rule: *render the reference string, badge it, and refuse to edit it.* Anything beyond that is Phase 7.
 
@@ -82,7 +82,7 @@ Import (existing, Phase 2/3)      Editor (new, Phase 4)
 
 Two top-level tabs in the header: **Import** and **Tokens**. Import is the existing screen unchanged. Tokens is everything below. Tabs, not a wizard step, because re-import is an ongoing workflow (§6.5.1), not a one-time bootstrap the user graduates from.
 
-The Tokens tab is disabled with the copy *"Scan the file first"* until an import result exists.
+The Tokens tab is disabled with the copy *"Scan the file first"* until an import result exists — cached from a previous session (ADR-0004 §1) or freshly scanned. A persisted edit overlay on its own doesn't populate the tab: edits are a diff against an import, and there's nothing to show them against until the scan runs. See §8's empty states for how that reads without implying the edits were lost.
 
 ---
 
@@ -158,7 +158,7 @@ Nested disclosure rows following the DTCG group nesting exactly, since a node is
 - **Search** matches the full dotted path and `$description`, case-insensitive, substring (not fuzzy — with paths this structured, fuzzy matching produces noise). While searching, the tree flattens to a result list showing full dotted paths, with matched substrings emphasised. Group headers disappear; hierarchy stops being the point once you've typed.
 - **Type filter**: a multi-select of the seven `TokenType`s present in the current set, each with a count.
 - **Two state chips**, toggling filters rather than opening dialogs:
-  - `⚑ 12 flagged` — tokens with a report entry at their path (`collision`, `partial-token`, `dangling-reference`, `redundant-style`).
+  - `⚑ 12 flagged` — tokens with a report entry at their path (`collision`, `partial-token`, `dangling-reference`, `redundant-style`, and after a rescan, `edit-conflict` / `orphaned-edit` — see §5.5).
   - `● 4 unconfirmed` — number/string tokens with `subtypeSource: "default"`. Deep-links back to the Import tab's confirm step rather than duplicating that control here; it already works and there's no reason to build a second one.
 - Search scope defaults to the current set. A secondary line appears when there are matches elsewhere: *"18 more in other sets — search all sets"*. Cross-set search is opt-in because a path like `folio.color.border.accent.default` legitimately exists in both `Theme/Light` and `Theme/Dark`, and showing both by default makes every result look duplicated.
 
@@ -204,15 +204,51 @@ A `Go to target` action jumps to that path if it exists in any set; if it doesn'
 
 ### 5.4 Commit, revert, and where edits go
 
-Edits apply to the in-memory tree immediately and mark it dirty. The header gains an **Unsaved changes · 7** chip with an *Undo all* action.
+Edits apply to the tree immediately and are **persisted** — written to `clientStorage` as edit intent (target + op + value + base), keyed by `variableId + modeId` or `styleId`, per ADR-0004 §1–2. They survive closing the panel and reopening the file.
 
-**The destructive moment is Rescan.** A rescan rebuilds the tree from Figma and would silently discard local edits. So:
+The header gains a **Local edits · 7** chip. Tapping it opens the **local-edits list**: one row per overlay entry, showing the path, its set, the imported value and the current one, with *Revert* per row and *Undo all* at the top. Edited tokens also get *Revert to imported value* directly in the row's `⋯` menu; the list exists because deletions have no row left to hang a menu off, and because "what have I actually changed?" is a question with 7 answers and no other place to ask it.
 
-> **Rescan will discard 7 unsaved edits.**
-> The file will be re-read from Figma and your local changes to `folio.color.*` and 4 other paths will be lost. Copy the tree as JSON first if you want to keep them.
-> `[ Copy tree first ]` `[ Rescan anyway ]` `[ Cancel ]`
+**"Local edits", not "unsaved changes".** `clientStorage` is per-device and unsynced: the edits are durable on this machine, invisible on another, and not committed anywhere. Calling them "unsaved" implies a Save button that doesn't exist until Phase 6; calling them "saved" implies they're somewhere safe, which they aren't. "Local" is the honest word for both facts at once. The word *saved* is reserved for Phase 6's git commit.
 
-**Open question for Shyam (§10.1):** whether Phase 4 persists the edited tree to `clientStorage` between sessions, or whether the tree is session-only and "Copy whole tree as JSON" remains the sole exit. The copy above assumes session-only, which is the safer default to design against; if it persists, the rescan warning changes but doesn't disappear.
+Because of that, the panel keeps offering **Copy whole tree as JSON** prominently — until Phase 6 it is the only durable exit, and clearing browser data destroys the overlay (ADR-0004 §Consequences).
+
+If a write fails on quota, say so rather than losing it quietly:
+
+> **Couldn't save your edits — plugin storage is full.** Your changes are still in this session. Copy the tree as JSON before closing the panel.
+
+### 5.5 Rescan — merged, not destructive
+
+**Rescan destroys nothing and does not ask permission.** It rebuilds the tree from Figma and three-way-merges the persisted overlay back over it (ADR-0004 §4): where Figma hasn't moved, the edit reapplies silently; where Figma caught up to the edit, the entry retires silently; where both moved, the local edit wins and is flagged; where the target is gone, the entry is retired and flagged.
+
+No dialog before the scan. Afterwards, a **summary banner above the tree** (the existing `.entry` amber block, dismissible), only when the merge did something worth reading:
+
+> **7 edits reapplied · 2 conflicts · 1 orphaned**  `[ Review ]`  `[ Dismiss ]`
+
+- The silent-success case (all edits reapplied, nothing flagged) gets a plain toast instead — *"7 local edits reapplied."* — not a banner. Nothing needs attention, so nothing should hold screen space in a 640px panel.
+- Zero edits in the overlay: no banner, no toast. The rescan is just a rescan.
+- `[ Review ]` sets the `⚑ flagged` chip to the two new kinds, so the tree filters to exactly the rows that need a decision. Resolution happens in the tree, at leisure — there is no wizard and no per-token prompt during the scan.
+
+**`edit-conflict`** — both your edit and Figma moved from the same base. The row keeps its normal value preview showing **your** value (local wins), plus a `⚑ conflict` badge. The overlay/expanded row shows both sides:
+
+```
+┌──────────────────────────────────────────────┐
+│ ⚑ Conflict — both you and Figma changed this │
+│   Your edit      ■ #c33a2e                   │
+│   Now in Figma   ■ #b4342a                   │
+│   Your edit is being used.                   │
+│   [ Keep mine ]        [ Take Figma's ]      │
+└──────────────────────────────────────────────┘
+```
+
+*Keep mine* clears the flag and rebases the overlay entry on the freshly imported value (so the same conflict doesn't re-report on every subsequent scan). *Take Figma's* drops the overlay entry entirely and the row reverts to the imported value. Both are one tap, both undoable from the toast. There is deliberately no global "keep mine / take theirs" — across 1,316 tokens the right answer differs per token (ADR-0004 §4).
+
+**`orphaned-edit`** — the Variable or Style the edit targeted no longer exists in Figma. This is the same *"you're pointing at something that isn't there"* shape as `dangling-reference`, and reuses its treatment: `⚠` glyph, muted row, same badge palette. The row is rendered **outside the tree**, in a collapsed *"1 orphaned edit"* section pinned under the summary banner, because the token has no live path to sit at any more:
+
+> `folio.color.border.accent.hover` (was Theme/Light)
+> The Variable this edit changed was deleted in Figma. Your value: `#c33a2e`.
+> `[ Copy value ]` `[ Discard edit ]`
+
+Discarding is the only way to clear it — we can't reapply an edit to something that doesn't exist — so the copy hands the value back first rather than making the user retype it from a screenshot.
 
 ---
 
@@ -248,11 +284,13 @@ A single tap-through, with an **Undo** in the toast for 10 seconds. No typed con
 
 Deleting anyway is allowed, and the dependents get the existing `dangling-reference` badge — the same vocabulary the import report already uses (`ReportEntryKind`), so the user learns one concept, not two. There's no "rewrite the 7 references" option; that's aliasing surgery and belongs to Phase 7.
 
-**Deleting a group**: allowed from a group row, confirmation names the count (`Delete folio.color.border and its 12 tokens?`) and aggregates inbound references across all of them. Undo restores the whole subtree.
+**Deleting a group**: allowed from a group row, confirmation names the count (`Delete folio.color.border and its 12 tokens?`) and aggregates inbound references across all of them. Undo restores the whole subtree. Mechanically this is one tombstone per descendant token, not a single group-level one (ADR-0004 §2), which has a user-visible consequence worth knowing: a token *added to that group in Figma later* comes back on the next scan rather than being swallowed by the old deletion.
 
-**Style-derived and Variable-derived tokens delete like any other** — which, with creation deferred (§6), is every token in the tree. Nothing is removed from Figma (Phase 5), and a rescan brings the token straight back, so the confirmation always says so:
+**Style-derived and Variable-derived tokens delete like any other** — which, with creation deferred (§6), is every token in the tree. Nothing is removed from Figma (Phase 5), and the deletion persists as a tombstone in the overlay, so a rescan does **not** bring the token back. The confirmation says both halves:
 
-> This removes it from the local token tree only. Nothing changes in Figma, and a rescan will re-import it.
+> This removes it from the local token tree only. Nothing changes in Figma — the Variable is still there — and it stays removed here across rescans until you undo it.
+
+Undo lives in the toast for 10 seconds; after that, the way back is *Undo all* on the header chip, or a per-token restore from the `⋯` menu on the deletion's entry in the local-edits list.
 
 ---
 
@@ -262,7 +300,8 @@ Deleting anyway is allowed, and the dependents get the existing `dangling-refere
 
 | When | Copy |
 |---|---|
-| Tokens tab, nothing imported | **No tokens yet.** Scan the file on the Import tab to read its Variables and Styles. `[ Go to Import ]` |
+| Tokens tab, nothing imported, no local edits | **No tokens yet.** Scan the file on the Import tab to read its Variables and Styles. `[ Go to Import ]` |
+| Tokens tab, no cached import, **but the overlay has edits** (the cache was evicted or another file was opened — ADR-0004 §1) | **Scan the file to see your tokens.** Your 7 local edits are still here and will reapply after the scan. `[ Go to Import ]` — never let this read as "your edits are gone"; the overlay is durable and the import is the part that's re-derivable. |
 | Scan produced zero tokens | **Nothing importable in this file.** No Variables or Styles mapped to a token — see the Import tab's report for what was skipped. |
 | Set has no tokens | **This set is empty.** Every token in it was dropped as a collision — see the report. `[ Go to Import ]` |
 | Search, no matches in set | **No tokens match "shadw" in Theme/Light.** `[ Search all sets ]` |
@@ -280,7 +319,10 @@ Deleting anyway is allowed, and the dependents get the existing `dangling-refere
 | Partial token (`partial-token`) | Muted badge `partial` on the row; overlay lists omitted keys | `Imported without lineHeight — Figma's value was Auto, which has no token equivalent.` |
 | Collision loser | Not shown in the tree at all (it was never written). Discoverable only in the report. | — |
 | Unconfirmed subtype | Existing `.badge.needs` amber on the subtype tag | `Guessed as spacing. Confirm it on the Import tab.` |
-| Rescan with unsaved edits | Blocking dialog | see §5.4 |
+| Rescan with local edits | No dialog. Post-scan summary banner, `[ Review ]` filters the tree | see §5.5 |
+| `edit-conflict` | `⚑ conflict` badge on the row; both values in the expanded row, local value shown as live | `Both you and Figma changed this. Your value is being used.` |
+| `orphaned-edit` | `⚠`, in the pinned "orphaned edits" section, not the tree | `The Variable this edit changed was deleted in Figma.` |
+| Overlay write failed (storage full) | `.entry` amber block, edit stays applied in-session | `Couldn't save your edits — plugin storage is full. Copy the tree as JSON before closing.` |
 | Editing a reference | Disabled field + chip | see §5.3 |
 | Tree too large to render | Never surfaced — virtualize instead | — |
 
@@ -295,10 +337,10 @@ Deleting anyway is allowed, and the dependents get the existing `dangling-refere
 - 11px Inter body, monospace for anything path- or value-shaped (`.row .name` already does this).
 - `--border #e6e6e6`, `--muted #8c8c8c`, `--accent #0d99ff`, `--warn #b8730a` / `--warn-bg #fff6e5`.
 - `.row` (flex, 1px bottom border, ellipsised monospace name, trailing control) is exactly the token row. Reuse it.
-- `.badge` / `.badge.needs` already encode "state, neutral" vs "state, needs you". The subtype tags, `partial`, and flagged all map onto these two; **don't introduce a third badge colour.**
-- `.entry` (amber left border) is the error/flag block. Reuse for validation messages.
-- The existing toast is the undo surface.
-- Reserve the header's right slot for the Phase 6 sync pill. Leave it empty in Phase 4 rather than filling it with something that'll be evicted.
+- `.badge` / `.badge.needs` already encode "state, neutral" vs "state, needs you". The subtype tags, `partial`, and flagged all map onto these two; `conflict` and `orphaned` are `.badge.needs`. **Don't introduce a third badge colour** — a conflict is not a more urgent kind of amber, it's the same "needs you" the report already speaks.
+- `.entry` (amber left border) is the error/flag block. Reuse for validation messages and for §5.5's post-scan summary banner.
+- The existing toast is the undo surface, and the surface for the silent-success rescan summary.
+- The header's right slot holds the **Local edits · N** chip in Phase 4, and is where Phase 6's sync pill lands. Same slot, same role — "what state is my work in" — so the chip isn't a placeholder that gets evicted; it's the first occupant of a permanent one.
 
 Two things Phase 4 has to add: a **disclosure/caret row** for groups, and a **colour swatch** with a checkerboard alpha backing.
 
@@ -306,18 +348,22 @@ Two things Phase 4 has to add: a **disclosure/caret row** for groups, and a **co
 
 ## 10. Open questions for Shyam
 
-1. **Does the edited tree persist between plugin sessions** (`clientStorage`), or is it session-only until Phase 6's git sync gives it a real home? Changes §5.4's warning and whether "unsaved" is even the right word. *(Also a tech-lead question — flagging, not deciding.)*
+1. ~~**Does the edited tree persist between plugin sessions** (`clientStorage`), or is it session-only until Phase 6's git sync gives it a real home? Changes §5.4's warning and whether "unsaved" is even the right word. *(Also a tech-lead question — flagging, not deciding.)*~~
+   **Resolved 2026-09-01 — Shyam: persist to clientStorage; mechanics in ADR-0004.** Edits are stored as intent, keyed by Figma provenance id, and three-way-merged on rescan. Consequences already folded in above: §5.4's blocking rescan dialog is gone (replaced by §5.5's post-scan summary), the header chip reads **local edits** rather than "unsaved changes", deletion is a persistent tombstone (§7), and two new report kinds — `edit-conflict` and `orphaned-edit` — are designed in §5.5 and §8.
 2. **Single-set browsing vs. a merged view.** §4.2 argues for one set at a time. If you routinely need to compare `Theme/Light` against `Theme/Dark` side by side, that's a different screen and worth knowing now.
 3. **Should delete be blocked outright when references exist**, rather than warning and allowing? §7 allows it because the report already models `dangling-reference`, but that's a taste call about how much the tool should protect you from yourself.
 4. ~~**Are hand-created (`Local`) tokens actually wanted in Phase 4**, given nothing can be applied to Figma until Phase 5 and nothing can be committed until Phase 6? The PRD asks for create; it may in practice be dead weight for two phases. Worth confirming before it's built.~~
    **Resolved 2026-09-01 — Shyam: defer.** Creation is out of Phase 4 (§2). Phase 4 is browse/edit/delete over imported tokens only. Creation returns as its own ticket once Phase 5 or 6 gives a hand-made token somewhere to go. §6 is kept as a stub pointer.
-5. **Renaming a token's path** isn't specified above. It's mechanically a delete + create with the same reference consequences, but it also breaks every inbound reference at once. Is rename in Phase 4, or does it wait for Phase 7 where references can be rewritten? *(Sharper now that create is deferred: rename would be the only way to get a token onto a path Figma didn't produce, so shipping it would partly reopen the door §2 just closed.)*
+5. ~~**Renaming a token's path** isn't specified above. It's mechanically a delete + create with the same reference consequences, but it also breaks every inbound reference at once. Is rename in Phase 4, or does it wait for Phase 7 where references can be rewritten? *(Sharper now that create is deferred: rename would be the only way to get a token onto a path Figma didn't produce, so shipping it would partly reopen the door §2 just closed.)*~~
+   **Resolved 2026-09-01 — Shyam: defer to Phase 7**, where inbound references can be rewritten as part of the rename instead of being left dangling. Rename is out of Phase 4; §2's out-of-scope boundary covers it. Note for whoever revisits this: ADR-0004 defines overlay ops for `set-value`, `set-description`, and `delete` only — **there is no rename op** (ADR-0004 §Open questions). Pulling rename earlier than Phase 7 requires amending ADR-0004 first, not just a UX spec.
 
 ---
 
 ## 11. Build notes for `@frontend-engineer`
 
 - Don't call Figma. Nothing in this doc reads or writes the canvas.
+- **Persistence follows ADR-0004, not this doc.** Two `clientStorage` keys, edit-intent entries keyed by `variableId + modeId` / `styleId`, the merge table in §4, and the `edit-conflict` / `orphaned-edit` report kinds are all pinned there. This doc specifies only how those states read.
+- Subtype changes keep writing `userSubtypes` (ADR-0004 §3) — the subtype dropdown is *not* an overlay op, so it doesn't count toward the **Local edits · N** chip.
 - Preserve `$extensions."com.tokenvault"` byte-for-byte on every edit path. ADR-0002 §7's byte-identical re-import guarantee is the thing most easily broken by an editor that round-trips through a form.
 - Serialize through `stableStringify` / `compareKeys` so the copied tree still matches the fixture ordering.
 - Reuse `paths.ts` (`setTokenAtPath`, `isToken`, `normalizePathKey`) for validation instead of re-implementing path rules in the UI.
