@@ -695,7 +695,9 @@ Every one of these is named, per ADR-0006 §10 — the panel never reports a bar
 
 ## 12. Visual language — nothing new
 
-Phase 6 introduces **no new colour, no new badge, and no new component**. That is worth stating as a result rather than an absence, because a phase that adds a network, a credential and a third source of truth could easily have argued for all three.
+Phase 6 introduces **no new colour and no new badge**, and exactly **one new component** — §10.4's inline confirm strip, which is a footer, a sentence and the two-button pair the panel already has. That is worth stating as a result rather than an absence, because a phase that adds a network, a credential and a third source of truth could easily have argued for a new palette.
+
+**The two overrides cost nothing here, which is the tell that they were about structure rather than style.** Moving the commit surface from a modal to a screen (§7.2) swapped one existing container for another existing container and kept every row, swatch and blocked-row treatment intact. The Repo tab is the tab strip Phase 4 already built, with a third item in it.
 
 | Element | Reused from |
 |---|---|
@@ -706,7 +708,7 @@ Phase 6 introduces **no new colour, no new badge, and no new component**. That i
 | Repo tab | Phase 4's tab strip — third tab, same control, same count-badge treatment as Tokens |
 | Review & push, Diverged files, Compare | Phase 4's full-panel screen with a back arrow and a pinned footer — the same container as the Settings overlay, one level in |
 | Commit / diff / compare rows | Phase 5's `{ target, before, after, state }` row component, built for this |
-| Bulk confirm strip (§10.4) | Phase 4's inline footer confirm, in the slot the bulk button occupies |
+| Bulk confirm strip (§10.4) | **The one new component** — see below. Built from the existing footer slot and the standard `[ Cancel ] [ Primary ]` pair; nothing about it is a new visual idea |
 | First connect modal | Phase 5 §5.2's apply dialog container — the phase's only modal, and the only single-decision surface in it |
 
 Two additions that are not colours:
