@@ -1,7 +1,8 @@
 # ADR-0004 — Local edit persistence and re-import merge
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-09-01
+**Accepted**: 2026-09-02 — Phase 4 built and merged against this ADR unamended (issue #7, PR #8), and Phase 5 (ADR-0005) then built on §1's two stores, §2's entry shape and §4's merge table without changing them.
 **Owner**: @tech-lead
 
 ## Context

@@ -1,7 +1,8 @@
 # ADR-0003 — Styles-backed token types and the Styles import path
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-09-01
+**Accepted**: 2026-09-02 — Phase 3 built and merged against this ADR unamended (issue #3, PR #6). No implementation feedback contradicted a decision here, so unlike ADR-0002 there is no amendment.
 **Owner**: @tech-lead
 
 ## Context

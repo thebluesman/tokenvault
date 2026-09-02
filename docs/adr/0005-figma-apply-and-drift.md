@@ -1,10 +1,11 @@
 # ADR-0005 — Applying tokens to Figma, and drift detection
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-09-02
+**Accepted**: 2026-09-02 — Phase 5 built and merged against this ADR (PR #9, `1f3de4f`). Both remaining open questions were API facts, and implementation answered them; see [Open questions](#open-questions-not-decided-here).
 **Owner**: @tech-lead
 
-> Shyam resolved four of this ADR's open questions on 2026-09-02, before acceptance. They are folded into the decision sections below and marked *(resolved 2026-09-02)*: confirmation is always shown (§6), conflicts block apply (§10), deletion is its own destructive confirmation (§5), and aliases are applied as native Figma variable references (§11). The status stays Proposed — the ADR as a whole has not been accepted.
+> Shyam resolved four of this ADR's open questions on 2026-09-02, before acceptance. They are folded into the decision sections below and marked *(resolved 2026-09-02)*: confirmation is always shown (§6), conflicts block apply (§10), deletion is its own destructive confirmation (§5), and aliases are applied as native Figma variable references (§11).
 
 ## Context
 
@@ -217,10 +218,10 @@ Named here so they are visibly out of scope rather than accidentally missing.
 
 ## Open questions (not decided here)
 
-Two remain, and both are **API facts to verify during implementation**, not decisions to make:
+Two were **API facts to verify during implementation**, not decisions to make. Both were answered while building Phase 5, and are recorded here rather than left open:
 
-- **Does `documentchange` (or any event) fire for Variables/Styles mutations?** If yes, §9 gets an event-driven check and a one-line amendment. `@frontend-engineer` to verify against the current typings.
-- **Do a plugin's writes coalesce into one undo entry, and does that survive an apply followed by a rescan?** §6 leans on this for the escape hatch, and UX has committed to Figma's native ⌘Z with no custom undo — so if it does *not* coalesce, that is a finding both this ADR and `docs/ux/apply-and-drift.md` need to hear about before the copy ships. Do not promise ⌘Z until confirmed.
+- **Do a plugin's writes coalesce into one undo entry?** **Answered, yes — with a caveat that changed the code.** Plugin writes are not committed to undo history by default; they join whatever undo entry is already open, which can include the user's own last canvas edit. `src/figma/apply.ts` therefore calls `figma.commitUndo()` on *both* sides of the write batch, so an apply is its own isolated undo step. The call is guarded, because some Figma runtimes do not expose it; without it the writes still reach undo history, just less isolated. This is what let UX §5.5's footer copy commit to ⌘Z (`src/ui/applyDialog.ts`).
+- **Does `documentchange` (or any event) fire for Variables/Styles mutations?** **Not pursued, and §9 stands unchanged.** Phase 5 shipped scan-time plus on-demand detection as decided, so nothing depended on the answer. If an event-driven check is ever wanted, it remains the one-line amendment §9 describes — a strictly better §9, not a correction to one. Separately, `documentchange`'s rule that a plugin is never notified of its own changes is the precedent `src/code.ts`'s `justWrote` set follows to stop an apply reporting itself as drift.
 
 **Resolved since drafting** — recorded so the trail is visible rather than silently edited away:
 
