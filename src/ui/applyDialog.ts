@@ -18,9 +18,9 @@ import type { ApplyEntry, ApplyPlan } from "../tokens/plan";
 import type { PlannedWrite } from "../figma/apply";
 import type { TokenValue } from "../tokens/types";
 import { button, clear, el, swatch } from "./dom";
-import { send } from "./state";
+import { getModel, send } from "./state";
 import { truncateReference } from "../tokens/preview";
-import { stableStringify } from "../tokens/serialize";
+import { describeValue } from "../tokens/format";
 
 const modalEl = document.getElementById("modal") as HTMLElement;
 
@@ -81,6 +81,20 @@ export interface ApplyRequest {
  */
 export function openApplyDialog(request: ApplyRequest): void {
   const { plan } = request;
+
+  // The invariant this module already enforces, used for a second thing: every apply passes through
+  // here, so this is the one place that can refuse an apply built on guards that were never
+  // established. A tree restored from an old import cache carries an *empty* style-guard map and
+  // an empty non-local path set, and empty passes every check made against it — so the write that
+  // ADR-0005 §3 refuses would go through instead. The plan refuses each row too; this stops the
+  // user opening a dialog whose every row is blocked, and says what to do about it.
+  if (!getModel().guardsKnown) {
+    request.onNothingToDo(
+      "Rescan the file before applying — this tree came from the cache, so Tokenvault can't tell what a write would overwrite."
+    );
+    return;
+  }
+
   if (plan.ready === 0 && plan.skipped === 0) {
     request.onNothingToDo(request.nothingToDo);
     return;
@@ -295,12 +309,7 @@ function appendValue(into: HTMLElement, value: TokenValue | undefined, isAfter: 
   into.appendChild(el("span", isAfter ? "to" : undefined, text));
 }
 
+/** 46 characters is what one side of the `old → new` diff line holds at 460px. */
 function describe(value: TokenValue | undefined): string {
-  if (value === undefined) return "unset";
-  if (value === "") return "empty";
-  if (typeof value === "object") {
-    const json = stableStringify(value).trim().replace(/\s+/g, " ");
-    return json.length > 46 ? `${json.slice(0, 45)}…` : json;
-  }
-  return String(value);
+  return describeValue(value, { unset: "unset", limit: 46 });
 }

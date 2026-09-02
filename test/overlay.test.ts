@@ -14,8 +14,11 @@ import type { FlatToken } from "../src/tokens/view";
 import {
   applyOverlay,
   applyOverlayToFiles,
+  dropEntries,
   dropEntry,
   emptyOverlay,
+  entryRefs,
+  localEntries,
   indexOverlay,
   keepMine,
   mergeOverlay,
@@ -369,6 +372,68 @@ test("removeEntries drops every op for a target; dropEntry drops just one", () =
   );
   assert.equal(dropEntry(overlay, { variableId: "VariableID:1:4", modeId: "1:0" }, "set-value").entries.length, 1);
   assert.equal(removeEntries(overlay, { variableId: "VariableID:1:4", modeId: "1:0" }).entries.length, 0);
+});
+
+test("a bulk undo is scoped to the entries it was shown, never the whole overlay", () => {
+  // The regression: the Changes list's *Undo all* sits on a tab that filters conflicts out, and it
+  // used to clear the entire overlay. Undoing the two edits on screen therefore also discarded a
+  // conflict the button had never displayed — a resolution the user is being asked to make one at
+  // a time in a different tab, silently thrown away by a button that named neither.
+  //
+  // The fix is that the list and the scope are the same function, which is what this asserts.
+  const clean = { variableId: "VariableID:1:4", modeId: "1:0" };
+  const other = { variableId: "VariableID:2:2", modeId: "1:0" };
+  const disputed = { variableId: "VariableID:3:3", modeId: "1:0" };
+
+  const overlay: EditOverlay = {
+    version: 1,
+    entries: [
+      { target: clean, path: "a.b", set: "S", op: "set-value", value: "#c33a2e", base: "#111111", at: NOW },
+      { target: clean, path: "a.b", set: "S", op: "set-description", value: "x", base: "", at: NOW },
+      { target: other, path: "c.d", set: "S", op: "delete", at: NOW },
+      {
+        target: disputed,
+        path: "e.f",
+        set: "S",
+        op: "set-value",
+        value: "#0d99ff",
+        base: "#000000",
+        at: NOW,
+        conflict: { figma: "#b4342a", at: NOW },
+      },
+    ],
+  };
+
+  const shown = localEntries(overlay);
+  assert.equal(shown.length, 3);
+  assert.equal(
+    shown.some((entry) => targetKey(entry.target) === targetKey(disputed)),
+    false
+  );
+
+  const after = dropEntries(overlay, entryRefs(shown));
+  assert.equal(after.entries.length, 1);
+  assert.equal(after.entries[0].conflict?.figma, "#b4342a");
+  // And the sibling op on a target is dropped by name, not by target: a target carrying both a
+  // value and a description edit has two rows in the list and both were on screen.
+  assert.equal(
+    after.entries.some((entry) => targetKey(entry.target) === targetKey(clean)),
+    false
+  );
+});
+
+test("a scoped undo of one row leaves the other rows on the same target alone", () => {
+  const target = { variableId: "VariableID:1:4", modeId: "1:0" };
+  const overlay: EditOverlay = {
+    version: 1,
+    entries: [
+      { target, path: "a.b", set: "S", op: "set-value", value: "#c33a2e", base: "#111111", at: NOW },
+      { target, path: "a.b", set: "S", op: "set-description", value: "x", base: "", at: NOW },
+    ],
+  };
+  const after = dropEntries(overlay, [{ target, op: "set-value" }]);
+  assert.equal(after.entries.length, 1);
+  assert.equal(after.entries[0].op, "set-description");
 });
 
 test("keep-mine rebases on Figma's value so the same conflict does not re-report", () => {

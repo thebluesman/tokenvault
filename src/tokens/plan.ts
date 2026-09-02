@@ -27,7 +27,7 @@ import type { FigmaWriteOp, Refusal } from "./toFigma";
 import type { FlatToken } from "./view";
 import type { InboundIndex, Referrer } from "./references";
 import type { Token, TokenValue } from "./types";
-import { indexOverlay, targetKey, tokenKey, valuesEqual } from "./overlay";
+import { targetKey, tokenKey, valuesEqual } from "./overlay";
 import { toFigmaDescription, toFigmaRemoval, toFigmaValue } from "./toFigma";
 import { collectReferences, inboundReferrers, isReference, referenceTarget } from "./references";
 import { normalizePathKey } from "./paths";
@@ -114,6 +114,19 @@ export interface PlanInput {
    * local set — so this is a lookup, not a re-derivation.
    */
   nonLocalPaths?: Set<string>;
+  /**
+   * Whether `styleGuards` and `nonLocalPaths` were actually derived from a scan.
+   *
+   * Both guards are **collections whose emptiness is meaningful**, and both are derived from the
+   * live Figma read rather than from the token tree — so a tree restored from the import cache
+   * (ADR-0004 §1) can arrive with neither. Empty then means "we never asked", not "nothing is
+   * guarded", and `styleGuards.get(...)` returning `undefined` would wave through exactly the lossy
+   * style write ADR-0005 §3 forbids. `false` refuses every write until a scan re-establishes them.
+   *
+   * Absent means known — the guards are only unknown by way of the cache, and that path says so
+   * explicitly.
+   */
+  guardsKnown?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -124,15 +137,30 @@ interface IndexedToken {
   variableId?: string;
   type: string;
   path: string;
+  /** The reference graph node this token *is* — see `cycleNodeKey`. */
+  node: string;
+}
+
+/**
+ * One token instance's identity in the reference graph.
+ *
+ * **Not the normalised path.** A path is what a reference *names*, and two tokens in different sets
+ * can normalise to the same one — a `cross-set` collision, which ADR-0002 §5 detects and resolves by
+ * picking a winner rather than by making the loser disappear. Keying graph nodes by path merges
+ * those two tokens into one node, unions their outgoing references, and lets a cycle belonging to
+ * the loser refuse the winner's perfectly ordinary write. The set is what tells them apart, and a
+ * set cannot hold two tokens at one path — it is a JSON tree — so this is unique per instance.
+ */
+export function cycleNodeKey(setId: string, path: string): string {
+  return `${setId}\u0000${normalizePathKey(path)}`;
 }
 
 /**
  * `normalizePathKey(path)` → the token it names.
  *
- * Unambiguous by construction: a path that resolved to two variables would be a `cross-set` or
- * `token-group` collision, and ADR-0002 §5 already detects those and writes only the winner. The
- * collision pass therefore guarantees this key's uniqueness and no new disambiguation rule is
- * needed here.
+ * First-wins where a path is ambiguous, which is also how a reference resolves at write time: the
+ * collision pass (ADR-0002 §5) has already chosen that same winner, so the index and the tree agree
+ * about which token a pointer lands on.
  */
 function buildAliasIndex(tokens: FlatToken[]): Map<string, IndexedToken> {
   const index = new Map<string, IndexedToken>();
@@ -144,35 +172,68 @@ function buildAliasIndex(tokens: FlatToken[]): Map<string, IndexedToken> {
       variableId: typeof figma?.variableId === "string" ? figma.variableId : undefined,
       type: entry.token.$type,
       path: entry.path,
+      node: cycleNodeKey(entry.setId, entry.path),
     });
   }
   return index;
 }
 
+/** What the cycle pass found — nodes for reporting, edges for refusing a specific write. */
+export interface CycleIndex {
+  /** Node keys (see `cycleNodeKey`) that sit on a cycle. */
+  nodes: Set<string>;
+  /**
+   * The `source → target` edges that *close* a cycle, keyed `sourceNode` + NUL + `targetNode`.
+   *
+   * The edge, not the node, is what a refusal is keyed on. A token can hold several references —
+   * a shadow's colour and its offset both — and only the ones that actually complete a loop are
+   * the circular ones; refusing by node would blame every pointer the token carries.
+   */
+  edges: Set<string>;
+}
+
+/** Exported so a caller can ask about one edge without re-deriving the key's shape. */
+export function cycleEdgeKey(from: string, to: string): string {
+  return `${from}\u0000${to}`;
+}
+
 /**
- * Every path that sits on a reference cycle.
+ * Every reference edge that sits on a cycle.
  *
  * Figma rejects a circular alias, but discovering that as a thrown error partway through a plan is
  * the worst possible place to find out: it lands after some entries have already been written, and
  * it reaches the user as whatever string Figma chose rather than as a named skip reason. So the
- * plan builder finds cycles up front and refuses the whole cycle — which is also the
- * "circular reference detection with a clear error state" PRD §6.3 asks for, arriving early and as
- * a side effect (ADR-0005 §11, Consequences).
+ * plan builder finds cycles up front and refuses them — which is also the "circular reference
+ * detection with a clear error state" PRD §6.3 asks for, arriving early and as a side effect
+ * (ADR-0005 §11, Consequences).
+ *
+ * The graph's nodes are **token instances** and its edges run through the alias index, so a
+ * reference resolves to exactly the token a write would alias — see `cycleNodeKey` for why keying
+ * this by path instead lets one set's cycle refuse another set's unrelated token.
  *
  * Iterative rather than recursive: a deep alias chain in a real file is perfectly legal, and a
  * recursive walk would trade a reported cycle for a stack overflow.
  */
-export function findReferenceCycles(tokens: FlatToken[]): Set<string> {
+export function findReferenceCycles(tokens: FlatToken[]): CycleIndex {
+  const index = buildAliasIndex(tokens);
   const edges = new Map<string, string[]>();
+
   for (const entry of tokens) {
-    const key = normalizePathKey(entry.path);
-    const targets = collectReferences(entry.token).map(normalizePathKey);
-    const existing = edges.get(key);
-    if (existing === undefined) edges.set(key, targets);
+    const from = cycleNodeKey(entry.setId, entry.path);
+    const targets: string[] = [];
+    for (const reference of collectReferences(entry.token)) {
+      // A reference to a path that isn't a token in this tree is a dangling reference, not a
+      // cycle. It resolves as its own refusal (`alias-target-unknown`) and has no node here.
+      const target = index.get(normalizePathKey(reference));
+      if (target !== undefined) targets.push(target.node);
+    }
+    const existing = edges.get(from);
+    if (existing === undefined) edges.set(from, targets);
     else existing.push(...targets);
   }
 
-  const onCycle = new Set<string>();
+  const nodes = new Set<string>();
+  const cycleEdges = new Set<string>();
   /** 0 unvisited, 1 on the current path, 2 finished. */
   const state = new Map<string, number>();
 
@@ -200,22 +261,24 @@ export function findReferenceCycles(tokens: FlatToken[]): Set<string> {
       const seen = state.get(target) ?? 0;
 
       if (seen === 1) {
-        // Back edge: everything from `target` to the top of the current path is on the cycle.
+        // Back edge: everything from `target` to the top of the current path is on the cycle, and
+        // so is every edge along it — including the back edge itself, which closes the loop.
         const from = path.lastIndexOf(target);
-        for (let i = from; i < path.length; i += 1) onCycle.add(path[i]);
+        for (let i = from; i < path.length; i += 1) {
+          nodes.add(path[i]);
+          if (i + 1 < path.length) cycleEdges.add(cycleEdgeKey(path[i], path[i + 1]));
+        }
+        cycleEdges.add(cycleEdgeKey(frame.node, target));
         continue;
       }
       if (seen === 2) continue;
-      // A reference to a path that isn't a token in this tree is a dangling reference, not a
-      // cycle. It has no outgoing edges, so walking into it is harmless and it resolves as a
-      // separate refusal (`alias-target-unknown`).
       state.set(target, 1);
       path.push(target);
       stack.push({ node: target, next: 0 });
     }
   }
 
-  return onCycle;
+  return { nodes, edges: cycleEdges };
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +309,8 @@ export function buildApplyPlan(input: PlanInput, scope: PlanScope = {}): ApplyPl
   const entries: ApplyEntry[] = [];
   const covered = new Set<string>();
 
-  const ops = indexOverlay(input.overlay);
+  // Over the raw entries, deliberately, rather than over `indexOverlay`'s per-target grouping: a
+  // target carrying both a value and a description edit has to produce both rows.
   for (const overlayEntry of input.overlay.entries) {
     const key = targetKey(overlayEntry.target);
     if (key === null) continue;
@@ -254,9 +318,6 @@ export function buildApplyPlan(input: PlanInput, scope: PlanScope = {}): ApplyPl
     covered.add(key);
     entries.push(planEntry(overlayEntry, key, { effective, imported, aliasIndex, cycles, input }));
   }
-  // `ops` is read only to keep the index warm for callers that reuse it; the loop above is over
-  // the raw entries so a target carrying both a value and a description edit produces both rows.
-  void ops;
 
   if (scope.includeMatches === true) {
     for (const entry of input.tokens) {
@@ -304,7 +365,7 @@ interface PlanContext {
   effective: Map<string, FlatToken>;
   imported: Map<string, Token>;
   aliasIndex: Map<string, IndexedToken>;
-  cycles: Set<string>;
+  cycles: CycleIndex;
   input: PlanInput;
 }
 
@@ -350,6 +411,17 @@ function planEntry(entry: OverlayEntry, key: string, context: PlanContext): Appl
       ...base,
       reason: "apply-conflicted",
       message: "You and Figma both changed this. Resolve the conflict before applying it.",
+    };
+  }
+
+  if (context.input.guardsKnown === false) {
+    // Before `already-matches`, and before anything that could produce a `write`: an empty guard
+    // map that was never populated passes every `.get`/`.has` check downstream, so the only place
+    // this can be caught is above them all.
+    return {
+      ...base,
+      reason: "apply-guards-unknown",
+      message: "Rescan the file first — this tree came from the cache, so Tokenvault can't tell what a write would overwrite.",
     };
   }
 
@@ -414,6 +486,10 @@ function resolvedValue(path: string, context: PlanContext): TokenValue | undefin
  * local token, so the unknown branch would swallow it and report the wrong cause. "This lives in a
  * published library" is actionable; "this isn't in any set" sends the user looking for a token
  * that was never going to be there.
+ *
+ * The cycle check comes after both, because it is the one guard that needs the target *resolved*:
+ * it asks whether this specific source→target edge closes a loop, not whether the source's path
+ * appears anywhere in the cycle set.
  */
 function resolveAlias(
   path: string,
@@ -421,14 +497,6 @@ function resolveAlias(
   context: PlanContext
 ): { ok: true; targetId: string } | Refusal {
   const key = normalizePathKey(path);
-
-  if (context.cycles.has(normalizePathKey(sourcePath(source, context)))) {
-    return {
-      ok: false,
-      reason: "alias-cycle",
-      message: `${path} is part of a circular reference. Figma can't hold a variable that points back at itself.`,
-    };
-  }
 
   if (context.input.nonLocalPaths?.has(key) === true) {
     return {
@@ -446,6 +514,16 @@ function resolveAlias(
       message: `Points at ${path}, which isn't in any set.`,
     };
   }
+
+  const from = sourceNode(source, context);
+  if (from !== null && context.cycles.edges.has(cycleEdgeKey(from, target.node))) {
+    return {
+      ok: false,
+      reason: "alias-cycle",
+      message: `${path} is part of a circular reference. Figma can't hold a variable that points back at itself.`,
+    };
+  }
+
   if (target.variableId === undefined) {
     return {
       ok: false,
@@ -466,10 +544,12 @@ function resolveAlias(
   return { ok: true, targetId: target.variableId };
 }
 
-function sourcePath(token: Token, context: PlanContext): string {
+/** The graph node the token being written *is*, or `null` when it isn't in the effective tree. */
+function sourceNode(token: Token, context: PlanContext): string | null {
   const key = tokenKey(token);
-  if (key === null) return "";
-  return context.effective.get(key)?.path ?? "";
+  if (key === null) return null;
+  const entry = context.effective.get(key);
+  return entry === undefined ? null : cycleNodeKey(entry.setId, entry.path);
 }
 
 // ---------------------------------------------------------------------------

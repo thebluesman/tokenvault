@@ -1,6 +1,6 @@
 // Message contract between the plugin controller (code.ts) and the UI iframe (ui/main.ts).
 
-import type { EditOverlay, OverlayEntry, OverlayOp, OverlayTarget } from "./tokens/overlay";
+import type { EditOverlay, EntryRef, OverlayEntry, OverlayOp, OverlayTarget } from "./tokens/overlay";
 import type {
   ImportResultCounts,
   Manifest,
@@ -83,6 +83,15 @@ export interface ImportPayload {
   styleGuards: Array<[string, Refusal]>;
   /** Normalised dotted paths naming a published-library variable — §11's up-front locality check. */
   nonLocalPaths: string[];
+  /**
+   * Whether the two fields above came from a scan at all.
+   *
+   * Both are collections whose *emptiness is meaningful*, and both are derived from the live Figma
+   * read rather than from the token tree — so a payload restored from the import cache can carry
+   * neither. `false` means "we never asked", which every apply path has to treat as a refusal
+   * rather than as an all-clear: an unpopulated guard map passes every lookup made against it.
+   */
+  guardsKnown: boolean;
 }
 
 /** What one apply run did, per entry (ADR-0005 §6 — a report, never a rollback). */
@@ -114,8 +123,15 @@ export type UiToPluginMessage =
   | { type: "edit"; entries: Array<Omit<OverlayEntry, "at">> }
   /** Drop the overlay entries for one target — all of them, or just one op. */
   | { type: "revert"; targets: OverlayTarget[]; op?: OverlayOp }
-  /** Undo everything. The header chip's *Undo all*. */
-  | { type: "revert-all" }
+  /**
+   * Drop a named list of `(target, op)` entries — the Changes list's *Undo all*.
+   *
+   * Deliberately a list rather than a "clear the overlay" verb. *Undo all* sits on the Local tab,
+   * which filters conflicts out (they are resolved one at a time in their own tab), so a global
+   * wipe would discard entries that button never showed the user. The scope of a bulk action is
+   * whatever is on screen under it, and this message is that rule made unrepresentable otherwise.
+   */
+  | { type: "revert-entries"; entries: EntryRef[] }
   /** Resolve an `edit-conflict` by keeping the local value, rebased on Figma's (UX §5.5). */
   | { type: "keep-mine"; target: OverlayTarget; op: OverlayOp }
   /** The edited token tree, serialized — the only durable exit until Phase 6 (UX §5.4). */

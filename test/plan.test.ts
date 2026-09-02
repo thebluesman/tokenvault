@@ -9,7 +9,13 @@ import assert from "node:assert/strict";
 
 import type { EditOverlay, OverlayEntry } from "../src/tokens/overlay";
 import type { ApplyEntry } from "../src/tokens/plan";
-import { buildApplyPlan, buildDeletePlan, findReferenceCycles } from "../src/tokens/plan";
+import {
+  buildApplyPlan,
+  buildDeletePlan,
+  cycleEdgeKey,
+  cycleNodeKey,
+  findReferenceCycles,
+} from "../src/tokens/plan";
 import { buildInboundIndex } from "../src/tokens/references";
 import { flat, styleToken, varToken } from "./helpers";
 
@@ -250,13 +256,20 @@ test("cycles are found up front, so Figma never rejects one mid-plan", () => {
     flat("c", "S", varToken("color", "{a}")),
     flat("d", "S", varToken("color", "{a}")),
   ]);
-  assert.deepEqual(Array.from(cycles).sort(), ["a", "b", "c"]);
+  assert.deepEqual(
+    Array.from(cycles.nodes).sort(),
+    [cycleNodeKey("S", "a"), cycleNodeKey("S", "b"), cycleNodeKey("S", "c")].sort()
+  );
   // `d` points *into* the cycle without being on it, so it is not itself circular.
-  assert.equal(cycles.has("d"), false);
+  assert.equal(cycles.nodes.has(cycleNodeKey("S", "d")), false);
+  // And the edge out of `d` is not a cycle edge, so its own write is never refused for one.
+  assert.equal(cycles.edges.has(cycleEdgeKey(cycleNodeKey("S", "d"), cycleNodeKey("S", "a"))), false);
 });
 
 test("a self-reference is a cycle of one", () => {
-  assert.deepEqual(Array.from(findReferenceCycles([flat("a", "S", varToken("color", "{a}"))])), ["a"]);
+  const cycles = findReferenceCycles([flat("a", "S", varToken("color", "{a}"))]);
+  assert.deepEqual(Array.from(cycles.nodes), [cycleNodeKey("S", "a")]);
+  assert.equal(cycles.edges.has(cycleEdgeKey(cycleNodeKey("S", "a"), cycleNodeKey("S", "a"))), true);
 });
 
 test("a long alias chain is not a cycle and costs nothing", () => {
@@ -265,7 +278,49 @@ test("a long alias chain is not a cycle and costs nothing", () => {
   const chain = Array.from({ length: 500 }, (_, i) =>
     flat(`n${i}`, "S", varToken("color", i === 499 ? "#000000" : `{n${i + 1}}`))
   );
-  assert.equal(findReferenceCycles(chain).size, 0);
+  assert.equal(findReferenceCycles(chain).nodes.size, 0);
+});
+
+test("a cycle in one set does not refuse a colliding path in another", () => {
+  // The regression: cycle nodes used to be keyed by normalised path alone, so two sets whose
+  // tokens normalise to the same dotted path shared one graph node and had their outgoing
+  // references unioned. `Theme/Dark`'s self-reference then put `Theme/Light`'s perfectly ordinary
+  // pointer on a cycle, and its write was refused as circular. Paths are what a reference *names*;
+  // the set is what says which token it lands on.
+  const light = { variableId: "VariableID:1:1", modeId: "1:0" };
+  const target = varToken("color", "#c33a2e", { variableId: "VariableID:9:9" });
+  const plan = buildApplyPlan({
+    tokens: [
+      flat("a.b", "Theme/Light", varToken("color", "{ref.red}", light)),
+      flat("a.b", "Theme/Dark", varToken("color", "{a.b}", { variableId: "VariableID:2:2" })),
+      flat("ref.red", "Theme/Light", target),
+    ],
+    imported: [
+      flat("a.b", "Theme/Light", varToken("color", "#b4342a", light)),
+      flat("a.b", "Theme/Dark", varToken("color", "{a.b}", { variableId: "VariableID:2:2" })),
+      flat("ref.red", "Theme/Light", target),
+    ],
+    overlay: overlay([
+      entry({ target: light, op: "set-value", value: "{ref.red}", base: "#b4342a" }),
+    ]),
+  });
+
+  const applied = byPath(plan, "a.b");
+  assert.equal(applied.status, "ready");
+  assert.equal(applied.reason, undefined);
+  assert.equal(applied.write?.kind, "variable-alias");
+});
+
+test("only the edge that closes a loop is refused, not every pointer the token holds", () => {
+  // A token can carry several references — a shadow's colour and its offset both. Refusing by node
+  // rather than by edge would blame the innocent ones too.
+  const cycles = findReferenceCycles([
+    flat("a", "S", varToken("color", "{b}")),
+    flat("b", "S", varToken("color", "{a}")),
+    flat("leaf", "S", varToken("color", "#000000")),
+  ]);
+  assert.equal(cycles.edges.has(cycleEdgeKey(cycleNodeKey("S", "a"), cycleNodeKey("S", "b"))), true);
+  assert.equal(cycles.edges.has(cycleEdgeKey(cycleNodeKey("S", "a"), cycleNodeKey("S", "leaf"))), false);
 });
 
 test("a token on a cycle is refused with the cycle reason", () => {
@@ -291,6 +346,38 @@ test("a token on a cycle is refused with the cycle reason", () => {
 // ---------------------------------------------------------------------------
 // Style guards and descriptions
 // ---------------------------------------------------------------------------
+
+test("an apply built on unestablished guards is refused outright", () => {
+  // The regression: `styleGuards` and `nonLocalPaths` are derived from the live Figma read, so a
+  // tree restored from the import cache used to arrive with both **empty**. Empty passes every
+  // lookup made against it — `styleGuards.get(id)` is `undefined`, `nonLocalPaths.has(path)` is
+  // false — so the lossy style write ADR-0005 §3 exists to refuse would have gone straight through.
+  // Unknown is not "nothing is guarded", and it has to be caught above every branch that can
+  // produce a `write`.
+  const plan = buildApplyPlan({
+    ...scenario({ imported: "#b4342a", edited: "#c33a2e" }),
+    styleGuards: new Map(),
+    nonLocalPaths: new Set(),
+    guardsKnown: false,
+  });
+  assert.equal(plan.ready, 0);
+  assert.equal(byPath(plan, "a.b").status, "skipped");
+  assert.equal(byPath(plan, "a.b").reason, "apply-guards-unknown");
+  assert.equal(
+    plan.entries.every((each) => each.write === undefined),
+    true
+  );
+});
+
+test("guards established by a scan let the same apply through", () => {
+  const plan = buildApplyPlan({
+    ...scenario({ imported: "#b4342a", edited: "#c33a2e" }),
+    styleGuards: new Map(),
+    nonLocalPaths: new Set(),
+    guardsKnown: true,
+  });
+  assert.equal(plan.ready, 1);
+});
 
 test("a guarded style is refused before its whole-array write can lose anything", () => {
   const before = styleToken("color", "#b4342a");

@@ -208,7 +208,7 @@ test("figma.fontStyle carries an unmapped weight back verbatim", () => {
 test("the real file's reference graph has no cycles", () => {
   // Not a tautology worth skipping: a cycle here would mean the importer had written one, and the
   // detector running clean on 1,300 real tokens with heavy aliasing is what says the walk scales.
-  assert.deepEqual(Array.from(findReferenceCycles(flat)), []);
+  assert.deepEqual(Array.from(findReferenceCycles(flat).nodes), []);
 });
 
 test("an edit to one real token plans exactly one write and touches nothing else", () => {

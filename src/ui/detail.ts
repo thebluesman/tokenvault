@@ -58,7 +58,7 @@ import {
 import { openApplyDialog } from "./applyDialog";
 import { openDeleteInFigma } from "./deleteFigma";
 import { button, copy, el, toast } from "./dom";
-import { stableStringify } from "../tokens/serialize";
+import { describeValue } from "../tokens/format";
 import { normalizePathKey } from "../tokens/paths";
 
 const panelEl = document.getElementById("panel") as HTMLElement;
@@ -284,10 +284,9 @@ function renderConflict(line: Line): HTMLElement {
   return box;
 }
 
+/** Untruncated: the detail view is the surface with room for the whole value. */
 function describe(value: TokenValue | undefined): string {
-  if (value === undefined) return "—";
-  if (typeof value === "object") return stableStringify(value).trim().replace(/\s+/g, " ");
-  return String(value);
+  return describeValue(value);
 }
 
 /**

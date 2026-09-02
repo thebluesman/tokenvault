@@ -17,6 +17,7 @@
 
 import type { Line } from "./state";
 import type { OverlayEntry } from "../tokens/overlay";
+import { entryRefs, localEntries } from "../tokens/overlay";
 import {
   conflictedLines,
   dismissDrift,
@@ -28,11 +29,11 @@ import {
   planRestoreDrift,
   resolveKeepMine,
   revert,
-  revertAll,
+  revertEntries,
 } from "./state";
 import { openApplyDialog } from "./applyDialog";
 import { button, el, toast } from "./dom";
-import { stableStringify } from "../tokens/serialize";
+import { describeValue } from "../tokens/format";
 
 const panelEl = document.getElementById("panel") as HTMLElement;
 
@@ -82,8 +83,9 @@ export function renderChanges(): void {
   const model = getModel();
   const drifted = driftedLines();
   const conflicts = conflictedLines();
-  // Conflicted entries are shown in their own section, so the Local list is the rest.
-  const local = model.overlay.entries.filter((entry) => entry.conflict === undefined);
+  // Conflicted entries are shown in their own section, so the Local list is the rest. The same
+  // function decides *Undo all*'s scope below — see `localEntries`.
+  const local = localEntries(model.overlay);
 
   panelEl.textContent = "";
   panelEl.classList.remove("hidden");
@@ -147,9 +149,14 @@ function renderLocal(body: HTMLElement, entries: OverlayEntry[]): void {
   actions.appendChild(apply);
 
   const undoAll = button("Undo all");
+  // Scoped to `entries` — the rows this tab is actually showing. Conflicts are filtered out above
+  // and are resolved one at a time in their own tab, so a global wipe would discard decisions the
+  // user was never offered here.
+  undoAll.title = "Undoes the local edits listed below. Conflicts are resolved separately.";
   undoAll.addEventListener("click", () => {
-    revertAll();
-    toast("Reverted every local edit");
+    const count = entries.length;
+    revertEntries(entryRefs(entries));
+    toast(`Reverted ${count} local edit${count === 1 ? "" : "s"}`);
   });
   actions.appendChild(undoAll);
   body.appendChild(actions);
@@ -362,12 +369,7 @@ function renderConflicts(body: HTMLElement, lines: Line[]): void {
   }
 }
 
+/** 34 characters, because this line carries *two* values either side of a `→` or a `·`. */
 function describe(value: unknown): string {
-  if (value === undefined) return "—";
-  if (value === "") return "empty";
-  if (typeof value === "object" && value !== null) {
-    const json = stableStringify(value as never).trim().replace(/\s+/g, " ");
-    return json.length > 34 ? `${json.slice(0, 33)}…` : json;
-  }
-  return String(value);
+  return describeValue(value, { limit: 34 });
 }

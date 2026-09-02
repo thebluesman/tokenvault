@@ -485,6 +485,39 @@ export function keepMine(overlay: EditOverlay, target: OverlayTarget, op: Overla
   };
 }
 
+/** One entry, named the way a bulk action has to name it: by target *and* op, never by target. */
+export interface EntryRef {
+  target: OverlayTarget;
+  op: OverlayOp;
+}
+
+/**
+ * The entries the Changes list's *Local* tab shows.
+ *
+ * Conflicted entries are excluded because they have their own tab, where they are resolved one at a
+ * time — across a thousand tokens the right answer differs per token, which is why Phase 4 refused
+ * a global keep-mine in the first place.
+ *
+ * Exported rather than inlined at the call site so the tab's list and its *Undo all* scope are the
+ * *same function*. They were not, once: the list filtered and the button cleared the whole overlay,
+ * so undoing the seven edits on screen also discarded conflicts the button had never shown.
+ */
+export function localEntries(overlay: EditOverlay): OverlayEntry[] {
+  return overlay.entries.filter((entry) => entry.conflict === undefined);
+}
+
+/** Drops a named list of entries and nothing else — the scoped half of every bulk undo. */
+export function dropEntries(overlay: EditOverlay, refs: EntryRef[]): EditOverlay {
+  let next = overlay;
+  for (const ref of refs) next = dropEntry(next, ref.target, ref.op);
+  return next;
+}
+
+/** A bulk action's entries, reduced to what the `revert-entries` message carries. */
+export function entryRefs(entries: OverlayEntry[]): EntryRef[] {
+  return entries.map((entry) => ({ target: entry.target, op: entry.op }));
+}
+
 /** Drops one op's entry for a target, leaving its siblings — "take Figma's" and per-op revert. */
 export function dropEntry(overlay: EditOverlay, target: OverlayTarget, op: OverlayOp): EditOverlay {
   const key = targetKey(target);

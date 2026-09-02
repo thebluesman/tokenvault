@@ -7,12 +7,14 @@ import type {
   UiToPluginMessage,
 } from "./messages";
 import type { FileScan, ImportResult, SubtypeSelection } from "./tokens/types";
-import type { EditOverlay, OverlayEntry, OverlayOp, OverlayTarget } from "./tokens/overlay";
+import type { EditOverlay, EntryRef, OverlayEntry, OverlayOp, OverlayTarget } from "./tokens/overlay";
 import type { DriftResult } from "./tokens/drift";
 import type { FlatToken } from "./tokens/view";
 import type { PlannedWrite } from "./figma/apply";
+import type { Refusal } from "./tokens/toFigma";
 import {
   applyOverlayToFiles,
+  dropEntries,
   dropEntry,
   emptyOverlay,
   indexOverlay,
@@ -121,6 +123,18 @@ let drift: DriftResult = emptyDrift();
 let justWrote = new Set<string>();
 
 /**
+ * The apply guards from the last scan, restored alongside the import cache.
+ *
+ * `styleGuards` and `nonLocalPaths` are derived from the *live* Figma read, so before Phase 5 they
+ * had no way to survive a panel reopen: `emitImport` sent two empty collections and the plan built
+ * from them refused nothing, because an unpopulated guard map answers every lookup with
+ * `undefined`. Caching them alongside the tree they belong to keeps Apply usable on reopen without
+ * forcing a rescan; `null` means the cache predates them, and Apply refuses until a scan runs.
+ */
+let cachedGuards: Array<[string, Refusal]> | null = null;
+let cachedNonLocal: string[] | null = null;
+
+/**
  * Guards against a subtype edit landing against a stale snapshot mid-scan, and against an
  * older scan overwriting a newer one if two are ever in flight.
  */
@@ -224,10 +238,14 @@ async function persistImportCache(result: ImportResult): Promise<void> {
       await figma.clientStorage.deleteAsync(IMPORT_CACHE_PREFIX + previous);
     }
     await figma.clientStorage.setAsync(importCacheKey(), {
-      version: 1,
+      version: 2,
       importedAt: lastScanAt,
       fileName: snapshot === null ? figma.root.name : snapshot.variables.fileName,
       result,
+      // Cached with the tree rather than in a third store, for the same reason the tree *is* the
+      // drift baseline: they describe the same scan and must never be restorable apart from it.
+      styleGuards: snapshot === null ? [] : Array.from(styleGuards(snapshot.styles).entries()),
+      nonLocalPaths: nonLocalPaths(),
     });
     await figma.clientStorage.setAsync(IMPORT_CACHE_OWNER_KEY, owner);
   } catch {
@@ -245,20 +263,37 @@ interface CachedImport {
   importedAt: string | null;
   fileName: string;
   result: ImportResult;
+  /** `null` for a v1 cache, written before the guards were part of it. Unknown, not empty. */
+  styleGuards: Array<[string, Refusal]> | null;
+  nonLocalPaths: string[] | null;
 }
 
 async function loadImportCache(): Promise<CachedImport | null> {
   try {
     const stored = await figma.clientStorage.getAsync(importCacheKey());
     if (stored === null || typeof stored !== "object") return null;
-    const record = stored as { version?: unknown; result?: unknown; importedAt?: unknown; fileName?: unknown };
-    if (record.version !== 1 || record.result === null || typeof record.result !== "object") return null;
+    const record = stored as {
+      version?: unknown;
+      result?: unknown;
+      importedAt?: unknown;
+      fileName?: unknown;
+      styleGuards?: unknown;
+      nonLocalPaths?: unknown;
+    };
+    // v1 is still readable — it just predates the guards, and losing a whole cached tree over a
+    // field the payload marks as unknown anyway would cost a rescan for no safety gained.
+    if (record.version !== 1 && record.version !== 2) return null;
+    if (record.result === null || typeof record.result !== "object") return null;
     const result = record.result as ImportResult;
     if (!Array.isArray(result.files) || result.manifest === undefined) return null;
     return {
       importedAt: typeof record.importedAt === "string" ? record.importedAt : null,
       fileName: typeof record.fileName === "string" ? record.fileName : figma.root.name,
       result,
+      styleGuards: Array.isArray(record.styleGuards)
+        ? (record.styleGuards as Array<[string, Refusal]>)
+        : null,
+      nonLocalPaths: Array.isArray(record.nonLocalPaths) ? (record.nonLocalPaths as string[]) : null,
     };
   } catch {
     return null;
@@ -282,6 +317,12 @@ function emitImport(fileName: string, refresh = false): void {
     json: stableStringify(file.content),
   }));
 
+  // Live where there is a snapshot, restored from the cache where there isn't, `null` where neither
+  // has them — never silently empty.
+  const guards =
+    snapshot === null ? cachedGuards : Array.from(styleGuards(snapshot.styles).entries());
+  const nonLocal = snapshot === null ? cachedNonLocal : nonLocalPaths();
+
   post({
     type: "import-result",
     payload: {
@@ -298,8 +339,11 @@ function emitImport(fileName: string, refresh = false): void {
       refresh,
       drift: drift.entries,
       driftKnown: baselineKnown,
-      styleGuards: snapshot === null ? [] : Array.from(styleGuards(snapshot.styles).entries()),
-      nonLocalPaths: nonLocalPaths(),
+      styleGuards: guards ?? [],
+      nonLocalPaths: nonLocal ?? [],
+      // Empty-because-clean and empty-because-unasked are different answers to "what would this
+      // write overwrite?", and only one of them may enable Apply — §8's rule, applied a second time.
+      guardsKnown: guards !== null && nonLocal !== null,
     } satisfies ImportPayload,
   });
   pendingMerge = undefined;
@@ -488,6 +532,18 @@ async function handleRevert(targets: OverlayTarget[], op: OverlayOp | undefined)
   await commitOverlay(next, resolvedFlag);
 }
 
+/**
+ * Drops exactly the named entries — the durable half of the Changes list's *Undo all*.
+ *
+ * Never `emptyOverlay()`. That button lives on a tab that filters conflicts out, so clearing the
+ * whole store would silently discard resolutions the user was never shown under it. The UI sends
+ * the list it rendered, and this drops that list and nothing else.
+ */
+async function handleRevertEntries(refs: EntryRef[]): Promise<void> {
+  const resolvedFlag = refs.some((ref) => carriesFlag(ref.target, ref.op));
+  await commitOverlay(dropEntries(overlay, refs), resolvedFlag);
+}
+
 // ---------------------------------------------------------------------------
 // Writing to Figma — ADR-0005 §5, §6
 // ---------------------------------------------------------------------------
@@ -556,6 +612,23 @@ async function handleDeleteInFigma(
   await handleApply(writes, true);
 }
 
+/**
+ * What `[ Show them ]` actually managed, said in one line.
+ *
+ * Figma's selection is per-page, so consumers spread across pages cannot all be selected at once.
+ * The count on the delete screen ("Used by 14 layers") counts every page, and a toast reading
+ * "Selected 9 layers" against it would look like five layers had quietly gone missing — so the
+ * remainder is named rather than dropped.
+ */
+function describeSelection(result: { selected: number; found: number; pages: number }): string {
+  if (result.found === 0) return "Those layers aren't reachable any more.";
+  const selected = `Selected ${result.selected} layer${result.selected === 1 ? "" : "s"}`;
+  if (result.pages <= 1) return `${selected}.`;
+  const elsewhere = result.found - result.selected;
+  const others = result.pages - 1;
+  return `${selected} on this page. ${elsewhere} more ${elsewhere === 1 ? "is" : "are"} on ${others} other page${others === 1 ? "" : "s"} — Figma can only select one page at a time.`;
+}
+
 function handleCopyTree(): void {
   if (!importResult) {
     post({ type: "tree-json", json: "", files: 0 });
@@ -598,6 +671,8 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
         // what lets the first scan of a session say what changed while the panel was closed.
         baseline = flattenImport(treeIndex(cached.result.files), cached.result.manifest);
         baselineKnown = true;
+        cachedGuards = cached.styleGuards;
+        cachedNonLocal = cached.nonLocalPaths;
         emitImport(cached.fileName);
       } else if (overlay.entries.length > 0) {
         post({ type: "overlay-state", overlay });
@@ -620,11 +695,8 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
       await handleRevert(message.targets, message.op);
       return;
     }
-    if (message.type === "revert-all") {
-      const resolvedFlag = overlay.entries.some(
-        (entry) => entry.conflict !== undefined || entry.orphaned === true
-      );
-      await commitOverlay(emptyOverlay(), resolvedFlag);
+    if (message.type === "revert-entries") {
+      await handleRevertEntries(message.entries);
       return;
     }
     if (message.type === "keep-mine") {
@@ -649,10 +721,7 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
       return;
     }
     if (message.type === "select-nodes") {
-      const selected = await selectNodes(message.nodeIds);
-      figma.notify(
-        selected === 0 ? "Those layers aren't reachable any more." : `Selected ${selected} layer${selected === 1 ? "" : "s"}.`
-      );
+      figma.notify(describeSelection(await selectNodes(message.nodeIds)));
       return;
     }
     if (message.type === "copy-scan") {

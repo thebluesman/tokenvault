@@ -24,7 +24,7 @@
 import type { ReportEntry, TokenValue } from "./types";
 import type { FlatToken } from "./view";
 import { tokenKey, valuesEqual } from "./overlay";
-import { stableStringify } from "./serialize";
+import { describeValue } from "./format";
 
 export type DriftKind = "drift-value" | "drift-added" | "drift-removed";
 
@@ -185,9 +185,7 @@ function toReportEntry(entry: DriftEntry): ReportEntry {
   };
 }
 
+/** Prose, so an absent value reads as "it was unset" rather than as a dash mid-sentence. */
 function describe(value: TokenValue | undefined): string {
-  if (value === undefined) return "unset";
-  if (value === "") return "empty";
-  if (typeof value === "object") return stableStringify(value).trim().replace(/\s+/g, " ");
-  return String(value);
+  return describeValue(value, { unset: "unset" });
 }

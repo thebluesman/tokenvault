@@ -12,7 +12,7 @@
 
 import type { ImportPayload, MergeSummary, UiToPluginMessage } from "../messages";
 import type { ReportEntry, Token, TokenGroup, TokenType, TokenValue } from "../tokens/types";
-import type { EditOverlay, OverlayEntry, OverlayOp, OverlayTarget } from "../tokens/overlay";
+import type { EditOverlay, EntryRef, OverlayEntry, OverlayOp, OverlayTarget } from "../tokens/overlay";
 import type { FlatToken, PathRow, SetInfo, TreeNode } from "../tokens/view";
 import type { InboundIndex, Referrer } from "../tokens/references";
 import type { DriftEntry } from "../tokens/drift";
@@ -20,6 +20,7 @@ import type { Refusal } from "../tokens/toFigma";
 import type { ApplyPlan, PlanScope } from "../tokens/plan";
 import {
   applyOverlay,
+  dropEntries,
   dropEntry,
   emptyOverlay,
   indexOverlay,
@@ -118,6 +119,14 @@ export interface EditorModel {
   imported: FlatToken[];
   styleGuards: Map<string, Refusal>;
   nonLocalPaths: Set<string>;
+  /**
+   * Whether the two guards above were actually established.
+   *
+   * `false` on a tree restored from a cache written before the guards were part of it. Both are
+   * empty *and* meaningless then, and every apply path has to refuse rather than read the emptiness
+   * as an all-clear — see `openApplyDialog`, which is the single funnel that enforces it.
+   */
+  guardsKnown: boolean;
 }
 
 let payload: ImportPayload | null = null;
@@ -158,6 +167,7 @@ function blankModel(): EditorModel {
     imported: [],
     styleGuards: new Map(),
     nonLocalPaths: new Set(),
+    guardsKnown: false,
   };
 }
 
@@ -329,6 +339,7 @@ function rebuild(storageError?: string): void {
     imported: pristine,
     styleGuards: new Map(payload.styleGuards),
     nonLocalPaths: new Set(payload.nonLocalPaths),
+    guardsKnown: payload.guardsKnown,
   };
   notify();
 }
@@ -352,6 +363,7 @@ export function planFor(scope: PlanScope = {}): ApplyPlan {
       overlay: model.overlay,
       styleGuards: model.styleGuards,
       nonLocalPaths: model.nonLocalPaths,
+      guardsKnown: model.guardsKnown,
     },
     scope
   );
@@ -408,6 +420,7 @@ export function planRestoreDrift(keys: string[]): ApplyPlan {
       overlay: { version: 1, entries },
       styleGuards: model.styleGuards,
       nonLocalPaths: model.nonLocalPaths,
+      guardsKnown: model.guardsKnown,
     },
     { keys: wanted }
   );
@@ -658,9 +671,18 @@ export function revert(targets: OverlayTarget[], op?: OverlayOp): void {
   rebuild();
 }
 
-export function revertAll(): void {
-  overlay = emptyOverlay();
-  send({ type: "revert-all" });
+/**
+ * Drops exactly the entries handed to it — never the whole overlay.
+ *
+ * The Changes list's *Undo all* is scoped to the tab it sits on, which shows non-conflicted local
+ * edits only. Clearing the store outright would take the conflicts with it: entries that tab never
+ * rendered, whose resolution the user is being asked to make one at a time in a different tab.
+ * A bulk action's scope is what is on screen under it.
+ */
+export function revertEntries(refs: EntryRef[]): void {
+  if (refs.length === 0) return;
+  overlay = dropEntries(overlay, refs);
+  send({ type: "revert-entries", entries: refs });
   rebuild();
 }
 

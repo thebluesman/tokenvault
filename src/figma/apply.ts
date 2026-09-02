@@ -373,17 +373,23 @@ function walkForVariables(variableIds: Map<string, string>, counts: Map<string, 
       | Record<string, unknown>
       | undefined;
     if (bound !== undefined) {
+      // Every target this node binds, deduplicated **across fields** before anything is counted.
+      // One layer counts once per target however many of its fields bind it — the sentence is
+      // "used by 14 layers", not "used 19 times" — and a node binding the same Variable through
+      // both `fills` and `strokes` is exactly one layer that would lose exactly one binding.
+      // Collecting first rather than breaking out of the inner loop also keeps a *single* field
+      // that binds two different doomed Variables counting for both of them.
+      const hit = new Set<string>();
       for (const field of Object.keys(bound)) {
         for (const id of aliasIds(bound[field])) {
           const key = variableIds.get(id);
-          if (key === undefined) continue;
-          const entry = counts.get(key) as ConsumerCount;
-          entry.layers += 1;
-          if (entry.nodeIds.length < MAX_SHOWN) entry.nodeIds.push(node.id);
-          // One layer counts once per target however many of its fields bind it: the sentence is
-          // "used by 14 layers", not "used 19 times".
-          break;
+          if (key !== undefined) hit.add(key);
         }
+      }
+      for (const key of hit) {
+        const entry = counts.get(key) as ConsumerCount;
+        entry.layers += 1;
+        if (entry.nodeIds.length < MAX_SHOWN) entry.nodeIds.push(node.id);
       }
     }
     const children = (node as ChildrenMixin).children;
@@ -407,8 +413,26 @@ function aliasIds(value: unknown): string[] {
   return alias.type === "VARIABLE_ALIAS" && typeof alias.id === "string" ? [alias.id] : [];
 }
 
-/** The confirmation's `[ Show them ]` — the honest inverse of a selection-driven flow (UX §5.5). */
-export async function selectNodes(nodeIds: string[]): Promise<number> {
+/** What `[ Show them ]` managed to put on screen, so the caller can say so honestly. */
+export interface SelectionResult {
+  /** Nodes actually selected — those on the page we navigated to. */
+  selected: number;
+  /** Nodes still reachable in the file at all. */
+  found: number;
+  /** How many distinct pages those nodes are spread across. */
+  pages: number;
+}
+
+/**
+ * The confirmation's `[ Show them ]` — the honest inverse of a selection-driven flow (UX §5.5).
+ *
+ * **Figma's selection is per-page and there is no multi-page selection API**, so a set of consumers
+ * spread across pages cannot all be shown at once. The choice is which page to land on and what to
+ * say about the rest; silently selecting one page's worth under a heading that counted every page
+ * is the one option that isn't available, because it contradicts the number the user just read.
+ * So this reports what it managed and the caller says the remainder out loud.
+ */
+export async function selectNodes(nodeIds: string[]): Promise<SelectionResult> {
   const nodes: SceneNode[] = [];
   for (const id of nodeIds) {
     const node = await figma.getNodeByIdAsync(id);
@@ -416,15 +440,35 @@ export async function selectNodes(nodeIds: string[]): Promise<number> {
       nodes.push(node as SceneNode);
     }
   }
-  if (nodes.length === 0) return 0;
+  if (nodes.length === 0) return { selected: 0, found: 0, pages: 0 };
+
+  // Land on the page holding the most of them, rather than on whichever happened to be walked
+  // first: it is the page where the largest part of the count is visible in one go.
+  const byPage = new Map<PageNode, SceneNode[]>();
+  for (const node of nodes) {
+    const page = pageOf(node);
+    if (page === null) continue;
+    const list = byPage.get(page);
+    if (list === undefined) byPage.set(page, [node]);
+    else list.push(node);
+  }
+  if (byPage.size === 0) return { selected: 0, found: nodes.length, pages: 0 };
+
+  let best: PageNode | null = null;
+  let bestNodes: SceneNode[] = [];
+  for (const [page, list] of byPage) {
+    if (list.length > bestNodes.length) {
+      best = page;
+      bestNodes = list;
+    }
+  }
+
   // Selection is page-scoped, so the page has to move with it or the user gets an empty canvas and
   // a selection count they cannot see.
-  const page = pageOf(nodes[0]);
-  if (page !== null && page !== figma.currentPage) await figma.setCurrentPageAsync(page);
-  const onPage = nodes.filter((node) => pageOf(node) === figma.currentPage);
-  figma.currentPage.selection = onPage;
-  figma.viewport.scrollAndZoomIntoView(onPage);
-  return onPage.length;
+  if (best !== null && best !== figma.currentPage) await figma.setCurrentPageAsync(best);
+  figma.currentPage.selection = bestNodes;
+  figma.viewport.scrollAndZoomIntoView(bestNodes);
+  return { selected: bestNodes.length, found: nodes.length, pages: byPage.size };
 }
 
 function pageOf(node: BaseNode): PageNode | null {

@@ -25,7 +25,7 @@ import type { Line } from "./state";
 import { buildDeletePlan } from "../tokens/plan";
 import { getModel, send } from "./state";
 import { button, el } from "./dom";
-import { stableStringify } from "../tokens/serialize";
+import { describeValue } from "../tokens/format";
 
 const panelEl = document.getElementById("panel") as HTMLElement;
 
@@ -316,10 +316,7 @@ function renderBlastRadius(body: HTMLElement): void {
   }
 }
 
+/** Untruncated: this is the last time the value is on screen before it stops existing. */
 function describe(value: unknown): string {
-  if (value === undefined) return "—";
-  if (typeof value === "object" && value !== null) {
-    return stableStringify(value as never).trim().replace(/\s+/g, " ");
-  }
-  return String(value);
+  return describeValue(value);
 }
