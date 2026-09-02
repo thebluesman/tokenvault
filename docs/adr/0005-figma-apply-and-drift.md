@@ -172,7 +172,11 @@ Four guards, all failing loud per entry rather than at runtime mid-apply:
 - **Unresolvable target** — the path names no variable in this file. Refused as `apply-skipped` / `alias-target-unknown`, reusing the report reason ADR-0002 Amendment 1 §G already defines for the import side.
 - **Type mismatch** — Figma requires an alias target's `resolvedType` to match. Checked before the write.
 - **Cycles** — a reference graph that closes on itself. Figma rejects a circular alias, but discovering that as a thrown error partway through a plan is the worst place to find out. The plan builder detects cycles up front and refuses the whole cycle, which is also the "circular reference detection with a clear error state" PRD §6.3 asks for, arriving early and for free.
-- **Non-local targets** — a variable from a published library cannot be aliased by local id. Refused, and folded into the same verification the last Open question already flags.
+- **Non-local targets** *(resolved 2026-09-02)* — a variable from a published team library is read-only to this file and cannot be aliased by local id. **Refused loudly, by an up-front check, never by attempting the write and catching what comes back.** A runtime error surfacing mid-plan is the failure mode this whole section exists to avoid: it lands after some entries have already been written, and it reaches the user as whatever string Figma chose rather than as a named skip reason. Reason: `apply-skipped` / `alias-target-non-local`.
+
+  The check is cheap, because locality is already known. `scan.ts` reads only `getLocalVariablesAsync`, so **every token in the tree is local by construction** — a non-local variable can never be an apply *target*, only an alias *target*. Those arrive through `aliasTargetNames`, which `scan.ts` populates by resolving ids that were **not** in the local set (`localIds`). That set is precisely the non-local ones. The snapshot should carry the distinction forward as a flag rather than making `plan.ts` re-derive it, at which point the guard is a boolean test.
+
+  Worth stating because it is not obvious: this is why apply never needs to ask whether its write target is writable. Import's local-only scan already guaranteed it.
 
 ### 12. Deliberately deferred
 
@@ -213,15 +217,15 @@ Named here so they are visibly out of scope rather than accidentally missing.
 
 ## Open questions (not decided here)
 
-*Four questions this ADR originally raised were resolved by Shyam on 2026-09-02 and moved into §5, §6, §10 and §11. What remains is unresolved.*
+Two remain, and both are **API facts to verify during implementation**, not decisions to make:
 
-- **Does `documentchange` (or any event) fire for Variables/Styles mutations?** An API fact, not a decision. If yes, §9 gets an event-driven check and a one-line amendment. `@frontend-engineer` to verify.
-- **Does a plugin's writes coalesce into one undo entry, and does that survive an apply followed by a rescan?** §6 leans on this for the escape hatch. Same verification, and it affects UI copy — do not promise ⌘Z until it is confirmed.
-- **Drift presentation.** Whether drift rides the existing `⚑ flagged` chip, gets its own filter, or gets its own tab — and how a `drift-value` row shows both sides. `@ux-designer`'s call; this ADR fixes only the entry kinds and when they are produced.
-- **The apply preview's surface.** Whether it is a modal, a tab, or the Phase 6 diff view arriving early. Product/UX — §6 fixes only that it is always shown, never that it is a dialog.
-- **The delete confirmation's copy and placement.** §5 fixes the register (destructive, separate, names what it removes); the wording and where the action lives are `@ux-designer`'s.
-- **Whether an applied alias should be shown differently in the preview.** Writing a pointer and writing a value are different kinds of change and a flat list may not say so. UX's call, and only worth answering once Phase 6 can actually produce one.
-- **Non-local Variables.** A file can reference variables from a published team library, which are read-only. Import already resolves their names for aliases (`scan.ts`); apply must refuse to write them, and it is worth confirming what the API does on the attempt — refuse loudly, do not discover it as a runtime error in front of a designer.
+- **Does `documentchange` (or any event) fire for Variables/Styles mutations?** If yes, §9 gets an event-driven check and a one-line amendment. `@frontend-engineer` to verify against the current typings.
+- **Do a plugin's writes coalesce into one undo entry, and does that survive an apply followed by a rescan?** §6 leans on this for the escape hatch, and UX has committed to Figma's native ⌘Z with no custom undo — so if it does *not* coalesce, that is a finding both this ADR and `docs/ux/apply-and-drift.md` need to hear about before the copy ships. Do not promise ⌘Z until confirmed.
+
+**Resolved since drafting** — recorded so the trail is visible rather than silently edited away:
+
+- *By Shyam, 2026-09-02*: confirmation always shown (§6), conflicts block apply (§10), deletion allowed behind its own destructive confirmation (§5), aliases applied as native Figma references (§11), non-local alias targets refused by an up-front check (§11).
+- *By `@ux-designer`, 2026-09-02, in `docs/ux/apply-and-drift.md`*: drift presentation (reuses the existing `⚑ flagged` chip pattern), the apply preview surface (modal), undo (Figma's native ⌘Z, no custom undo), a new green *in sync* state, delete-confirmation copy and placement, and alias display in the preview (unchanged from the existing pointer treatment). **This ADR does not restate or re-decide any of them** — it owns the entry kinds, when they are produced, and the refusal rules; the UX doc owns everything the user sees. If the two ever disagree, the UX doc wins on presentation and this one wins on semantics.
 
 ## References
 
@@ -229,6 +233,7 @@ Named here so they are visibly out of scope rather than accidentally missing.
 - ADR-0003 (`docs/adr/0003-styles-token-schema.md`) — §2 `styleId`/`styleKey` and `figma.fontStyle`, §3 per-kind value mapping and the lossy points apply must refuse at, §6 report additions, §7 module boundary
 - ADR-0004 (`docs/adr/0004-local-edit-persistence.md`) — §1 the two stores, §2 overlay entry shape, §4 the three-way merge and `edit-conflict`, §6 quota and eviction
 - PRD §6.2, §6.3 (aliasing and circular-reference detection, partly reached by §11), §6.5.2, §6.5.3, §8, §9 Phase 5: `docs/prd.md`
-- `docs/ux/local-editor.md` — §2 (creation deferred), §5.5 (conflict resolution)
+- `docs/ux/local-editor.md` — §2 (creation deferred), §5.3 (reference values read-only), §5.5 (conflict resolution)
+- `docs/ux/apply-and-drift.md` — `@ux-designer`, in progress. Owns the apply preview, drift presentation, the *in sync* state, and the delete confirmation. Note that its green *in sync* state is the zero-drift, zero-overlay case of §7 — this ADR produces the entries, not the state name.
 - Phase 2–4 implementation: `src/figma/scan.ts`, `src/figma/scanStyles.ts`, `src/tokens/build.ts`, `src/tokens/buildStyles.ts`, `src/tokens/styleValues.ts`, `src/tokens/overlay.ts`, `src/tokens/references.ts`, `src/code.ts`
 - `@figma/plugin-typings` — `Variable.setValueForMode`, `PaintStyle.paints`, `TextStyle`, `EffectStyle.effects`, `GridStyle.layoutGrids`, `figma.loadFontAsync`, `figma.variables.createVariable`, `setBoundVariable`, `documentchange`
