@@ -4,7 +4,11 @@ Tokenvault is a self-built Figma plugin that replaces Tokens Studio for Figma: d
 
 ## Current phase
 
-**Phase 2 (Variables import) landed 2026-09-01.** Figma Variables → DTCG token JSON import is built against ADR-0002 (Accepted, Revision 2), with the pure conversion layer under `src/tokens/`, the Figma API boundary in `src/figma/scan.ts`, and a scaffold-level scan/confirm-subtype/report UI. 97 unit tests, validated live in Figma desktop. Next up: Phase 3 (PRD §9, issue #3), Styles → token JSON import.
+**Phase 4 (Local editor) landed 2026-09-02.** In-plugin Tokens tab for browsing, editing, and deleting imported tokens — merged view across all sets keyed by dotted path (UX `docs/ux/local-editor.md`), per-type inline/overlay editing, delete blocked outright while a token has inbound references, undo, and edits persisted via a `clientStorage` overlay with three-way merge on rescan (ADR-0004, Proposed). Token creation and path rename are explicitly deferred (create: no downstream consumer until Phase 5/6; rename: needs Phase 7's reference-rewriting). 262 unit tests, validated live in Figma desktop. Next up: Phase 5 (PRD §9, provisional), Figma application (write tokens back to Variables/Styles) and drift detection.
+
+Phase 3 (Styles import) landed 2026-09-01. Figma Styles → token JSON import extends the schema for style-only types (typography, shadow/effect, grid) per ADR-0003 (Accepted) — paint, text, effect, and grid styles, with Variables-win cross-source collision precedence.
+
+Phase 2 (Variables import) landed 2026-09-01. Figma Variables → DTCG token JSON import is built against ADR-0002 (Accepted, Revision 2), with the pure conversion layer under `src/tokens/`, the Figma API boundary in `src/figma/scan.ts`.
 
 Phase 1 (scaffold) landed 2026-09-01 — see `README.md` for how to build and load the plugin locally.
 
