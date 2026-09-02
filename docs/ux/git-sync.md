@@ -700,12 +700,14 @@ Phase 6 introduces **no new colour, no new badge, and no new component**. That i
 | Element | Reused from |
 |---|---|
 | Chip's right half | Phase 5's header state slot — third occupant, as predicted |
-| `⚑ diverged`, `⚑` on the gear | Phase 4's `.badge.needs` amber. Divergence is *needs you*, the same as a conflict |
+| `⚑ diverged`, `⚑` on the gear, `⚑` on the Repo tab label | Phase 4's `.badge.needs` amber. Divergence is *needs you*, the same as a conflict |
 | `● In sync` green | Phase 5 §8's green, in its existing home — the chip. Its meaning strengthens; its placement doesn't move |
 | `.entry` amber block | Every error in §11 |
-| Commit modal container | Phase 5 §5.2's apply dialog — same card, same backdrop, same three ways out |
+| Repo tab | Phase 4's tab strip — third tab, same control, same count-badge treatment as Tokens |
+| Review & push, Diverged files, Compare | Phase 4's full-panel screen with a back arrow and a pinned footer — the same container as the Settings overlay, one level in |
 | Commit / diff / compare rows | Phase 5's `{ target, before, after, state }` row component, built for this |
-| Settings, Diverged files | Phase 4's full-panel overlay with a back arrow |
+| Bulk confirm strip (§10.4) | Phase 4's inline footer confirm, in the slot the bulk button occupies |
+| First connect modal | Phase 5 §5.2's apply dialog container — the phase's only modal, and the only single-decision surface in it |
 
 Two additions that are not colours:
 
