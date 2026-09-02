@@ -587,10 +587,12 @@ Four genuinely new pieces:
 
 | Colour | Means | Where it appears |
 |---|---|---|
-| **Grey** | Neutral information. Not a state. | Set codes, subtype tags, muted second lines, `already matches` rows |
-| **Green** | Agreed. Token and Figma match as of the last scan; nothing to do. | Below |
+| **Grey** | Neutral information. Not a state. | Set codes, subtype tags, muted second lines, the *text* of `already matches` rows |
+| **Green** | Agreed. Token and Figma match as of the last scan; nothing to do. | Three places, listed just below |
 | **Amber** (`.badge.needs`) | Needs you. Flagged, changed in Figma, conflict, orphaned. | Badges, `.entry` blocks, the header chip when counts are non-zero |
-| **Red** | This control destroys something. | `[ Delete Variable ]` and `Delete in Figma…` only (§8.1 above) |
+| **Red** | This control destroys something. | `[ Delete Variable ]` and `Delete in Figma…` only — item 1 above |
+
+Two of these are attention colours (amber, red) and two are not (grey, green), and the panel stays readable only as long as that split holds. If a future state wants green *and* wants to be noticed, it's amber.
 
 **Where the green goes** — three places, and the list is closed:
 
