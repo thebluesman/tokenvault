@@ -4,9 +4,11 @@ Tokenvault is a self-built Figma plugin that replaces Tokens Studio for Figma: d
 
 ## Current phase
 
-**Phase 4 (Local editor) landed 2026-09-02.** In-plugin Tokens tab for browsing, editing, and deleting imported tokens — merged view across all sets keyed by dotted path (UX `docs/ux/local-editor.md`), per-type inline/overlay editing, delete blocked outright while a token has inbound references, undo, and edits persisted via a `clientStorage` overlay with three-way merge on rescan (ADR-0004, Proposed). Token creation and path rename are explicitly deferred (create: no downstream consumer until Phase 5/6; rename: needs Phase 7's reference-rewriting). 262 unit tests, validated live in Figma desktop. Next up: Phase 5 (PRD §9, provisional), Figma application (write tokens back to Variables/Styles) and drift detection.
+**Phase 5 (Figma application) landed 2026-09-02.** Apply tokens back to Figma Variables/Styles and detect drift against the last scan, built against ADR-0005 and `docs/ux/apply-and-drift.md`. Apply writes only the edited overlay (not the full tree); conflicted targets are refused, never auto-resolved; deleting a Figma variable/style is its own separate, destructive-styled confirmation, never bundled into an apply; token-to-token references apply as native Figma variable aliases rather than flattening to resolved values (pulling alias-writing forward from Phase 7). No plugin-side undo for Figma writes — relies on Figma's native ⌘Z. 333 unit tests (71 new), validated live against a real Figma file. Next up: Phase 6 (PRD §9, provisional), Git sync (PAT-based) — push/pull token JSON to a GitHub repo with a diff view before commit.
 
-Phase 3 (Styles import) landed 2026-09-01. Figma Styles → token JSON import extends the schema for style-only types (typography, shadow/effect, grid) per ADR-0003 (Accepted) — paint, text, effect, and grid styles, with Variables-win cross-source collision precedence.
+**Phase 4 (Local editor) landed 2026-09-02.** In-plugin Tokens tab for browsing, editing, and deleting imported tokens — merged view across all sets keyed by dotted path (UX `docs/ux/local-editor.md`), per-type inline/overlay editing, delete blocked outright while a token has inbound references, undo, and edits persisted via a `clientStorage` overlay with three-way merge on rescan (ADR-0004). Token creation and path rename are explicitly deferred (create: no downstream consumer until Phase 5/6; rename: needs Phase 7's reference-rewriting). 262 unit tests, validated live in Figma desktop.
+
+Phase 3 (Styles import) landed 2026-09-01. Figma Styles → token JSON import extends the schema for style-only types (typography, shadow/effect, grid) per ADR-0003 — paint, text, effect, and grid styles, with Variables-win cross-source collision precedence.
 
 Phase 2 (Variables import) landed 2026-09-01. Figma Variables → DTCG token JSON import is built against ADR-0002 (Accepted, Revision 2), with the pure conversion layer under `src/tokens/`, the Figma API boundary in `src/figma/scan.ts`.
 
@@ -34,16 +36,16 @@ Tokenvault is built by Shyam via Claude Code. Single workstream — no sprint ca
 | Agent | Owns | When to invoke |
 |---|---|---|
 | `@tech-lead` | `docs/adr/`, `docs/architecture.md` (once authored) | Architecture decisions, ADR authoring — token schema, git sync design, export pipeline |
-| `@ux-designer` | `docs/ux/` (once it exists) | Plugin panel UX — token/theme browser, sync status, settings, diff view |
+| `@ux-designer` | `docs/ux/` | Plugin panel UX — token/theme browser, sync status, settings, diff view |
 | `@product-manager` | GitHub Issues backlog | Ticket creation, backlog grooming, reconciling issues against `docs/prd.md` |
-| `@frontend-engineer` | Plugin implementation — DORMANT until Phase 1 scaffold lands | Once there's a repo scaffold to build against |
+| `@frontend-engineer` | Plugin implementation | Active since Phase 1 scaffold landed 2026-09-01 |
 | `@historian` | `docs/journal/` | Auto-invoked by the Stop hook after canonical-doc edits |
 
 ## Key references
 
 - Product spec: `docs/prd.md`
 - ADRs: `docs/adr/`
-- Plugin UX flows: `docs/ux/` (once it exists)
+- Plugin UX flows: `docs/ux/`
 - Project journal: `docs/journal/` — owned by `@historian`
 - GitHub Issues conventions: `.claude/skills/github-issues/SKILL.md`
 
