@@ -4,6 +4,8 @@
 **Date**: 2026-09-02
 **Owner**: @tech-lead
 
+> Shyam resolved four of this ADR's open questions on 2026-09-02, before acceptance. They are folded into the decision sections below and marked *(resolved 2026-09-02)*: confirmation is always shown (§6), conflicts block apply (§10), deletion is its own destructive confirmation (§5), and aliases are applied as native Figma variable references (§11). The status stays Proposed — the ADR as a whole has not been accepted.
+
 ## Context
 
 Phase 5 (PRD §9 item 5) reverses the arrow that Phases 2–4 built: token values go back into Figma (§6.5.2), and Figma-side changes made outside the token workflow get flagged (§6.5.3).
@@ -15,7 +17,7 @@ Four facts from what already exists constrain the design.
 - **There is no token source independent of Figma until Phase 6.** Git sync has not landed. That has a sharp consequence for drift, dealt with in §5.
 - **The three-way merge already detects Figma-side movement.** ADR-0004 §4's `edit-conflict` — Figma moved away from an edit's `base` — is drift, discovered for the subset of tokens that carry an edit. Phase 5 does not need a new mechanism, it needs that one widened.
 
-Scope, per the phase brief: single file, non-aliased values, no themes and no math (Phase 7), no git (Phase 6).
+Scope, per the phase brief: single file, no themes and no math (Phase 7), no git (Phase 6). The brief also scoped out aliases; Shyam pulled alias *writing* back in on 2026-09-02, for the reasons in §11.
 
 ## Decision
 
@@ -45,8 +47,10 @@ Choosing between the two systems is a *creation* question, and creation is defer
 
 ```
 src/tokens/toFigma.ts    NEW — pure. Token ($type, $value, $extensions) → FigmaWriteOp | Refusal
-src/tokens/plan.ts       NEW — pure. Built tree + overlay → ApplyPlan (ops, skips with reasons)
+src/tokens/plan.ts       NEW — pure. Built tree + overlay → ApplyPlan (ops, skips with reasons);
+                               owns the path→variableId index and the cycle check (§11)
 src/tokens/drift.ts      NEW — pure. Fresh tree vs. baseline tree → DriftEntry[]
+src/tokens/references.ts reused — `isReference`, `referenceTarget`, `normalizePathKey` (§11)
 src/figma/apply.ts       NEW — the only module that calls a Figma write API
 ```
 
@@ -64,6 +68,7 @@ Write APIs, per kind (to be confirmed against `@figma/plugin-typings` at build t
 | Target | Call |
 |---|---|
 | Variable value | `variable.setValueForMode(modeId, value)` |
+| Variable alias | `variable.setValueForMode(modeId, { type: "VARIABLE_ALIAS", id })` (§11) |
 | Variable description | `variable.description = …` |
 | Paint style | `style.paints = [ … ]` |
 | Text style | `figma.loadFontAsync({ family, style })` **first**, then `style.fontName` / `fontSize` / `lineHeight` / `letterSpacing` / … |
@@ -81,18 +86,19 @@ Creating would also mean deciding a collection, a mode, a resolved type, a scope
 
 Landing zone, recorded so it is not re-derived: creation becomes genuinely necessary at Phase 6, when a pulled tree holds tokens this file lacks. It needs a collection-resolution rule (the manifest's `$figmaCollectionId` back-reference is the obvious candidate) and `figma.variables.createVariable(name, collection, resolvedType)`. It is its own decision and probably its own ADR.
 
-### 5. Delete is applied, but only for a target with no inbound references, and never in bulk
+### 5. Delete is applied, but only for a target with no inbound references, and never inside a normal apply *(resolved 2026-09-02)*
 
-An overlay `delete` tombstone means "this token should not exist". Applying it calls `variable.remove()`, which is the one genuinely destructive thing this phase does.
+An overlay `delete` tombstone means "this token should not exist". Applying it calls `variable.remove()` or `style.remove()`, which is the one genuinely destructive thing this phase does. Shyam's call: allowed, but never bundled.
 
-Two guards, the first of which the codebase already implements:
+Three guards, the first of which the codebase already implements:
 
 - **Refused when the target has inbound references.** Phase 4 already blocks deleting a token that other tokens alias (`src/tokens/references.ts`); apply reuses that check rather than re-deriving it. Removing an alias target cascades into every referrer, which is the same blast-radius argument ADR-0002 Amendment 1 §F used to pick collision winners.
-- **Deletes are a separately confirmed group in the apply preview.** They are never carried along by an "apply all" over value edits. Whether that is a second button, a checkbox, or a second screen is `@ux-designer`'s call; that it is a distinct confirmation is this ADR's.
+- **Deletion is its own action, not a group inside the apply preview.** A normal apply — value and description edits — can never remove anything from the file, whatever is sitting in the overlay. Pending tombstones are surfaced, but reaching them takes a separate, explicitly chosen step with its own confirmation.
+- **The UI treats it as destructive.** `@ux-designer` owns the surface, but not the register: this action gets destructive treatment — a distinct confirmation naming what will be removed and how many, and visual weight that does not read like the adjacent apply button. It must not be reachable by muscle memory from the apply flow. What the copy says is UX's; that it warns is this ADR's.
 
 ### 6. Apply is previewed, per-entry, not transactional, and ends in a rescan
 
-- **Preview first, always.** The plan is rendered before anything is written — the same shape and, ideally, the same component as Phase 6's diff view. Nothing writes to a designer's file without the write being shown first.
+- **Preview first, always — including a single-token apply, and with no way to turn it off** *(resolved 2026-09-02)*. The plan is rendered before anything is written, and confirmed, every time. There is no "don't ask again", no remembered preference, and no small-change fast path. The reasoning is that the cost is one click on the cheap end and an unreviewed write to a shared design file on the expensive end, and a suppression toggle is only ever exercised by the user who has stopped reading. A one-entry preview is also cheap to render, so the exception would buy nothing but the inconsistency. Same shape and, ideally, the same component as Phase 6's diff view.
 - **No rollback.** Figma plugin writes are not transactional. A rollback pass can itself fail halfway and leave the file in a state neither side predicted. Instead: entries are applied in a defined order, each succeeds or fails independently, and the result is an apply report naming every failure. Figma coalesces a plugin run's edits into a single undo entry, so ⌘Z remains the user's escape hatch — **verify this against the current plugin API before relying on it in the UI copy.**
 - **A successful apply is followed by a rescan.** This is not housekeeping; it is what retires the overlay. ADR-0004 §4's merge table already says *"Value equals the entry's `value` → Figma caught up to the edit. Retire the entry silently."* An applied edit is exactly that case, so applied entries retire through existing code with no new retirement logic and no new state. An entry that fails to apply does not match, stays in the overlay, and stays visible.
 
@@ -133,7 +139,7 @@ No background polling and no timer. Detecting drift requires a full `getLocalVar
 
 There is no reliable push signal to use instead: Figma's `documentchange` event reports node-level changes, and whether it fires for Variables and Styles mutations is **not something this ADR asserts** — `@frontend-engineer` should verify against the current typings, and if a reliable event does exist, an event-driven check is a strictly better §9 and worth a one-line amendment.
 
-### 10. Apply refuses to write a target that is in conflict
+### 10. Apply refuses to write a target that is in conflict *(resolved 2026-09-02)*
 
 If a target carries both a local edit and Figma-side drift — ADR-0004's `edit-conflict` — apply **skips it** (`apply-conflicted`) until the conflict is resolved one way or the other.
 
@@ -141,15 +147,40 @@ Writing anyway would silently destroy a change a designer made in Figma, using a
 
 Resolution is already built: ADR-0004 §4's per-token keep-mine / take-Figma's. Resolving with keep-mine leaves an ordinary entry that applies normally on the next run.
 
-**This is the main thing to push back on if it feels too strict** — see Open questions.
+Shyam confirmed this on 2026-09-02, with the strictness understood and intended.
 
-### 11. Deliberately deferred
+### 11. Aliases apply as native Figma variable references, never as flattened values *(resolved 2026-09-02)*
+
+Shyam's call: a token whose value points at another token — `button.background` → `{color.blue.500}` — must land in Figma as a real Variable-to-Variable reference. This reverses the deferral this ADR originally proposed, and it is the right reversal. Flattening a pointer to a resolved hex destroys the semantic layer the whole tool exists to manage, which is the same objection ADR-0002 §2 and ADR-0003 §3 already sustained on the import side. Apply should not be the one direction where that rule lapses.
+
+**The write is one line.** Figma models aliases natively: `variable.setValueForMode(modeId, { type: "VARIABLE_ALIAS", id: targetVariableId })`. There is no synthesis, no encoding, no shape to invent.
+
+**The work is the resolver**, and it is small. `toFigma` needs `{dotted.path}` → `variableId`, which is an index built from the tokens already in hand — every token carries its path and its `figma.variableId`, so the index is a fold over the built tree. `src/tokens/references.ts` already supplies `isReference`, `referenceTarget`, and the case-normalised path matching (`normalizePathKey`) this needs; the only new code is the map and a lookup branch in the writer.
+
+Three properties make this cheaper than it looks, and they are worth writing down because each one is a place a reader would reasonably expect a problem:
+
+- **Multi-hop chains cost nothing.** If `a → b → c`, apply writes `a` as an alias to `b`'s id and `b` as an alias to `c`'s id, each independently. Figma resolves the chain at render time. Chain depth never enters the plugin's model, so there is no traversal to write and no depth limit to pick. **Single-level pointers and arbitrary-depth chains are the same implementation** — scoping to "single-level only" would not save any work, so it is not proposed.
+- **The index is unambiguous by construction.** A path could in principle resolve to two variables, but that is precisely a `cross-set` or `token-group` collision, and ADR-0002 §5 already detects those and writes only the winner. The collision pass therefore guarantees the resolver's key uniqueness; no new disambiguation rule is needed.
+- **Nothing in Phase 5 can currently author an alias.** Phase 4's editor refuses to edit a reference value at all (`isReadOnlyValue`, UX §5.3), so no overlay entry holds one. Under §1's overlay-scoped apply, an aliased token is never written, which means **pointer relationships are already preserved today — by not being touched.**
+
+That last point is the honest scoping answer, and it is the one thing worth Shyam's attention rather than mine. Building the resolver in Phase 5 is not what makes aliases *editable*; that needs the Phase 4 editor to learn reference authoring, which is Phase 7 UI work and is **not** pulled forward here. What the resolver does buy is that the moment something can produce an aliased write — Phase 6 pulling a git tree that contains one — the flattening failure mode is closed off permanently, rather than discovered as data loss in a designer's file. It is cheap insurance bought at the point where it is cheap.
+
+So: build the resolver and the write branch now; leave alias *authoring* to Phase 7.
+
+Four guards, all failing loud per entry rather than at runtime mid-apply:
+
+- **Unresolvable target** — the path names no variable in this file. Refused as `apply-skipped` / `alias-target-unknown`, reusing the report reason ADR-0002 Amendment 1 §G already defines for the import side.
+- **Type mismatch** — Figma requires an alias target's `resolvedType` to match. Checked before the write.
+- **Cycles** — a reference graph that closes on itself. Figma rejects a circular alias, but discovering that as a thrown error partway through a plan is the worst place to find out. The plan builder detects cycles up front and refuses the whole cycle, which is also the "circular reference detection with a clear error state" PRD §6.3 asks for, arriving early and for free.
+- **Non-local targets** — a variable from a published library cannot be aliased by local id. Refused, and folded into the same verification the last Open question already flags.
+
+### 12. Deliberately deferred
 
 Named here so they are visibly out of scope rather than accidentally missing.
 
 - **Bulk-apply to selected layers** (PRD §6.5.2, second bullet). Deferred to a follow-up ticket. It is a *binding* operation, not a value operation — `node.setBoundVariable(field, variable)`, `figma.variables.setBoundVariableForPaint(...)` for fills and strokes, and `node.setFillStyleIdAsync` / `setTextStyleIdAsync` / `setEffectStyleIdAsync` on the Styles side. What blocks it is not the API but the mapping: deciding that `space.4` binds to `itemSpacing` rather than `paddingLeft` needs subtype tagging that is still `subtypeSource: "default"` for most numbers (ADR-0002 §3), and a selection-scoped UI that is `@ux-designer`'s to design. Shipping it half-mapped would bind the wrong field to the right token, which is worse than not shipping it.
-- **Aliased values.** A token whose `$value` is `{a.b.c}` is refused (`apply-skipped` / `alias-value`). Writing one means resolving a dotted path to a `variableId` and calling `setValueForMode` with a `VARIABLE_ALIAS`, which is Phase 7's resolution semantics. Phase 4's editor cannot currently author an alias, so this is a defensive guard, not a common path.
-- **Math expressions.** Phase 7.
+- **Authoring an alias in the editor.** §11 makes apply able to *write* a reference; nothing in Phase 5 lets a user *create* one. The editor still refuses to edit a reference value (UX §5.3), so the only producer of an aliased write is a Phase 6 pull. Reference authoring stays Phase 7.
+- **Math expressions.** Phase 7. `{a} * 2` is not a reference (`references.ts` anchors the pattern deliberately) and has no Figma representation to write into.
 - **Themes and modes as an apply target.** Apply writes the mode the token came from. Applying one token across modes, or switching a theme on the canvas (PRD §6.2), is Phase 7.
 - **EASING / TIMING variables.** Still not imported (ADR-0002 Amendment 1 §A), so there is nothing to apply.
 - **Creating Variables or Styles** — §4.
@@ -161,7 +192,8 @@ Named here so they are visibly out of scope rather than accidentally missing.
 - Applied entries retire through ADR-0004's existing merge table. Phase 5 adds no new lifecycle state to the overlay, which is the main reason the overlay's cost in Phase 4 was worth paying.
 - The apply plan and Phase 6's commit diff are the same shape, so the preview surface is built once. Phase 6 swaps the plan producer and the drift baseline; the executor and the comparator are unchanged.
 - Drift in Phase 5 is scan-to-scan, and depends on an evictable cache. Users on a second device, or after clearing storage, get "unknown" rather than a false all-clear. Acceptable, and it stops being a limitation at Phase 6.
-- Deletion reaches the designer's file. This is the first Tokenvault operation that can destroy something a person made, and it is why §5 has two guards and its own confirmation.
+- Deletion reaches the designer's file. This is the first Tokenvault operation that can destroy something a person made, and it is why §5 puts it behind three guards and outside the apply flow entirely.
+- Alias resolution (§11) lands earlier than planned, and brings PRD §6.3's circular-reference detection with it as a side effect. The alias *authoring* UI is not pulled forward with it, so Phase 5 ships a write path that only Phase 6 can exercise — deliberate, and cheap enough to be worth it.
 - No infra implication. Figma APIs and files in a git repo; PRD §8's zero-recurring-cost constraint is untouched.
 
 ## Alternatives considered
@@ -172,18 +204,23 @@ Named here so they are visibly out of scope rather than accidentally missing.
 - **A dedicated `last-applied` store as the drift baseline.** Rejected. Apply is followed by a rescan, which refreshes the import cache to include everything just written — so a separate applied-value store would always hold a copy of what the cache already says. One baseline, one store, and ADR-0004 §6's quota story stays intact.
 - **Poll for drift on a timer, or on every canvas change.** Rejected. Detection costs a full scan and build; running it when the user has not asked is the plugin's most expensive operation on a loop. On-scan plus on-demand covers the actual moments the answer matters.
 - **Treat drift as a third source in the merge, alongside imported and edited.** Rejected — it is the imported side moving, not a new party. Modelling it as a third source would mean a three-way merge with four inputs and, worse, a second code path that can disagree with `mergeOverlay` about what "changed" means.
-- **Let apply overwrite a conflicted target (local edit wins, as in the tree).** Rejected as the default, kept as the open question. Local-wins is non-destructive when it decides a local view and destructive when it decides a write to a shared file.
+- **Let apply overwrite a conflicted target (local edit wins, as in the tree).** Rejected, and confirmed rejected by Shyam on 2026-09-02. Local-wins is non-destructive when it decides a local view and destructive when it decides a write to a shared file.
+- **Skip the preview for a single-entry apply, or offer a "don't ask again".** Rejected (§6). The saving is one click; the exposure is an unreviewed write to a file other people work in, taken by the user least likely to be paying attention.
+- **Flatten aliases to their resolved value on apply.** Rejected (§11). It destroys the semantic layer on the one leg of the round trip where import already refuses to, and the resolved value is derived data that Figma can compute itself.
+- **Scope alias apply to single-level pointers only, deferring chains.** Rejected as a false economy. Each token's write is independent and Figma resolves chains natively, so depth never enters the implementation — a single-level restriction would be extra code enforcing a limit that costs nothing to lift.
 - **Roll back a partially failed apply.** Rejected. A rollback pass has the same failure modes as the apply pass, and a failed rollback leaves a state neither side modelled. A precise per-entry report plus ⌘Z is more honest.
 - **Skip deletion entirely in Phase 5.** Tempting — it is the only destructive operation here. Rejected because a tombstone that can never be applied makes Phase 4's delete a permanently local fiction, and the user would find that out at Phase 6 instead. The guards in §5 are the cheaper answer.
 
 ## Open questions (not decided here)
 
-- **Is §10 too strict?** Refusing to apply a conflicted target means a designer's Figma tweak blocks the user's edit until they look at it. The looser option is local-wins-with-a-warning, matching the tree. Shyam's call — it is a judgement about whose change is more likely to be right in this file, and I do not have that evidence.
-- **Should applying a delete be possible at all from the plugin?** §5 says yes with guards. If the answer is "never remove a Variable from a designer's file", the tombstone becomes a Phase-6-only concept (delete the token in git, let a human delete the Variable) and §5 shrinks to nothing. Also Shyam's call, and worth deciding before it is built rather than after.
+*Four questions this ADR originally raised were resolved by Shyam on 2026-09-02 and moved into §5, §6, §10 and §11. What remains is unresolved.*
+
 - **Does `documentchange` (or any event) fire for Variables/Styles mutations?** An API fact, not a decision. If yes, §9 gets an event-driven check and a one-line amendment. `@frontend-engineer` to verify.
 - **Does a plugin's writes coalesce into one undo entry, and does that survive an apply followed by a rescan?** §6 leans on this for the escape hatch. Same verification, and it affects UI copy — do not promise ⌘Z until it is confirmed.
 - **Drift presentation.** Whether drift rides the existing `⚑ flagged` chip, gets its own filter, or gets its own tab — and how a `drift-value` row shows both sides. `@ux-designer`'s call; this ADR fixes only the entry kinds and when they are produced.
-- **The apply preview's surface.** Whether it is a modal, a tab, or the Phase 6 diff view arriving early. Product/UX.
+- **The apply preview's surface.** Whether it is a modal, a tab, or the Phase 6 diff view arriving early. Product/UX — §6 fixes only that it is always shown, never that it is a dialog.
+- **The delete confirmation's copy and placement.** §5 fixes the register (destructive, separate, names what it removes); the wording and where the action lives are `@ux-designer`'s.
+- **Whether an applied alias should be shown differently in the preview.** Writing a pointer and writing a value are different kinds of change and a flat list may not say so. UX's call, and only worth answering once Phase 6 can actually produce one.
 - **Non-local Variables.** A file can reference variables from a published team library, which are read-only. Import already resolves their names for aliases (`scan.ts`); apply must refuse to write them, and it is worth confirming what the API does on the attempt — refuse loudly, do not discover it as a runtime error in front of a designer.
 
 ## References
@@ -191,7 +228,7 @@ Named here so they are visibly out of scope rather than accidentally missing.
 - ADR-0002 (`docs/adr/0002-variables-token-schema.md`) — §3 `$type`/extensions and `figma.variableId` as the drift key, §7 determinism, Amendment 1 §A (EASING/TIMING), §F (blast-radius reasoning), §H (float32)
 - ADR-0003 (`docs/adr/0003-styles-token-schema.md`) — §2 `styleId`/`styleKey` and `figma.fontStyle`, §3 per-kind value mapping and the lossy points apply must refuse at, §6 report additions, §7 module boundary
 - ADR-0004 (`docs/adr/0004-local-edit-persistence.md`) — §1 the two stores, §2 overlay entry shape, §4 the three-way merge and `edit-conflict`, §6 quota and eviction
-- PRD §6.2, §6.5.2, §6.5.3, §8, §9 Phase 5: `docs/prd.md`
+- PRD §6.2, §6.3 (aliasing and circular-reference detection, partly reached by §11), §6.5.2, §6.5.3, §8, §9 Phase 5: `docs/prd.md`
 - `docs/ux/local-editor.md` — §2 (creation deferred), §5.5 (conflict resolution)
 - Phase 2–4 implementation: `src/figma/scan.ts`, `src/figma/scanStyles.ts`, `src/tokens/build.ts`, `src/tokens/buildStyles.ts`, `src/tokens/styleValues.ts`, `src/tokens/overlay.ts`, `src/tokens/references.ts`, `src/code.ts`
 - `@figma/plugin-typings` — `Variable.setValueForMode`, `PaintStyle.paints`, `TextStyle`, `EffectStyle.effects`, `GridStyle.layoutGrids`, `figma.loadFontAsync`, `figma.variables.createVariable`, `setBoundVariable`, `documentchange`
