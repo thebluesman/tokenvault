@@ -15,7 +15,7 @@ import type { TokenType } from "../tokens/types";
 import type { Line, Row } from "./state";
 import {
   deleteBlockers,
-  deleteLines,
+  editBlockedReason,
   editValue,
   filters,
   getModel,
@@ -32,7 +32,7 @@ import { previewOf } from "../tokens/preview";
 import { parseHexColor, parseNumberValue, parseStringValue } from "../tokens/edit";
 import { normalizePathKey } from "../tokens/paths";
 import { button, clear, closePopover, copy, el, highlight, popover, toast } from "./dom";
-import { closeDetail, deleteButton, openDetail, showBlockedPanel } from "./detail";
+import { closeDetail, deleteButton, openDetail, runDelete } from "./detail";
 
 const GLYPHS: Record<TokenType, string> = {
   color: "■",
@@ -536,18 +536,9 @@ function groupMenu(group: GroupNode, close: () => void): HTMLElement {
       : `Delete ${group.name} and its ${rows.length} token${rows.length === 1 ? "" : "s"}`;
   del.addEventListener("click", () => {
     close();
-    if (block.count > 0) {
-      showBlockedPanel(paths, block.referrers);
-      return;
-    }
-    const targets = lines
-      .map((line) => line.target)
-      .filter((target): target is OverlayTarget => target !== null);
-    deleteLines(lines);
-    toast(`Deleted ${group.name} — ${rows.length} tokens`, {
-      label: "Undo",
-      run: () => revert(targets, "delete"),
-    });
+    // The label's count is from when the menu opened; `runDelete` re-checks at the moment of the
+    // write, which is the check that decides (§7).
+    runDelete(lines, paths, `${group.name} — ${rows.length} tokens`);
   });
   wrap.appendChild(del);
   return wrap;
@@ -638,16 +629,21 @@ function appendValue(container: HTMLElement, line: Line, row: Row): void {
     container.appendChild(el("span", "swatch outlined"));
   }
 
-  const readOnly = preview.reference !== undefined || isComposite(line);
+  // A token with no overlay target has nothing to key an edit on (ADR-0004 §2), so it reads as
+  // read-only here and says why when clicked — the alternative is an input that accepts a value
+  // and silently reverts it.
+  const blocked = editBlockedReason(line);
+  const readOnly = blocked !== null || preview.reference !== undefined || isComposite(line);
   const value = el(
     "span",
     `val${readOnly ? " readonly" : ""}${line.edited ? " edited" : ""}`,
     preview.text
   );
-  value.title = readOnly ? preview.text : `${preview.text} — click to edit`;
+  value.title = blocked !== null ? blocked : readOnly ? preview.text : `${preview.text} — click to edit`;
   value.addEventListener("click", (event) => {
     event.stopPropagation();
-    if (readOnly) openDetail(row.row.key, line.entry.setId);
+    if (blocked !== null) toast(blocked);
+    else if (readOnly) openDetail(row.row.key, line.entry.setId);
     else startInlineEdit(value, line);
   });
   container.appendChild(value);
@@ -707,7 +703,10 @@ function startInlineEdit(anchor: HTMLElement, line: Line): void {
     select.value = String(token.$value === true);
     anchor.replaceWith(select);
     select.focus();
-    select.addEventListener("change", () => editValue(line, select.value === "true"));
+    select.addEventListener("change", () => {
+      const error = editValue(line, select.value === "true");
+      if (error !== null) toast(error);
+    });
     select.addEventListener("blur", () => renderTree());
     return;
   }
@@ -741,8 +740,14 @@ function startInlineEdit(anchor: HTMLElement, line: Line): void {
       toast(parsed.message);
       return;
     }
+    const error = editValue(line, parsed.value);
+    if (error !== null) {
+      input.classList.add("invalid");
+      input.title = error;
+      toast(error);
+      return;
+    }
     done = true;
-    editValue(line, parsed.value);
     // An unchanged value records nothing, so no model change comes back to close the editor —
     // repaint here rather than leaving the row stuck as an input.
     renderTree();

@@ -6,6 +6,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import type { Token, TokenFileOutput, TokenGroup } from "../src/tokens/types";
 import type { EditOverlay, OverlayEntry } from "../src/tokens/overlay";
@@ -379,6 +380,41 @@ test("keep-mine rebases on Figma's value so the same conflict does not re-report
   assert.equal(kept.entries[0].base, "#b4342a");
   const again = mergeOverlay([moved], kept, NOW);
   assert.equal(again.conflicts, 0, "the flag the user already answered must stop firing");
+});
+
+test("resolving a conflict either way clears the report entry, not just the conflict field", () => {
+  // The `⚑ conflict` badge and the Import tab's Flagged count read the *report*, not the overlay,
+  // so a resolution only clears them once the import payload is re-derived — which is why
+  // `code.ts` re-emits it after a resolution instead of posting `overlay-state` alone.
+  const target = { variableId: "VariableID:1:4", modeId: "1:0" };
+  const moved = flat(LIGHT.path, LIGHT.setId, variableToken("VariableID:1:4", "1:0", "#b4342a"));
+  const merged = mergeOverlay([moved], overlayOf(valueEdit("#000000", "#c33a2e")), NOW);
+  assert.equal(merged.entries.length, 1);
+
+  const kept = keepMine(merged.overlay, target, "set-value");
+  assert.deepEqual(mergeOverlay([moved], kept, NOW).entries, [], "keep mine");
+
+  const taken = dropEntry(merged.overlay, target, "set-value");
+  assert.deepEqual(mergeOverlay([moved], taken, NOW).entries, [], "take Figma's");
+});
+
+test("discarding an orphaned edit clears its report entry on the next derive", () => {
+  const target = { variableId: "VariableID:1:4", modeId: "1:0" };
+  const merged = mergeOverlay([DARK], overlayOf(valueEdit("#000000", "#c33a2e")), NOW);
+  assert.equal(merged.entries[0].kind, "orphaned-edit");
+
+  const again = mergeOverlay([DARK], removeEntries(merged.overlay, target), NOW);
+  assert.equal(again.orphaned, 0);
+  assert.deepEqual(again.entries, []);
+});
+
+test("the target-key joiner is written as an escape, so the source stays a text file", () => {
+  // A literal NUL byte in the source makes git classify the file as binary, which takes it out of
+  // the PR diff entirely — and every change here has to be reviewable line by line before it
+  // lands. `\0` in source has identical runtime semantics.
+  const source = readFileSync("src/tokens/overlay.ts", "utf8");
+  assert.equal(source.indexOf("\0"), -1, "src/tokens/overlay.ts must not contain a raw NUL byte");
+  assert.equal(targetKey({ styleId: "S:abc," }), `style\0S:abc,`);
 });
 
 // ---------------------------------------------------------------------------

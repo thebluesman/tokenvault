@@ -107,7 +107,9 @@ window.onmessage = (event: MessageEvent) => {
     tokensTab.disabled = false;
     tokensTab.title = "";
     // The tree may not have the same shape after a rescan, so expansion starts over (UX §4.4).
-    resetExpansion();
+    // A `refresh` is the same snapshot re-derived after a conflict/orphan resolution — collapsing
+    // the tree under the user mid-review would be a worse answer than the stale flag was.
+    if (message.payload.refresh !== true) resetExpansion();
     setImportPayload(message.payload);
     setPayload(message.payload);
     renderStateSlot();

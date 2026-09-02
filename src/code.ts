@@ -16,6 +16,7 @@ import {
   parseOverlay,
   recordEdit,
   removeEntries,
+  targetKey,
 } from "./tokens/overlay";
 import { flattenImport, treeIndex } from "./tokens/view";
 import { buildMergedImport } from "./tokens/merge";
@@ -161,7 +162,7 @@ async function persistOverlay(): Promise<string | undefined> {
       await figma.clientStorage.setAsync(editStorageKey(), overlay);
       return undefined;
     } catch (second) {
-      const reason = second instanceof Error ? second.message : String(first);
+      const reason = second instanceof Error ? second.message : String(second);
       return `Couldn't save your edits — plugin storage is full. ${reason}`;
     }
   }
@@ -227,7 +228,12 @@ async function loadImportCache(): Promise<CachedImport | null> {
 // Emitting
 // ---------------------------------------------------------------------------
 
-function emitImport(fileName: string): void {
+/**
+ * `refresh` marks a re-emit that is *not* a fresh read of the file — the same snapshot, re-derived
+ * because an overlay change (resolving a conflict, discarding an orphan) altered what the report
+ * says about a token. The UI keeps its tree expansion across one of these; a rescan resets it.
+ */
+function emitImport(fileName: string, refresh = false): void {
   if (!importResult) return;
 
   const files: SerializedFile[] = importResult.files.map((file) => ({
@@ -248,6 +254,7 @@ function emitImport(fileName: string): void {
       overlay,
       merge: pendingMerge,
       fromCache: importFromCache,
+      refresh,
     } satisfies ImportPayload,
   });
   pendingMerge = undefined;
@@ -260,7 +267,7 @@ function emitImport(fileName: string): void {
  * `build.ts` and `merge.ts` stay reproducible from Figma plus `userSubtypes` alone, and the
  * overlay is a declared transform layered on top rather than a hidden input to the build.
  */
-async function rebuild(fromScan: boolean): Promise<void> {
+async function rebuild(fromScan: boolean, refresh = false): Promise<void> {
   if (!snapshot) return;
 
   const result = buildMergedImport(snapshot, {
@@ -309,7 +316,7 @@ async function rebuild(fromScan: boolean): Promise<void> {
     if (storageError !== undefined) post({ type: "overlay-state", overlay, storageError });
   }
 
-  emitImport(snapshot.variables.fileName);
+  emitImport(snapshot.variables.fileName, refresh);
 }
 
 async function handleScan(): Promise<void> {
@@ -359,10 +366,28 @@ async function handleSetSubtypes(subtypes: Record<string, SubtypeSelection | nul
  * the whole overlay back — a few KB — keeps the two sides from drifting without retransmitting
  * the 700KB tree on every keystroke.
  */
-async function commitOverlay(next: EditOverlay): Promise<void> {
+async function commitOverlay(next: EditOverlay, resolvedFlag = false): Promise<void> {
   overlay = next;
   const storageError = await persistOverlay();
   post({ type: "overlay-state", overlay, storageError });
+
+  // A conflict or orphan flag lives on the *import report*, not on the overlay, so clearing the
+  // entry alone leaves the row's `⚑ conflict` badge and the Import tab's Flagged count claiming an
+  // unresolved item until the next rescan. Re-derive so the flag clears on the same interaction.
+  // Only on a resolution: an ordinary edit must not put a 700KB re-emit on the keystroke path.
+  if (resolvedFlag && snapshot !== null && !scanning) await rebuild(false, true);
+}
+
+/** Whether the entries about to be dropped or rebased are carrying a merge flag. */
+function carriesFlag(target: OverlayTarget, op: OverlayOp | undefined): boolean {
+  const key = targetKey(target);
+  if (key === null) return false;
+  return overlay.entries.some(
+    (entry) =>
+      targetKey(entry.target) === key &&
+      (op === undefined || entry.op === op) &&
+      (entry.conflict !== undefined || entry.orphaned === true)
+  );
 }
 
 async function handleEdit(entries: Array<Omit<OverlayEntry, "at">>): Promise<void> {
@@ -373,11 +398,12 @@ async function handleEdit(entries: Array<Omit<OverlayEntry, "at">>): Promise<voi
 }
 
 async function handleRevert(targets: OverlayTarget[], op: OverlayOp | undefined): Promise<void> {
+  const resolvedFlag = targets.some((target) => carriesFlag(target, op));
   let next = overlay;
   for (const target of targets) {
     next = op === undefined ? removeEntries(next, target) : dropEntry(next, target, op);
   }
-  await commitOverlay(next);
+  await commitOverlay(next, resolvedFlag);
 }
 
 function handleCopyTree(): void {
@@ -392,6 +418,17 @@ function handleCopyTree(): void {
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Messages are handled strictly one at a time.
+ *
+ * Every overlay handler is read-modify-write over the module-level `overlay` and ends in an
+ * `await figma.clientStorage.setAsync`. Dispatched concurrently, two edits sent a frame apart can
+ * both read the pre-edit overlay, and whichever `setAsync` settles last wins — so the durable
+ * store can end up holding the *first* edit's snapshot while the live session shows both. Queueing
+ * costs nothing here (the handlers are short and user-paced) and removes the race entirely.
+ */
+let queue: Promise<void> = Promise.resolve();
 
 figma.ui.onmessage = (message: UiToPluginMessage) => {
   const run = async (): Promise<void> => {
@@ -430,11 +467,15 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
       return;
     }
     if (message.type === "revert-all") {
-      await commitOverlay(emptyOverlay());
+      const resolvedFlag = overlay.entries.some(
+        (entry) => entry.conflict !== undefined || entry.orphaned === true
+      );
+      await commitOverlay(emptyOverlay(), resolvedFlag);
       return;
     }
     if (message.type === "keep-mine") {
-      await commitOverlay(keepMine(overlay, message.target, message.op));
+      // `keep-mine` only exists as a conflict resolution, so it always clears a flag.
+      await commitOverlay(keepMine(overlay, message.target, message.op), true);
       return;
     }
     if (message.type === "copy-tree") {
@@ -448,8 +489,12 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
     }
   };
 
-  run().catch((error: unknown) => {
-    scanning = false;
-    post({ type: "import-error", message: error instanceof Error ? error.message : String(error) });
-  });
+  // The error handler is inside the chain so one failed message never breaks the queue: the next
+  // message still runs, and the failure is reported rather than left as an unhandled rejection.
+  queue = queue.then(() =>
+    run().catch((error: unknown) => {
+      scanning = false;
+      post({ type: "import-error", message: error instanceof Error ? error.message : String(error) });
+    })
+  );
 };

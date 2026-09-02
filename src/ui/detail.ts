@@ -43,6 +43,7 @@ import type { GridField, ShadowField, TypographyField } from "../tokens/edit";
 import {
   deleteBlockers,
   deleteLines,
+  editBlockedReason,
   editDescription,
   editValue,
   getModel,
@@ -67,12 +68,15 @@ export function setNavigator(fn: (path: string) => void): void {
 export function openDetail(pathKey: string, setId?: string): void {
   openKey = pathKey;
   focusSet = setId;
-  renderDetail();
+  pendingRender = false;
+  renderNow();
 }
 
 export function closeDetail(): void {
   openKey = null;
   focusSet = undefined;
+  pendingRender = false;
+  blockedPanel = false;
   panelEl.classList.add("hidden");
   panelEl.textContent = "";
 }
@@ -81,8 +85,61 @@ export function isDetailOpen(): boolean {
   return openKey !== null;
 }
 
+// ---------------------------------------------------------------------------
+// Rendering — deferred while a field is being edited
+// ---------------------------------------------------------------------------
+//
+// A field commits on blur, and a commit rebuilds the model, which calls back here. Rendering
+// straight through would rebuild the panel from scratch *during* that blur — and by then focus has
+// usually already moved to the sibling the user tabbed into. Destroying that input fires a native
+// blur on it and re-enters the commit path with a half-typed value, so a tab between two fields
+// can discard or spuriously commit what was in the second one.
+//
+// So the render is owed rather than performed: it runs on the next tick, and only once focus has
+// left the panel's fields. What the user is typing in is never torn out from under them.
+
+/** A render is owed — the model changed and the panel hasn't caught up yet. */
+let pendingRender = false;
+/** The blocked-reference panel currently owns the panel element; don't paint over it. */
+let blockedPanel = false;
+
+function panelInputFocused(): boolean {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || !panelEl.contains(active)) return false;
+  return (
+    active instanceof HTMLInputElement ||
+    active instanceof HTMLSelectElement ||
+    active instanceof HTMLTextAreaElement
+  );
+}
+
 export function renderDetail(): void {
   if (openKey === null) return;
+  pendingRender = true;
+  setTimeout(flushRender, 0);
+}
+
+function flushRender(): void {
+  if (!pendingRender) return;
+  if (openKey === null) {
+    pendingRender = false;
+    return;
+  }
+  // Both of these leave the render owed rather than dropping it: dismissing the blocked panel and
+  // leaving the field each re-flush.
+  if (blockedPanel || panelInputFocused()) return;
+  pendingRender = false;
+  renderNow();
+}
+
+// `focusout` fires as focus leaves a field, before it settles on the next one, so the flush is
+// deferred a tick — landing on a sibling input simply leaves the render owed again.
+panelEl.addEventListener("focusout", () => setTimeout(flushRender, 0));
+
+function renderNow(): void {
+  if (openKey === null) return;
+  pendingRender = false;
+  blockedPanel = false;
   const row = getModel().byPath.get(openKey);
   if (row === undefined) {
     // The path was deleted from every set it lived in, so there is nothing left to show.
@@ -145,6 +202,11 @@ function renderSetSection(row: Row, line: Line): HTMLElement {
   section.title = line.set.label;
 
   if (line.conflict !== undefined) section.appendChild(renderConflict(line));
+
+  // An edit is keyed on Figma provenance (ADR-0004 §2). Without one there is nothing to key on, so
+  // say it up front rather than letting every field accept a value and quietly discard it (§8).
+  const blocked = editBlockedReason(line);
+  if (blocked !== null) section.appendChild(el("div", "empty", blocked));
 
   section.appendChild(renderValueEditor(line));
   section.appendChild(renderDescription(line));
@@ -340,8 +402,7 @@ function colorEditor(line: Line): HTMLElement {
   const text = committingInput(current, (raw) => {
     const parsed = parseHexColor(raw);
     if (!parsed.ok) return parsed.message;
-    editValue(line, parsed.value);
-    return null;
+    return editValue(line, parsed.value);
   });
   text.field.style.flex = "1";
   row.appendChild(text.field);
@@ -355,7 +416,9 @@ function colorEditor(line: Line): HTMLElement {
   picker.addEventListener("change", () => {
     const alpha = current.length === 9 ? current.slice(7) : "";
     const parsed = parseHexColor(picker.value + alpha);
-    if (parsed.ok) editValue(line, parsed.value);
+    if (!parsed.ok) return;
+    const error = editValue(line, parsed.value);
+    if (error !== null) toast(error);
   });
   row.appendChild(picker);
 
@@ -368,7 +431,8 @@ function numberEditor(line: Line): HTMLElement {
   const field = committingInput(String(line.entry.token.$value), (raw) => {
     const parsed = parseNumberValue(raw);
     if (!parsed.ok) return parsed.message;
-    editValue(line, parsed.value);
+    const error = editValue(line, parsed.value);
+    if (error !== null) return error;
     // A warning, not a rejection: the value is committed and the note explains itself (§8).
     return subtypeWarning(extension?.subtype, parsed.value);
   });
@@ -379,7 +443,10 @@ function booleanEditor(line: Line): HTMLElement {
   const wrap = el("div", "toolbar");
   for (const value of [true, false]) {
     const control = button(String(value), line.entry.token.$value === value ? "primary" : undefined);
-    control.addEventListener("click", () => editValue(line, value));
+    control.addEventListener("click", () => {
+      const error = editValue(line, value);
+      if (error !== null) toast(error);
+    });
     wrap.appendChild(control);
   }
   return fieldRow("Value", wrap);
@@ -389,8 +456,7 @@ function stringEditor(line: Line): HTMLElement {
   const field = committingInput(String(line.entry.token.$value), (raw) => {
     const parsed = parseStringValue(raw);
     if (!parsed.ok) return parsed.message;
-    editValue(line, parsed.value);
-    return null;
+    return editValue(line, parsed.value);
   });
   return fieldRow("Value", field.field);
 }
@@ -413,8 +479,7 @@ function typographyEditor(line: Line): HTMLElement {
   const apply = (field: TypographyField, raw: string, unit?: DimensionValue["unit"]): string | null => {
     const parsed = setTypographyField(value, field, raw, unit);
     if (!parsed.ok) return parsed.message;
-    editValue(line, parsed.value);
-    return null;
+    return editValue(line, parsed.value);
   };
 
   wrap.appendChild(
@@ -453,7 +518,10 @@ function typographyEditor(line: Line): HTMLElement {
     );
     const auto = button("Auto");
     auto.title = "Remove lineHeight — Figma's Auto has no token equivalent";
-    auto.addEventListener("click", () => editValue(line, clearLineHeight(value)));
+    auto.addEventListener("click", () => {
+      const error = editValue(line, clearLineHeight(value));
+      if (error !== null) toast(error);
+    });
     lineRow.appendChild(auto);
   }
   wrap.appendChild(lineRow);
@@ -465,7 +533,11 @@ function shadowEditor(line: Line): HTMLElement {
   const list = shadowList(line.entry.token.$value);
   const wrap = el("div");
 
-  const write = (next: ShadowValue[]): void => editValue(line, denormalizeShadows(next));
+  const write = (next: ShadowValue[]): string | null => editValue(line, denormalizeShadows(next));
+  const writeOrToast = (next: ShadowValue[]): void => {
+    const error = write(next);
+    if (error !== null) toast(error);
+  };
 
   list.forEach((shadow, index) => {
     const box = el("div", "subrow");
@@ -477,12 +549,12 @@ function shadowEditor(line: Line): HTMLElement {
       up.addEventListener("click", () => {
         const next = list.slice();
         next.splice(index - 1, 0, next.splice(index, 1)[0]);
-        write(next);
+        writeOrToast(next);
       });
       head.appendChild(up);
     }
     const remove = button("Remove");
-    remove.addEventListener("click", () => write(list.filter((_, at) => at !== index)));
+    remove.addEventListener("click", () => writeOrToast(list.filter((_, at) => at !== index)));
     head.appendChild(remove);
     box.appendChild(head);
 
@@ -491,8 +563,7 @@ function shadowEditor(line: Line): HTMLElement {
       if (!parsed.ok) return parsed.message;
       const next = list.slice();
       next[index] = parsed.value;
-      write(next);
-      return null;
+      return write(next);
     };
 
     for (const field of ["offsetX", "offsetY", "blur", "spread"] as const) {
@@ -504,14 +575,17 @@ function shadowEditor(line: Line): HTMLElement {
     inset.appendChild(new Option("drop", "false"));
     inset.appendChild(new Option("inset", "true"));
     inset.value = String(shadow.inset === true);
-    inset.addEventListener("change", () => apply("inset", inset.value));
+    inset.addEventListener("change", () => {
+      const error = apply("inset", inset.value);
+      if (error !== null) toast(error);
+    });
     box.appendChild(fieldRow("inset", inset));
 
     wrap.appendChild(box);
   });
 
   const add = button("Add shadow");
-  add.addEventListener("click", () => write(list.concat([newShadow()])));
+  add.addEventListener("click", () => writeOrToast(list.concat([newShadow()])));
   wrap.appendChild(add);
   return wrap;
 }
@@ -520,14 +594,18 @@ function gridEditor(line: Line): HTMLElement {
   const list = gridList(line.entry.token.$value);
   const wrap = el("div");
 
-  const write = (next: GridValue[]): void => editValue(line, next);
+  const write = (next: GridValue[]): string | null => editValue(line, next);
+  const writeOrToast = (next: GridValue[]): void => {
+    const error = write(next);
+    if (error !== null) toast(error);
+  };
 
   list.forEach((grid, index) => {
     const box = el("div", "subrow");
     const head = el("div", "subhead");
     head.appendChild(el("span", "grow", `Grid ${index + 1}`));
     const remove = button("Remove");
-    remove.addEventListener("click", () => write(list.filter((_, at) => at !== index)));
+    remove.addEventListener("click", () => writeOrToast(list.filter((_, at) => at !== index)));
     head.appendChild(remove);
     box.appendChild(head);
 
@@ -539,7 +617,7 @@ function gridEditor(line: Line): HTMLElement {
       // Switching pattern removes the keys the new one has no place for, rather than zeroing
       // them: `count: 0` on a `grid` is a value the importer would never write (§5.2).
       next[index] = setGridPattern(grid, pattern.value as GridValue["pattern"]);
-      write(next);
+      writeOrToast(next);
     });
     box.appendChild(fieldRow("pattern", pattern));
 
@@ -548,8 +626,7 @@ function gridEditor(line: Line): HTMLElement {
       if (!parsed.ok) return parsed.message;
       const next = list.slice();
       next[index] = parsed.value;
-      write(next);
-      return null;
+      return write(next);
     };
 
     for (const field of gridFieldsFor(grid.pattern)) {
@@ -570,7 +647,7 @@ function gridEditor(line: Line): HTMLElement {
   });
 
   const add = button("Add grid");
-  add.addEventListener("click", () => write(list.concat([newGrid()])));
+  add.addEventListener("click", () => writeOrToast(list.concat([newGrid()])));
   wrap.appendChild(add);
   return wrap;
 }
@@ -578,10 +655,9 @@ function gridEditor(line: Line): HTMLElement {
 // ---------------------------------------------------------------------------
 
 function renderDescription(line: Line): HTMLElement {
-  const field = committingInput(line.entry.token.$description ?? "", (raw) => {
-    editDescription(line, raw);
-    return null;
-  });
+  const field = committingInput(line.entry.token.$description ?? "", (raw) =>
+    editDescription(line, raw)
+  );
   field.input.placeholder = "none";
   return fieldRow("Description", field.field);
 }
@@ -709,15 +785,45 @@ export function deleteButton(
   }
 
   const control = button(labels.action);
-  control.addEventListener("click", () => {
-    const targets = lines
-      .map((line) => line.target)
-      .filter((target): target is OverlayTarget => target !== null);
-    deleteLines(lines);
-    toast(`Deleted ${labels.subject}`, { label: "Undo", run: () => revert(targets, "delete") });
-    closeDetail();
-  });
+  control.addEventListener("click", () => runDelete(lines, paths, labels.subject));
   return control;
+}
+
+/**
+ * The delete itself, with the blocker check re-run **at click time**.
+ *
+ * The label's count is computed when the control is built, and a reference can appear while it is
+ * still on screen — editing another token's value to point here, for one. Trusting the stale check
+ * would let a delete through that manufactures exactly the dangling reference §7 exists to
+ * prevent, so the check at the moment of the write is the one that decides.
+ */
+export function runDelete(lines: Line[], paths: string[], subject: string): void {
+  const block = deleteBlockers(paths);
+  if (block.count > 0) {
+    showBlockedPanel(paths, block.referrers);
+    return;
+  }
+
+  const targets = lines
+    .map((line) => line.target)
+    .filter((target): target is OverlayTarget => target !== null);
+  const outcome = deleteLines(lines);
+
+  // Never claim a deletion that didn't happen: a line with no overlay target has nothing to
+  // tombstone, and closing the panel on a "Deleted" toast would be a lie the user can't check.
+  if (outcome.deleted === 0) {
+    toast(`Couldn't delete ${subject} — no Figma Variable or Style behind it.`);
+    return;
+  }
+  if (outcome.skipped > 0) {
+    toast(
+      `Deleted ${subject} — ${outcome.skipped} couldn't be deleted (no Figma Variable or Style behind them).`,
+      { label: "Undo", run: () => revert(targets, "delete") }
+    );
+  } else {
+    toast(`Deleted ${subject}`, { label: "Undo", run: () => revert(targets, "delete") });
+  }
+  closeDetail();
 }
 
 /**
@@ -732,15 +838,13 @@ export function showBlockedPanel(paths: string[], referrers: Array<{ path: strin
   const model = getModel();
   const codes = new Map(model.sets.map((info) => [info.id, info.code] as const));
 
+  blockedPanel = true;
   panelEl.textContent = "";
   panelEl.classList.remove("hidden");
 
   const head = el("div", "panel-head");
   const back = button("←");
-  back.addEventListener("click", () => {
-    if (openKey !== null) renderDetail();
-    else closeDetail();
-  });
+  back.addEventListener("click", dismissBlockedPanel);
   head.appendChild(back);
   head.appendChild(el("div", "title", "Can't delete yet"));
   panelEl.appendChild(head);
@@ -778,11 +882,15 @@ export function showBlockedPanel(paths: string[], referrers: Array<{ path: strin
   );
 
   const close = button("Close");
-  close.addEventListener("click", () => {
-    if (openKey !== null) renderDetail();
-    else closeDetail();
-  });
+  close.addEventListener("click", dismissBlockedPanel);
   body.appendChild(close);
 
   panelEl.appendChild(body);
+}
+
+/** Hands the panel back to the detail view, or closes it if there was nothing open behind. */
+function dismissBlockedPanel(): void {
+  blockedPanel = false;
+  if (openKey !== null) renderNow();
+  else closeDetail();
 }

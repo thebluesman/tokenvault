@@ -46,6 +46,12 @@ export interface ImportPayload {
    * scan (ADR-0004 §1). The Tokens tab is usable either way; the Import tab says which it is.
    */
   fromCache: boolean;
+  /**
+   * True when this payload was re-derived from the *same* snapshot rather than a fresh read —
+   * emitted after a conflict or orphan resolution so the report's flags clear immediately. The
+   * tree hasn't changed shape, so the UI keeps its expansion state instead of resetting it.
+   */
+  refresh?: boolean;
 }
 
 export type UiToPluginMessage =
