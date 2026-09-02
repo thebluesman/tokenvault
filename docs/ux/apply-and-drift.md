@@ -326,16 +326,23 @@ Three deliberate choices:
 An aliased Variable introduces a drift case Phase 5 must read correctly: **the pointer changed, not the value.** Someone in Figma re-pointed the Variable at a different one, or broke the alias and typed a literal. The comparison block (§6.4) renders it as a pointer diff, not a colour diff:
 
 ```
-│ ⚑ Changed in Figma                           │
-│   Your token   ↗ {…palette.red-warm.50}      │
-│   Now in Figma   ■ #b4342a  (alias removed)  │
+│ ⚑ Changed in Figma                            │
+│   At your last scan  ↗ {…palette.red-warm.50} │
+│   Now in Figma       ■ #b4342a (alias removed)│
 ```
 
-`(alias removed)` and its inverse `(now aliased)` are the copy that makes this legible; without them, a pointer-to-literal change looks like a colour that barely moved. **Re-apply token** restores the alias; **Take Figma's** replaces the token's reference with a literal — which is an *edit to a reference*, the one thing Phase 4 forbade. So that button gets a second line of confirmation copy here and nowhere else:
+`(alias removed)` and its inverse `(now aliased)` are the copy that makes this legible; without them, a pointer-to-literal change looks like a colour that barely moved. The two labels follow §6.4's correction — at the last scan this was a pointer, now it isn't. **Put Figma back** restores the alias; **Take Figma's** accepts the literal, and the token tree already shows it.
 
-> Taking Figma's value replaces the reference with a literal `#b4342a`. Phase 5 can't put the reference back — you'd re-point it in Phase 7.
+Accepting is the lossy direction and says so, here and nowhere else:
 
-**Caveat — this section is written ahead of its feasibility.** `@tech-lead` is assessing native alias support in ADR-0005 in parallel. If aliasing turns out to be partly or wholly unavailable in Phase 5, the fallback is §5.6 as originally drafted — reference rows **blocked** in the apply dialog with *"Applying references lands with aliasing (Phase 7)"*, matching Phase 4 §5.3's refusal word-for-word. The fallback is deliberately "block", never "flatten silently". **This section needs one review pass once ADR-0005 lands.**
+> Keeping Figma's value means this token is a literal `#b4342a` now, not a pointer. Phase 5 can't put the reference back — you'd re-point it in Phase 7.
+
+**Caveat closed 2026-09-02 — the feasibility landed in our favour and this section stands as written.** ADR-0005 §11 (Accepted) confirms Figma models aliases natively (`{ type: "VARIABLE_ALIAS", id }`), so the fallback — blocking reference rows — was never needed. Two refinements from the ADR are worth carrying here, because they change what a user can actually reach:
+
+- **Multi-hop chains need no special reading.** `a → b → c` is written as two independent one-hop aliases and Figma resolves the chain itself. Nothing in the UI has to represent depth, and there is no chain-too-deep state to design.
+- **The rows in the table above are, in Phase 5, unreachable.** Under ADR-0005 §1 apply writes the *overlay*, and Phase 4's editor refuses to edit a reference — so no overlay entry can hold one, and no aliased row can appear in the apply dialog yet. The write path is built and tested ahead of its first caller, which is Phase 6 pulling a git tree that contains a pointer. **So this section is a Phase 6 spec that happens to have shipped early.** Keep it: the flattening failure mode is the kind that surfaces as silent data loss in a designer's file months later, and closing it before anything can trigger it is the cheap moment.
+
+One state arrives earlier than expected as a side effect: ADR-0005 §11 detects **reference cycles** up front and refuses the whole cycle rather than letting Figma throw mid-plan. That is PRD §6.3's circular-reference detection, landing in Phase 5's plan builder. It has **no UI in this doc** — §2 and §7 still say cycles are not a Phase 5 state, and they're right about what the user can *reach*, since nothing here can author a reference. A cycle that arrives in imported data surfaces as an ordinary skip reason in the apply dialog's blocked-rows list. Designing the real circular-reference error state stays Phase 7's job, where references become editable and a user can actually make one.
 
 ### 5.7 Deleting a Figma Variable or Style
 
