@@ -346,7 +346,7 @@ Phase 4's delete removes a token from the local tree and says, in as many words,
 
 #### It is never part of an apply
 
-A deletion cannot ride along in the apply dialog, cannot be a row in that checklist, and there is no button on the apply dialog that deletes anything. The reason is the checklist's own design: §5.2 ships every row pre-checked, so a delete row would be a destructive default. Bundling one irreversible action into a list of reversible ones also destroys the dialog's honest promise — *"undo rewrites the previous value"* — because a deleted Variable takes its bindings with it and no rewrite brings those back.
+A deletion cannot ride along in the apply dialog, cannot be a row in that checklist, and there is no button on the apply dialog that deletes anything. The reason is the checklist's own design: §5.2 ships every row pre-checked, so a delete row would be a destructive default — the one class of action that must never be opted into on the user's behalf. And the two are not the same kind of consequence even in Figma's own history: a wrong value can be re-applied correctly from the panel a second later, whereas a deleted Variable takes every layer binding with it and only ⌘Z brings those back.
 
 #### The confirmation
 
@@ -383,7 +383,7 @@ What each part is doing, and why it's not negotiable:
 - **The blast radius comes before the button, not after.** Two counts, both of them things the user cannot see from the token tree: how many **layers** are bound to it, and how many **tokens** point at it. `[ Show them ]` selects those layers on the canvas — the same node-selecting rows as §5.5's `[ Details ]`.
 - **Deleting a Variable that other tokens reference is blocked, not warned.** Phase 4 §7 blocks local delete while inbound references exist, for exactly this reason, and Phase 5 does not get to be more permissive about a *more* destructive version of the same action. When the referrer count is non-zero, the confirmation opens in its blocked form: the referrer list in full (tappable, navigating to each token — Phase 4 §7's panel verbatim), no primary button, and `[ Close ]` alone.
 - **Layers being bound is a warning, not a block.** Fourteen layers keeping their colour and losing their binding is a real consequence, but it's the user's call and it's exactly what deleting a Variable means. Blocking on it would make the action nearly unusable in any real file.
-- **The undo sentence is stated before the button, not in the toast afterwards.** This is the only action in the product the panel cannot undo, and that fact belongs where the decision is made.
+- **The undo sentence is stated before the button, not in the toast afterwards.** Since §5.5, ⌘Z is the only undo for *every* canvas write, so this line is no longer unique to deletion — but it is stated at greater length here, because this is the one write whose damage a second apply cannot repair. Every other consequence in the product is re-doable from the panel; this one isn't, and that belongs where the decision is made.
 - **No typed confirmation.** Phase 4 called a typing gate theatre for local deletes. Here the gate is real — a separate screen, a red button, a blast-radius readout — and adding "type DELETE" on top of it is the kind of ceremony that trains people to type without reading.
 
 #### The destructive button
@@ -487,14 +487,14 @@ Two buttons, two directions, and the copy has to make the direction unmissable b
 
 | Action | What happens | Where it leaves you |
 |---|---|---|
-| **Re-apply token** | Writes the token's value into Figma. A canvas write. | In sync. Undoable from the toast (§5.5). |
+| **Re-apply token** | Writes the token's value into Figma. A canvas write, so it routes through the apply dialog (§5.2). | In sync. Undo is Figma's ⌘Z, not the panel's (§5.5). |
 | **Take Figma's** | Updates the token to Figma's value. A local edit, not a canvas write. | Becomes a **local edit** — because the token file now differs from what was last committed. Phase 6 commits it. |
 
 That second row is the subtle one and it deserves a line of copy on the button's confirmation toast: *"Token updated to Figma's value — it's a local edit until you commit it."* Without that, "Take Figma's" reads as "make this go away", and the user is surprised later when the count reappears in the Changes list under a different heading.
 
 `[ View both ]` isn't a separate action — the block *is* the diff, inline, always expanded. At three values or fewer, a comparison this small doesn't earn a screen of its own; composite types (typography, shadow, grid) render the block as a **field-level list with only differing fields shown**, plus *"4 fields unchanged"* collapsed, which keeps a 15-field typography diff to two lines.
 
-Both actions are one tap, both undoable from the toast, both clear the badge.
+Both actions clear the badge, and the asymmetry in what it costs to change your mind is the reason they don't look alike: *Take Figma's* is one tap and reversible in the panel (Phase 4's local undo), while *Re-apply token* is a canvas write, so it opens the apply dialog as a one-row confirmation and afterwards the way back is ⌘Z in Figma.
 
 ### 6.5 Bulk resolution — allowed here, and why that's not a contradiction
 
@@ -542,7 +542,7 @@ That's a **conflict**, and it's Phase 4's `edit-conflict` unchanged — same bad
 | Bind: a selected layer is locked | Counted as skipped, named in `[ Details ]` | `Locked — unlock it to bind.` |
 | Bind: token type has no bindable property | Action absent (see empty states) | — |
 | Apply partially failed mid-batch | Toast reports what landed; dialog reopens with the failed rows still checked | `Applied 5 of 7. 2 failed — they're still listed here.` |
-| Apply failed entirely | `.entry` block, no undo offered | `Couldn't apply — nothing changed in Figma.` + the underlying reason |
+| Apply failed entirely | `.entry` block; nothing was written, so nothing to take back | `Couldn't apply — nothing changed in Figma.` + the underlying reason |
 | Rescan finds drift | Existing post-scan banner, count added | see §6.1 |
 | Drift on a composite type | Field-level comparison, unchanged fields collapsed | `4 fields unchanged` |
 | Two sets disagree on `$type` at one path | Unchanged from Phase 4 — per-line glyphs, no badge. Apply operates per line regardless. | — |
