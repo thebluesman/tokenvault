@@ -1,12 +1,13 @@
 # UX: Apply and drift (Phase 5)
 
-**Status:** Provisional — written ahead of the build, to be revised once it's used live in Figma.
+**Status:** Implemented — Phase 5 shipped 2026-09-02 (PR #9) and was validated live in Figma. Every question in §9 is closed. **One section did not ship: §5.4 (bind to selected layers)**, deferred to its own ticket by ADR-0005 §12 — it stands as that ticket's spec. Still the live spec: amend it when the design changes.
 **Owner:** `@ux-designer`
 **Covers:** PRD §6.5.2 (apply tokens → Figma), §6.5.3 (drift detection), §6.7 (plugin panel), build plan §9 Phase 5.
 **Builds on:** `docs/ux/local-editor.md` (Phase 4) — same panel, same vocabulary, same 460 × 640 px. Read that first; this doc extends it rather than restating it.
-**Depends on:** ADR-0005 (in flight with `@tech-lead`). Every place a UX choice hangs on a mechanic that isn't decided yet is marked **[ARCH]** and listed in §9.
+**Depends on:** ADR-0005 — **Accepted 2026-09-02**. The `[ARCH]` marks below are kept where they sit so the trail is readable, but every one of them now has an answer; §9 records which.
 **Revised 2026-09-02** after Shyam's decisions on §9 — apply always confirms (§5.2), deleting Figma Variables/Styles is in scope behind its own destructive confirmation (§5.7), and apply preserves token-to-token pointers instead of flattening them (§5.6).
-**Revised again 2026-09-02 (second pass)** — the apply confirmation is a **lightweight modal**, not a full-panel screen (§5.2); drift reuses Phase 4's `⚑` badge rather than any new indicator (§6.2); **there is no plugin-side undo for canvas writes** — Figma's ⌘Z is the only undo, and the copy says so plainly (§5.5); and `In sync` gets a **green**, completing the panel's four-colour status language (§8). Eight of §9's eleven questions are now closed; three remain, all `[ARCH]`.
+**Revised again 2026-09-02 (second pass)** — the apply confirmation is a **lightweight modal**, not a full-panel screen (§5.2); drift reuses Phase 4's `⚑` badge rather than any new indicator (§6.2); **there is no plugin-side undo for canvas writes** — Figma's ⌘Z is the only undo, and the copy says so plainly (§5.5); and `In sync` gets a **green**, completing the panel's four-colour status language (§8).
+**Revised 2026-09-02 (post-build)** — reconciled against what shipped in PR #9. The substantive correction is in §6.3–§6.4: **in Phase 5 the token tree is re-derived from Figma on every scan, so a drifted token that carries no local edit already shows Figma's new value.** Drift is a changelog against a local watermark, not a divergence between two live sources — that only becomes possible at Phase 6, when git gives the tokens a source of their own. Three copy pairs follow from it and are corrected below. §5.4 is marked deferred, §5.6's feasibility caveat is closed, and §9's last three questions are answered.
 
 ---
 
@@ -200,7 +201,16 @@ Same dialog, different pre-population — it is always the surface, never a dire
 
 Note the asymmetry, and it's deliberate: applying a *set* offers every token in it, including the ones already in sync. Those rows render **muted and labelled `already matches`**, with a green `●` in place of the checkbox (§8) rather than being dropped, so the count in the button is honest and the user can see the set is mostly fine. If everything matches, the dialog doesn't open at all — a toast says *"Theme / Dark already matches Figma."*
 
-### 5.4 Bind to selected layers
+### 5.4 Bind to selected layers — **deferred, not shipped**
+
+> **Did not ship in Phase 5.** ADR-0005 §12 pulled binding out into its own ticket. The blocker isn't
+> the API, it's the mapping: deciding that `space.4` binds to `itemSpacing` rather than `paddingLeft`
+> needs subtype tagging that is still `subtypeSource: "default"` for most numbers, and binding the
+> wrong field to the right token is worse than not binding at all. **Nothing in this section exists in
+> the panel today** — no selection bar, no `Bind to selection` menu item, no property dropdown. The
+> section is kept whole, and unedited, as the spec for that ticket. Everything downstream of it that
+> mentions binding — the selection bar in §4, §5.5's partial-success toast, §7's four bind error rows,
+> §8's item 2 — is deferred with it.
 
 The flow PRD §6.5.2 calls "bulk-apply tokens to selected layers". This is the one place the plugin has to be selection-aware, and it's the flow most likely to feel magical or infuriating depending on the feedback.
 

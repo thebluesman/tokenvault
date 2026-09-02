@@ -1,6 +1,6 @@
 # UX: Local editor (Phase 4)
 
-**Status:** Provisional — a starting design, to be revised once it's used live in Figma.
+**Status:** Implemented — Phase 4 shipped 2026-09-02 (PR #8) and was validated live in Figma. All five of §10's questions are closed, and the build followed this doc without a design deviation worth recording. Still the live spec: amend it when the design changes.
 **Owner:** `@ux-designer`
 **Covers:** PRD §6.1 (token CRUD, minus create — deferred, see §2), §6.7 (plugin panel), build plan §9 Phase 4.
 **Grounded in:** `src/tokens/types.ts`, ADR-0002 (rev 2), ADR-0003, ADR-0004 (local edit persistence), and the real import fixture in `test/fixtures/styles-import/`.
@@ -393,7 +393,7 @@ Three things Phase 4 has to add: a **disclosure/caret row** for groups, a **colo
 
 ---
 
-## 10. Open questions for Shyam
+## 10. Questions — all closed
 
 1. ~~**Does the edited tree persist between plugin sessions** (`clientStorage`), or is it session-only until Phase 6's git sync gives it a real home? Changes §5.4's warning and whether "unsaved" is even the right word. *(Also a tech-lead question — flagging, not deciding.)*~~
    **Resolved 2026-09-01 — Shyam: persist to clientStorage; mechanics in ADR-0004.** Edits are stored as intent, keyed by Figma provenance id, and three-way-merged on rescan. Consequences already folded in above: §5.4's blocking rescan dialog is gone (replaced by §5.5's post-scan summary), the header chip reads **local edits** rather than "unsaved changes", deletion is a persistent tombstone (§7), and two new report kinds — `edit-conflict` and `orphaned-edit` — are designed in §5.5 and §8.
