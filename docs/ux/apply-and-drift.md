@@ -6,7 +6,7 @@
 **Builds on:** `docs/ux/local-editor.md` (Phase 4) — same panel, same vocabulary, same 460 × 640 px. Read that first; this doc extends it rather than restating it.
 **Depends on:** ADR-0005 (in flight with `@tech-lead`). Every place a UX choice hangs on a mechanic that isn't decided yet is marked **[ARCH]** and listed in §9.
 **Revised 2026-09-02** after Shyam's decisions on §9 — apply always confirms (§5.2), deleting Figma Variables/Styles is in scope behind its own destructive confirmation (§5.7), and apply preserves token-to-token pointers instead of flattening them (§5.6).
-**Revised again 2026-09-02 (second pass)** — the apply confirmation is a **lightweight modal**, not a full-panel screen (§5.2); drift reuses Phase 4's `⚑` badge rather than any new indicator (§6.2); **there is no plugin-side undo for canvas writes** — Figma's ⌘Z is the only undo, and the copy says so plainly (§5.5); and `In sync` gets a **green**, completing the panel's four-colour status language (§8). Six of §9's nine questions are now closed; three remain, all `[ARCH]`.
+**Revised again 2026-09-02 (second pass)** — the apply confirmation is a **lightweight modal**, not a full-panel screen (§5.2); drift reuses Phase 4's `⚑` badge rather than any new indicator (§6.2); **there is no plugin-side undo for canvas writes** — Figma's ⌘Z is the only undo, and the copy says so plainly (§5.5); and `In sync` gets a **green**, completing the panel's four-colour status language (§8). Eight of §9's eleven questions are now closed; three remain, all `[ARCH]`.
 
 ---
 
@@ -82,9 +82,9 @@ Tokens tab (Phase 4)                     new in Phase 5
 │ ▾ folio                │
 │   ■ accent.default     │──⋯ Apply──▶ ┌────────────────────────┐
 │       Light  #c33a2e   │             │ Apply 7 changes        │  A. Apply dialog
-│       Dark   #f0a19a ⚑ │             │ ☑ Variables (6)        │     (overlay, §5.2)
+│       Dark   #f0a19a ⚑ │             │ ☑ Variables (6)        │     (modal, §5.2)
 └────────────────────────┘             │ ☑ Styles (1)           │
-     │            │                    │        [ Apply ]       │
+     │            │                    │ [Cancel]  [ Apply ]    │
      │            │                    └────────────────────────┘
      │            └── ⚑ badge ──▶ ┌────────────────────────┐
      │                            │ Changed in Figma       │  B. Compare block
@@ -99,6 +99,7 @@ Tokens tab (Phase 4)                     new in Phase 5
                               └────────────────────────┘
 
 Header state slot:  [ 7 local · 3 changed ]  ──tap──▶  D. Changes list (§6.3)
+                    [ ● In sync ]  ← green when there's nothing to report (§8)
 
 ⋯ Delete in Figma ──▶ ┌────────────────────────┐
                       │ Delete 1 Variable?     │  E. Delete-in-Figma
@@ -107,7 +108,7 @@ Header state slot:  [ 7 local · 3 changed ]  ──tap──▶  D. Changes lis
                       └────────────────────────┘       destructive styling
 ```
 
-No new tab. Phase 5 adds two overlays (apply dialog, delete confirmation), one inline block, one pinned bar, and rewrites what the header chip says.
+No new tab, and no new indicator. Phase 5 adds one modal (the apply dialog), one full-panel overlay (the delete confirmation), one inline block, one pinned bar, and rewrites what the header chip says. Drift itself adds nothing to this inventory — it rides on Phase 4's `⚑` badge and the existing filter chip (§6.2).
 
 **The apply dialog and the delete confirmation are deliberately different screens.** Never a delete row inside an apply checklist, never a delete button on the apply dialog. Reasoning in §5.7.
 
@@ -197,7 +198,7 @@ Same dialog, different pre-population — it is always the surface, never a dire
 | **Set filter chip → `Apply this set`** | Every token in that set. This is the "make Figma match my `Theme/Dark`" action. |
 | Header chip → `Apply to Figma` | Only the local edits (§5.2). |
 
-Note the asymmetry, and it's deliberate: applying a *set* offers every token in it, including the ones already in sync. Those rows render **muted, unchecked, and labelled `already matches`** rather than being dropped, so the count in the button is honest and the user can see the set is mostly fine. If everything matches, the dialog doesn't open at all — a toast says *"Theme / Dark already matches Figma."*
+Note the asymmetry, and it's deliberate: applying a *set* offers every token in it, including the ones already in sync. Those rows render **muted and labelled `already matches`**, with a green `●` in place of the checkbox (§8) rather than being dropped, so the count in the button is honest and the user can see the set is mostly fine. If everything matches, the dialog doesn't open at all — a toast says *"Theme / Dark already matches Figma."*
 
 ### 5.4 Bind to selected layers
 
@@ -350,7 +351,7 @@ A deletion cannot ride along in the apply dialog, cannot be a row in that checkl
 
 #### The confirmation
 
-Its own full-panel overlay, reached only from `Delete in Figma…`:
+Its own **full-panel overlay** — deliberately the heavier surface, and the contrast with §5.2 is the point. Apply is a modal you dismiss with a stray tap on the backdrop, because apply is frequent and recoverable. Delete replaces the screen, has no backdrop to tap away, and makes you read a blast radius, because it is neither. Reached only from `Delete in Figma…`:
 
 ```
 ┌──────────────────────────────────────────────┐
@@ -527,7 +528,7 @@ That's a **conflict**, and it's Phase 4's `edit-conflict` unchanged — same bad
 
 | When | Copy |
 |---|---|
-| Changes list, nothing anywhere | **Everything's in sync.** Your tokens match Figma as of the last scan. |
+| Changes list, nothing anywhere | **Everything's in sync.** Your tokens match Figma as of the last scan. *(The only empty state in the panel rendered in green rather than grey — §8.)* |
 | Changes list, Changed section empty | **Nothing has changed in Figma** since your last scan. |
 | Apply dialog with nothing to do | *(dialog doesn't open)* toast: **Theme / Dark already matches Figma.** |
 | Selection bar, nothing selected | *(bar is absent — never an empty bar)* |
@@ -560,7 +561,7 @@ That's a **conflict**, and it's Phase 4's `edit-conflict` unchanged — same bad
 
 ---
 
-## 8. Visual language — one new colour, tightly fenced
+## 8. Visual language — two new colours, tightly fenced
 
 Everything in Phase 5 maps onto vocabulary that already exists:
 
@@ -627,7 +628,12 @@ Four genuinely new pieces:
    **Resolved 2026-09-02 — Shyam: add it; placement and shade the designer's call.** §8 now specifies a muted green in exactly three places — the header chip's `● In sync`, the detail overlay's per-set in-sync line, and the apply dialog's `already matches` rows — and explicitly keeps it **off tree rows**, where in-sync stays signalled by the absence of a badge. That completes the four-value status language: grey neutral, green agreed, amber needs-you, red destructive.
 7. **Conflict handling** — *not previously an open question; confirmed 2026-09-02.* Shyam has ratified the proposed model: when both sides moved, the plugin blocks and makes the user pick a side, per token, with both values shown. Phase 4's `edit-conflict` block and its *Keep mine / Take Figma's* pair carry forward unchanged (§3, §6.6); Phase 5 adds only `Keep mine and apply`. No global keep-mine/take-theirs for conflicts — the bulk affordance in §6.5 is for **drift only**, and that asymmetry is intentional and argued there.
 8. **Deleting Figma Variables and Styles** — *raised and resolved 2026-09-02.* Allowed, but never bundled into an apply: its own menu item (`Delete in Figma…`), its own confirmation screen with a blast-radius readout, and a red destructive CTA. Blocked outright while other tokens reference the target, matching Phase 4 §7. Fully specified in §5.7; the colour rule is in §8.
-9. **Does "Take Figma's" need a confirmation?** §6.4 makes it a plain local edit, undoable, no dialog. In bulk (§6.5) it can silently rewrite forty token values. Undo covers it, but "undo covers it" and "the user understood what happened" aren't the same claim.
+   **Copy and placement confirmed 2026-09-02 (second pass) — Shyam: keep it exactly as drafted.** `Delete in Figma…` stays a separate `⋯` menu item below a divider, red destructive label, opening its own confirmation screen with the blast-radius readout. No change to §5.7.
+9. **Does "Take Figma's" need a confirmation?** §6.4 makes it a plain local edit, undoable in the panel, no dialog. In bulk (§6.5) it can silently rewrite forty token values. Undo covers it, but "undo covers it" and "the user understood what happened" aren't the same claim. **Still open.**
+10. ~~**What surface is the apply preview?** A modal, a persistent tab, or the full Phase 6 diff view.~~
+   **Resolved 2026-09-02 — Shyam: a lightweight modal/popup.** Not a persistent tab, not a full-panel screen, not the Phase 6 diff view. §5.2 is rebuilt around a modal card over a dimmed tree: `✕` instead of a back arrow, a two-line header, the list scrolling inside the card, a footer that never scrolls, and three free ways out (`Cancel`, `Esc`, backdrop). The weight budget is set by the "always confirm" rule from §9.1 — the user sees this every single time, so every control in it is paid for a thousand times over.
+11. ~~**How is drift indicated in the tree?** A new icon, a dedicated tab, or the existing flag pattern.~~
+   **Resolved 2026-09-02 — Shyam: reuse Phase 4's `⚑` flagged-chip pattern.** Consistency with the existing pattern wins over a bespoke drift signal. §6.2 spells out what that inherits — the `⚑ N flagged` filter chip counts drift, group rows roll it up, the post-scan banner's `[ Review ]` filters to it, and it attaches to the value line — and why the two alternatives lost: a second attention glyph forces the user to parse two vocabularies in a 460 px column, and a dedicated tab splits *what needs me?* across two screens.
 
 ---
 
@@ -637,14 +643,17 @@ Four genuinely new pieces:
 - **Apply, bind, and delete-in-Figma are three separate code paths and three separate messages.** They share nothing but a verb in casual speech. Don't unify them behind one `apply(target)`, and specifically **don't let a delete become an op in the apply batch** — §5.7 explains why the dialog's pre-checked rows make that unsafe.
 - **The apply dialog is an invariant, not a default.** One entry point to the write, and it is reached only from a confirmed dialog (§5.2). Assert it if that's cheap.
 - **Aliasing is written against ADR-0005 before ADR-0005 exists.** §5.6 assumes native Figma aliases are available on apply. Check the ADR first; if aliasing is out or partial, fall back to blocking reference rows — never to flattening them silently.
-- **Deleting is the one action with no plugin-side undo.** Don't offer an `[ Undo ]` in its toast; the confirmation already says Figma's ⌘Z is the way back.
+- **No plugin-side undo for anything that touches the file** (§5.5, §9.3). No `[ Undo ]` on the apply, bind, or delete toasts. Phase 4's local undo stays exactly as it is for tree-only actions (edit, delete token, *Take Figma's*) — don't refactor the two together into one undo stack; they have different scopes on purpose.
+- **Verify Figma's undo coalescing, then fix one line of copy.** Whether a batch of plugin writes collapses into a single ⌘Z step is ADR-0005's open question and yours to settle empirically. It changes only the apply dialog's footer wording (§5.5's closing note) — *never* the decision to have no plugin undo. Report what you find so the copy can be sharpened or qualified.
+- **The apply dialog is a modal, and the first one in the panel.** Backdrop dims the tree, card sized to content and capped at ~⅔ panel height, list scrolls inside, footer pinned. `Esc` and backdrop-tap dismiss identically to `Cancel`, and dismissing discards checkbox state rather than remembering it.
 - **Everything is keyed to `{ path, setId }` → provenance**, exactly as in Phase 4. The merged row stays a display construct; apply resolves through `figma.variableId + modeId` / `figma.styleId`, never through the path.
-- **Hold the pre-write value for every target you touch** — undo (§5.5) is a rewrite, not a re-scan, and partial-failure reporting needs to know what actually landed.
+- **Read the pre-write value for every target you touch, but you no longer need to *keep* it.** It's what fills the dialog's `before` column and what partial-failure reporting compares against; with no plugin-side undo, nothing has to survive past the write's completion.
 - **The apply dialog's row component is Phase 6's diff row.** Build it as `{ target, before, after, state }` and keep it out of Phase 5-specific modules.
 - **Drift is computed by the scan comparison, not by a second mechanism.** It should fall out of the same three-way merge that already produces `edit-conflict` and `orphaned-edit` — as a fourth report kind, not a parallel system.
 - **The selection bar needs `selectionchange`, and needs to be cheap.** It runs on every canvas click. Compute node kinds and valid properties from the selection summary, not by walking each node's full property set.
 - **Never write on selection change.** The bar is a readout; only an explicit tap binds.
 - **Preserve `$extensions."com.tokenvault"` byte-for-byte through every apply and drift-resolution path.** ADR-0002 §7's byte-identical re-import guarantee is exactly as fragile here as it was in Phase 4, and *Take Figma's* is a new way to break it — it must write only `$value`, never rebuild the token.
-- **Reuse `.badge.needs` and the conflict block.** If Phase 5 introduces a third badge colour or a second comparison component, something has gone wrong in the translation from this doc. The new red is a **button/menu-label colour only** (§8) — one class, used by §5.7's CTA and menu item, nothing else.
+- **Reuse `.badge.needs` and the conflict block.** Drift is `⚑ changed` in the existing amber badge (§6.2) — no new glyph, no new badge class, no drift tab. If Phase 5 introduces a third badge colour or a second comparison component, something has gone wrong in the translation from this doc.
+- **The two new colours are not badge colours.** Red is a button/menu-label class used by §5.7's CTA and menu item and nothing else. Green is a text/dot class used in exactly three places (§8): the header chip's `In sync`, the detail overlay's per-set in-sync line, and the apply dialog's `already matches` rows. **Never put green on a tree row or a value line** — in the tree, in-sync is the absence of a badge.
 - **The delete confirmation needs two counts before it can render**: layers bound to the target (a Figma query) and tokens referencing it (Phase 4's inbound-reference index, already built). Don't open the screen with placeholder counts — the counts *are* the screen.
 - Section 2's out-of-scope table is the scope boundary. If a task starts needing reference resolution, mode composition, Variable creation, or a git write, stop and raise it.
