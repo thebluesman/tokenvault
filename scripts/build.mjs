@@ -39,7 +39,7 @@ async function buildUi() {
     const template = readFileSync("src/ui/index.html", "utf8");
     const html = template.replace(
       /<script>[\s\S]*?<\/script>/,
-      `<script>${js}</script>`
+      () => `<script>${js}</script>`
     );
     writeFileSync("dist/ui.html", html);
   };

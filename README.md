@@ -6,7 +6,7 @@ Built incrementally with Claude Code, running entirely on free infrastructure. Z
 
 ## Status
 
-**Phase 3 (Figma Styles → token JSON import) in progress.** Phase 1's scaffold and Phase 2's Variables import are done. See [`docs/prd.md` §9](docs/prd.md#9-build-plan-phased-for-claude-code-sessions) for the phased build plan and [`CLAUDE.md`](CLAUDE.md) for current phase status.
+**Phase 4 (in-plugin local editor) in progress.** Phase 1's scaffold, Phase 2's Variables import and Phase 3's Styles import are done. See [`docs/prd.md` §9](docs/prd.md#9-build-plan-phased-for-claude-code-sessions) for the phased build plan and [`CLAUDE.md`](CLAUDE.md) for current phase status.
 
 ### Running the plugin locally
 
@@ -73,15 +73,54 @@ guards this with an explicit same-file assertion, but recapture both halves toge
 If a collection was renamed or removed, delete `test/fixtures/styles-import/tokens/` before
 regenerating so no stale set is left behind.
 
+### The local editor
+
+The **Tokens** tab browses the imported tree and edits it in place — no writes to Figma (Phase 5),
+no commits (Phase 6). It follows [`docs/ux/local-editor.md`](docs/ux/local-editor.md) and
+[ADR-0004](docs/adr/0004-local-edit-persistence.md).
+
+Browsing is **one merged tree across every set**, keyed by dotted path rather than by token: the
+paths `Theme/Light` and `Theme/Dark` share appear once, with a value line per set stacked under the
+name, so retuning a colour in both themes is two clicks on adjacent lines. Set, type and flag
+filters narrow it; search covers paths and descriptions and says so when a query has hits in sets
+the filter is hiding. The tree is virtualized with variable row heights, because a multi-set row is
+taller than a single-set one.
+
+Colours, numbers, booleans and strings edit **inline on the value line**. Typography, shadow and
+grid — and description, subtype and provenance for anything — open a **full-panel overlay** with one
+section per set. Reference values (`{folio.ref.palette.red-warm.50}`) are rendered verbatim, badged
+and read-only: resolving or repointing one is aliasing, which is Phase 7.
+
+Deleting is **blocked while anything references the token**. The `⋯` menu shows the referrer count
+inline and opens an explanation listing every referrer rather than a confirmation. Phase 4 cannot
+rewrite a reference, so a token deep in the alias graph is simply undeletable until Phase 7 — the
+panel says that rather than dangling an affordance that doesn't exist.
+
+Edits **persist across sessions** in `clientStorage`, stored as intent (target + op + new value +
+the imported value it was made against) rather than as an edited copy of the tree. That is what
+makes a rescan safe: it rebuilds from Figma and three-way-merges the overlay back over it. Where
+Figma hasn't moved the edit reapplies silently; where Figma caught up the entry retires; where both
+moved the local edit wins and is flagged `edit-conflict`; where the target is gone it is flagged
+`orphaned-edit`. There is no pre-scan dialog and no global keep-mine/take-theirs.
+
+The header chip reads **Local edits · N**, not "unsaved changes": `clientStorage` is per-device and
+unsynced, so the edits are durable on this machine, invisible on another, and not committed
+anywhere. "Copy whole tree as JSON" applies the overlay and remains the only durable exit until
+Phase 6.
+
 ### Layout
 
 | Path | What lives there |
 |---|---|
 | `src/tokens/` | Pure conversion logic — schema, collisions, subtypes, serialization. No `figma` global. |
 | `src/tokens/merge.ts` | Composes both imports, runs the shared collision pass, emits the manifest and report. |
+| `src/tokens/view.ts` | The merged browser's view model — set codes, the path-keyed merge, the group tree. |
+| `src/tokens/overlay.ts` | The local edit overlay (ADR-0004): entry shape, apply, and the rescan three-way merge. |
+| `src/tokens/edit.ts` | Per-type value parsing and validation. Pure; shared by the controller and the iframe. |
+| `src/tokens/references.ts` | Reference recognition and the inbound-reference index that blocks a delete. |
 | `src/figma/scan.ts` | The only module that calls the Figma Variables API; flattens it to a plain snapshot. |
 | `src/figma/scanStyles.ts` | The only module that calls the Figma Styles API; same boundary, four style kinds. |
-| `src/ui/` | The plugin iframe. |
+| `src/ui/` | The plugin iframe — `importView.ts` (Import tab), `tokens.ts` + `detail.ts` (Tokens tab), `state.ts` (view model). |
 | `test/` | Unit tests over `src/tokens/`, run with `node --test` via esbuild (no test framework dependency). |
 
 ## Why
