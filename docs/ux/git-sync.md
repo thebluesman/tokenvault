@@ -1,11 +1,12 @@
 # UX: Git sync (Phase 6)
 
-**Status:** Provisional — written ahead of the build. Six questions in §13 are open and marked; everything else is specified.
+**Status:** Settled — ready to build. All six questions in §13 are closed by Shyam's decisions of 2026-09-02; nothing in this doc is open. Not yet shipped, so not yet *Implemented*.
 **Owner:** `@ux-designer`
 **Covers:** PRD §6.4 (git sync, PAT auth, branch selection, pre-commit diff), §6.7 (plugin panel — sync status indicator, settings panel), build plan §9 Phase 6.
 **Builds on:** `docs/ux/local-editor.md` (Phase 4) and `docs/ux/apply-and-drift.md` (Phase 5) — same panel, same 460 × 640 px, same vocabulary. Read both first; this doc extends them and does not restate them.
 **Depends on:** ADR-0006 (`docs/adr/0006-git-sync.md`) — **Proposed**. Where this doc and the ADR disagree, the ADR wins and this doc gets amended.
 **Amends:** `docs/ux/apply-and-drift.md` §6.4. Phase 5 wrote temporary drift copy and said so; §10 here takes it back, exactly as that section predicted.
+**Revised 2026-09-02** after Shyam's decisions on §13. Four went as recommended — per-file whole-file divergence (§9), manual push and pull with automatic status checks (§8.5), one branch plus a link out to GitHub (§7.5), adopt-the-repo on first connect (§5.3). **Two were overridden, and both changed structure rather than wording:** the commit and diff surface is now a **third top-level panel tab, `Repo`, with a full `Review & push` screen inside it** — not a fourth section tab on the Changes list with a modal over it (§4, §6.2, §7.2); and bulk `Take Figma's` now gets an **inline confirm strip** before it stages anything (§10.4). §13 records both, including what the original recommendation was, so the trail stays readable.
 
 ---
 
@@ -33,7 +34,7 @@ Constraints carried forward and still load-bearing: 1,316 tokens, 11 sets, 460 p
 
 ### In scope (Phase 6)
 
-Connecting a Figma file to one GitHub repo and branch with a fine-grained PAT (§5); a settings surface for repo, branch, tokens folder and token (§5.2); live per-file sync status in the header and the Changes list (§6); a pre-commit diff and an editable commit message (§7); pull, materialized as pending changes that route through Phase 5's apply flow (§8); a per-file divergence state that blocks rather than merges (§9); and the drift rebaseline that Phase 5 deferred to here (§10).
+Connecting a Figma file to one GitHub repo and branch with a fine-grained PAT (§5); a settings surface for repo, branch, tokens folder and token (§5.2); live per-file sync status in the header and a new top-level `Repo` tab (§6); a pre-commit diff and an editable commit message, on their own screen inside that tab (§7); pull, materialized as pending changes that route through Phase 5's apply flow (§8); a per-file divergence state that blocks rather than merges (§9); and the drift rebaseline that Phase 5 deferred to here (§10).
 
 ### Explicitly out of scope
 
@@ -89,9 +90,12 @@ Plus two that aren't in the table because they aren't comparisons:
 ## 4. Screen inventory
 
 ```
-Header:  Folio design system        Import│Tokens   ⚙   ← gear is new (§5.2)
+Header:  Folio design system    Import│Tokens│Repo   ⚙
+                                            ▲       ▲
+                                    NEW tab │       └ gear is new (§5.2)
+                                      (§6.2)│
 
-State slot (§6):
+State slot (§6) — visible from every tab:
   ┌ not connected ────────────────────────────────────────┐
   │ [ 7 local · 3 changed ]        ← Phase 5, unchanged   │
   └───────────────────────────────────────────────────────┘
@@ -100,43 +104,65 @@ State slot (§6):
   │ [ ● In sync ]                  ← all three agree      │
   │ [ 7 local │ 1 diverged ]       ← amber, blocks sync   │
   └───────────────────────────────────────────────────────┘
-        │
-        └── tap ──▶ Changes list (Phase 5 §6.3, grown)
-                    ┌──────────────────────────────────┐
-                    │ ←  Changes                       │
-                    │ [Local 7][Changed 3][Conflicts 2]│
-                    │ [ Repo 3 ]      ← NEW 4th tab    │  A. §6.2
-                    │  … file rows …                   │
-                    │ [ Pull ]          [ Push… ]      │
-                    └──────────────────────────────────┘
-                         │                   │
-      ┌──────────────────┘                   └──────────┐
-      ▼                                                 ▼
- ┌────────────────────────┐              ┌────────────────────────┐
- │ Pulled 12 changes      │              │ Commit and push      ✕ │  B. Commit
- │ They're pending —      │  toast +     │ 9 changes → 3 files    │     modal
- │ apply to update Figma  │  Local tab   │ ☑ theme/light.json     │     (§7.2)
- └────────────────────────┘              │ Message [          ]   │
-                                         │ [Cancel] [Commit to main]│
-                                         └────────────────────────┘
-
- ⚙ ──▶ ┌──────────────────────────┐      ⚠ ──▶ ┌──────────────────────┐
+      │                        │
+ tap LEFT half            tap RIGHT half
+      │                        │
+      ▼                        ▼
+ ┌──────────────────────┐  ┌────────────────────────────────┐
+ │ ←  Changes           │  │ Repo tab                       │  A. §6.2
+ │ [Local 7][Changed 3] │  │ thebluesman/folio-tokens · main│
+ │ [Conflicts 2]        │  │ To push · 3 files              │
+ │  … token rows …      │  │ To pull · 2 files              │
+ └──────────────────────┘  │ ⚑ Diverged · 1 file            │
+   Phase 5, THREE tabs —   │ [ Pull 2 files ]  [ Review… ]  │
+   no Repo tab added       └────────────────────────────────┘
+   (§6.2)                       │              │
+                    ┌───────────┘              └──────────┐
+                    ▼                                     ▼
+       ┌────────────────────────┐         ┌────────────────────────────┐
+       │ Pulled 12 changes      │         │ ←  Review & push       3/3 │  B. §7.2
+       │ They're pending —      │ toast + │ 8 changes in 3 files → main│
+       │ apply to update Figma  │ Changes │ ☑ theme/light.json  6 ▲    │  a SCREEN
+       └────────────────────────┘  /Local │    … token rows …          │  in the
+                                          │ ⚑ 1 file can't be pushed   │  Repo tab
+                                          │ Message [               ]  │
+                                          │ [ Commit to main ]         │
+                                          └────────────────────────────┘
+                                                     │
+                                                     ▼
+ ⚙ ──▶ ┌──────────────────────────┐      ⚑ ──▶ ┌──────────────────────┐
        │ ←  Settings              │            │ ←  Diverged files    │  D. §9.2
-       │ GitHub                   │  C. §5.2   │ theme/light.json     │
-       │ Repository / Branch /    │            │ [Compare][Take repo] │
-       │ Tokens folder / Token    │            │          [Keep mine] │
+       │ GitHub                   │  C. §5.2   │ theme/light.json     │  a screen
+       │ Repository / Branch /    │            │ [Compare][Take repo] │  in the
+       │ Tokens folder / Token    │            │          [Keep mine] │  Repo tab
        └──────────────────────────┘            └──────────────────────┘
 
  First connect ──▶ ┌──────────────────────────┐
                    │ This repo already has    │  E. §5.3
-                   │ tokens. Start from which?│
-                   │ ( ) The repo  ( ) Figma  │
+                   │ tokens. Start from which?│     the phase's
+                   │ (•) The repo  ( ) Figma  │     only modal
                    └──────────────────────────┘
+
+ Bulk Take Figma's ──▶ ┌──────────────────────────────┐
+ (Changes / Changed)   │ Accept Figma's values for 40 │  F. §10.4
+                       │ tokens? [Cancel] [Accept 40] │     inline strip,
+                       └──────────────────────────────┘     not a dialog
 ```
 
-Phase 6 adds **one header control** (the gear), **one tab inside an existing screen** (Repo), **two full-panel overlays** (Settings, Diverged files), **two modals** (Commit, First connect) and **one segment on an existing chip**. It adds **no new tab to the panel** and **no new badge colour**.
+Phase 6 adds **one top-level tab** (Repo), **one header control** (the gear), **three screens inside the Repo tab** (Review & push, Diverged files, Compare), **one full-panel overlay** (Settings), **one modal** (First connect), **one inline confirm strip** (§10.4) and **one segment on an existing chip**. It adds **no new section tab to the Changes list** and **no new badge colour**.
 
-**Why no third top-level tab.** Phase 4 argued tabs are for places you work, and there are two: Import and Tokens. Sync is not a third place — it is a property of the tokens you are already looking at. Putting a Sync tab beside them would split *what needs me?* across two screens, which is the same objection Phase 5 §6.2 raised against a Drift tab, and it would leave the Tokens tab unable to answer the question on its own.
+### 4.1 Why the repo gets a top-level tab
+
+The first draft of this doc put sync state in a fourth section tab on Phase 5's Changes list, with the commit surface as a modal over it, and argued from Phase 4's rule that *tabs are for places you work* — sync being a property of the tokens rather than a place. **Shyam overrode that, and the override is right for a reason the first draft half-admitted itself:** §13.3 already flagged that the commit surface "is doing more than the apply dialog — file grouping, nested token rows, two text fields, per-file checkboxes. If it grows one more control it stops being a confirmation and should become its own screen." It was over that line on the day it was drafted.
+
+So the rule doesn't bend; it gets applied honestly. **Reviewing and pushing a commit is work.** You read a diff, choose which files go, write a message, and send something to a shared repo that other people will see. That is not a state readout and it is not an *am I sure* — it is a third place, and it belongs beside Import and Tokens.
+
+What that does **not** mean is moving state legibility into a tab. Two rules keep the original objection answered:
+
+- **The chip stays in the header, visible from every tab**, and remains the answer to *what needs me?* from anywhere in the panel. The Repo tab is where you act on it, never where you have to go to find out.
+- **The Changes list keeps its three Phase 5 tabs — Local, Changed, Conflicts — and does not gain a Repo tab.** It stays token-shaped and is still "the one place the whole state of the world is legible" for the Figma side. The repo side has its own place because it has its own unit (§3).
+
+**The chip's two halves now open two different surfaces, and that is an improvement, not a compromise.** Tapping the left half opens the Changes list; tapping the right half switches to the Repo tab. The divider was already doing semantic work (§6.1) — *left is Figma, right is the repo* — and it now has a destination on each side to prove it. A user who taps `↑ 3` lands where pushing happens; a user who taps `7 local` lands where local edits live. One chip, two halves, two places, no ambiguity about which is which.
 
 ---
 
@@ -144,7 +170,7 @@ Phase 6 adds **one header control** (the gear), **one tab inside an existing scr
 
 ### 5.1 The gear, and where sync settings live
 
-A **gear icon in the header**, right of the tabs, opening a full-panel Settings overlay with a back arrow. Not a tab (§4), not a section inside the Tokens tab (it has nothing to do with a token), not a modal (it has several fields and a connection test, and modals are for one decision — Phase 5 §5.2).
+A **gear icon in the header**, right of the tabs, opening a full-panel Settings overlay with a back arrow. Not a fourth tab — §4.1's test is whether it's a place you work, and configuring a repo is something you do once and then don't — not a section inside the Tokens tab (it has nothing to do with a token), not a modal (it has several fields and a connection test, and modals are for one decision — Phase 5 §5.2).
 
 The gear carries **one state mark and only one**: an amber `⚑` when the connection is broken (bad token, missing repo, missing branch). Not a count, not a green dot when healthy. A settings icon that is decorated when everything is fine teaches the user to ignore its decoration.
 
@@ -228,7 +254,7 @@ The moment a file is first pointed at a repo, ADR-0006 §4's state table calls e
 - **When the Figma file has never been scanned**, likewise no question: adopt the repo, and the Tokens tab's existing *"Scan the file first"* state handles the rest.
 - **"Review file by file" is deliberately not a third option.** It is what the panel already does, every day, after connecting: the Repo tab lists per-file states and the user works through them. Offering it here would be offering a mode for something that is just the product.
 
-*Marked open — §13.5. The recommendation above is adopt-the-repo-by-default; the alternative worth taking seriously is refusing to guess and opening the Repo tab with all 12 files diverged, which is more honest and much more work on day one.*
+*Decided 2026-09-02 as recommended — §13.5. The alternative that was on the table, refusing to guess and opening the Repo tab with all 12 files diverged, is rejected: more honest, and a miserable first five minutes.*
 
 ---
 
@@ -259,7 +285,7 @@ So: **one chip, split by a hairline divider. Left half is Figma. Right half is t
 
 Four decisions carry this:
 
-- **The divider is doing semantic work, not decoration.** It is what makes *in sync with what* answerable without a word. Left of it: this file. Right of it: the repo. Nothing crosses.
+- **The divider is doing semantic work, not decoration.** It is what makes *in sync with what* answerable without a word. Left of it: this file. Right of it: the repo. Nothing crosses — and since §4.1, each half also has its own destination on tap: left opens the Changes list, right switches to the Repo tab.
 - **`↑` and `↓` are file counts, not token counts, and the list says so in words.** They are the one piece of borrowed git vocabulary in the panel, and they are borrowed because every developer already reads them and they cost two characters where "3 files to push" costs fifteen. The moment the user taps through, the Repo tab spells it out: **3 files to push**. A glyph in the chip and a sentence in the list is the trade this slot has to make.
 - **`diverged` is a word, never a glyph.** It is the one state that blocks an operation, it is the one term the user won't know, and compressing it into a symbol would be economising on exactly the wrong thing.
 - **`● In sync` now means all three agree** — the tree matches Figma, and the repo matches what we'd write. It is a stronger claim than Phase 5's and it is finally a claim worth making, because there is a real source of truth to be in sync with. When only half is clean, the green dot stays attached to the left half and the right half speaks for itself.
@@ -271,14 +297,14 @@ Four decisions carry this:
 3. Then repo counts, then Figma counts.
 4. `● In sync` only when there is genuinely nothing in either half.
 
-### 6.2 The Repo tab in the Changes list
+### 6.2 The Repo tab
 
-Phase 5 called the Changes list *"the one place the whole state of the world is legible"* and expected Phase 6's sync state to land in the same slot. It does — as a **fourth section tab**, not a new screen.
+The Repo tab is the third top-level tab (§4.1) and the home screen of everything in this phase that touches the repo. It is where the repo half of the chip lands.
 
 ```
 ┌──────────────────────────────────────────────┐
-│ ←  Changes                                   │
-│ [ Local 7 ][ Changed 3 ][ Conflicts 2 ][Repo 3]│
+│ Folio design system   Import│Tokens│[Repo 3]⚙│
+│ [ 7 local · 3 changed │ ↑ 3 ]                │
 ├──────────────────────────────────────────────┤
 │ thebluesman/folio-tokens · main              │
 │ Checked just now · [ Check again ]           │
@@ -297,16 +323,25 @@ Phase 5 called the Changes list *"the one place the whole state of the world is 
 │    Changed in the repo and here.             │
 │    [ Sort this out ]                         │
 ├──────────────────────────────────────────────┤
-│ [ Pull 2 files ]        [ Push… ]            │
+│ [ Pull 2 files ]        [ Review… ]          │
 └──────────────────────────────────────────────┘
 ```
 
-- **Files, not tokens, at the top level** — this is the one screen in the panel where the unit is a file, because it is the screen about the repo (§3). Expanding a file shows its token rows in the same `before → after` shape as everywhere else, so the two units nest rather than compete.
+- **It is a tab, not an overlay, so the header and the chip stay put.** That is the point of the override: the Repo tab sits at the same level as Tokens, with the same header above it, and switching to it costs one tap from anywhere and never buries the state chip behind a back arrow.
+- **The tab label carries a count and the amber `⚑`, and nothing else.** `Repo 3` for files needing attention, `⚑ Repo` when anything is diverged, bare `Repo` when there is nothing to do. No green tick when clean — §12's rule.
+- **Files, not tokens, at the top level** — this is the one *place* in the panel where the unit is a file, because it is the place about the repo (§3). Expanding a file shows its token rows in the same `before → after` shape as everywhere else, so the two units nest rather than compete.
 - **The repo and branch are named at the top of the tab, every time.** A user with two Figma files and two repos should never have to remember which one this panel is talking to, and the sentence costs one line.
 - **`[ Check again ]` and a freshness line, but no staleness anxiety.** Unlike Phase 5's drift (*"scanned 12 minutes ago"*, hedged because a rescan is expensive), a status check is one request. It runs on panel open, on tab open, and after every push or pull. *"Checked just now"* is usually literally true.
 - **A diverged file cannot be expanded into token rows inline.** It gets `[ Sort this out ]`, which opens §9.2. Rendering a diverged file's tokens in the same list as pushable ones would put three different meanings on one arrow.
-- **`[ Push… ]` has an ellipsis; `[ Pull 2 files ]` does not.** Push opens the commit modal — there is a message to write and a review to do. Pull is one action with a fully described outcome, and it writes nothing to Figma or the repo (§8), so it needs no confirmation screen. The ellipsis is carrying that distinction honestly.
-- **Both buttons disable with a reason, never silently.** No changes → `[ Push… ]` is disabled with `Nothing to push` beneath it. Diverged files present → both are enabled but scoped, and §9.1 explains what they do.
+- **The push button is `[ Review… ]`, not `[ Push… ]`.** It goes forward to a screen, and the screen's own footer is what pushes. Naming it `Push…` when it opens a review would be promising a write from a button that only navigates — a smaller lie when the destination was a modal you could dismiss with a backdrop tap, and not worth telling now that the destination is a screen. The ellipsis stays, for the same reason it always did: something continues after this tap.
+- **`[ Pull 2 files ]` has no ellipsis and no review screen.** It is one action with a fully described outcome, and it writes nothing to Figma or the repo (§8). The asymmetry between the two buttons is deliberate and is the honest shape of the two operations.
+- **Both buttons disable with a reason, never silently.** No changes → `[ Review… ]` is disabled with `Nothing to push` beneath it. Diverged files present → both are enabled but scoped, and §9.1 explains what they do.
+
+### 6.3 What the Changes list does *not* gain
+
+Phase 5's Changes list keeps exactly its three section tabs — `Local`, `Changed`, `Conflicts` — and gains nothing in Phase 6 except two small things that are token-shaped and therefore belong there: the `from repo` tag on pulled entries (§8.2) and the inline confirm on bulk `Take Figma's` (§10.4). No Repo tab, no file rows, no push button.
+
+**This is the cleanest consequence of the override.** The Changes list answers *what have I got outstanding against Figma*, at token granularity. The Repo tab answers *what does the repo think*, at file granularity. Two questions, two units, two surfaces — where the first draft had one surface trying to hold both units behind a tab strip, and a modal on top of that holding a third view of the same data.
 
 ---
 
@@ -316,51 +351,62 @@ Phase 5 called the Changes list *"the one place the whole state of the world is 
 
 **Commit and push are one action in this panel, and the button says both.** Git separates them; Tokenvault has no local repo, no staging area, and nothing a commit could sit in unpushed — the Git Data sequence only becomes visible at the final ref update (ADR-0006 §8). Offering a commit that doesn't push would be modelling a state that does not exist. The button is `[ Commit to main ]` and the toast says pushed.
 
-### 7.2 The commit modal
+### 7.2 The Review & push screen
 
-A **modal card over the dimmed Changes list**, the same container as Phase 5's apply dialog, for the same reason: this answers *am I sure*, and the user does it often.
+**A screen inside the Repo tab, not a modal.** `[ Review… ]` pushes forward from §6.2 with a back arrow; the header and the chip stay where they are.
 
 ```
 ┌──────────────────────────────────────────────┐
-│▒▒▒▒▒▒▒▒▒▒ Changes list, dimmed ▒▒▒▒▒▒▒▒▒▒▒▒▒│
-│  ┌────────────────────────────────────────┐  │
-│  │ Commit and push                      ✕ │  │
-│  │ 8 changes in 3 files → main            │  │
-│  ├────────────────────────────────────────┤  │
-│  │ ☑ tokens/theme/light.json    6 changes▲│  │
-│  │    color.border.accent.default         │  │
-│  │      ■ #b4342a  →  ■ #c33a2e           │  │
-│  │    color.border.accent.strong          │  │
-│  │      ■ #c94a3f  →  ↗ {…red-warm.60}    │  │
-│  │    spacing.100          16  →  20      │  │
-│  │    + 3 more                            │  │
-│  │ ☑ tokens/theme/dark.json     1 change ▼│  │
-│  │ ☑ tokens/$manifest.json               ▼│  │
-│  │    Theme / Dark  ·  289 → 290 tokens   │  │
-│  ├────────────────────────────────────────┤  │
-│  │ ⚑ 1 file can't be pushed               │  │
-│  │  tokens/base/mode-1.json  diverged     │  │
-│  │  [ Sort this out ]                     │  │
-│  ├────────────────────────────────────────┤  │
-│  │ Message                                │  │
-│  │ [ Update Theme tokens                ] │  │
-│  │ [ 6 values in Theme/Light, 1 in      ] │  │
-│  │ [ Theme/Dark, 1 set added.           ] │  │
-│  ├────────────────────────────────────────┤  │
-│  │ [ Cancel ]      [ Commit to main ]     │  │
-│  └────────────────────────────────────────┘  │
+│ Folio design system   Import│Tokens│[Repo 3]⚙│
+│ [ 7 local · 3 changed │ ↑ 3 ]                │
+├──────────────────────────────────────────────┤
+│ ←  Review & push                             │
+│ 8 changes in 3 files → main                  │
+├──────────────────────────────────────────────┤
+│ ☑ tokens/theme/light.json        6 changes ▲ │
+│    color.border.accent.default               │
+│      ■ #b4342a  →  ■ #c33a2e                 │
+│    color.border.accent.strong                │
+│      ■ #c94a3f  →  ↗ {…red-warm.60}          │
+│    spacing.100              16  →  20        │
+│    + 3 more                                  │
+│ ☑ tokens/theme/dark.json         1 change  ▼ │
+│ ☑ tokens/$manifest.json                    ▼ │
+│    Theme / Dark  ·  289 → 290 tokens         │
+│                                              │
+│ ⚑ 1 file can't be pushed                     │
+│  tokens/base/mode-1.json  diverged           │
+│  [ Sort this out ]                           │
+├──────────────────────────────────────────────┤
+│ Message                                      │
+│ [ Update Theme tokens                      ] │
+│ [ 6 values in Theme/Light, 1 in Theme/     ] │
+│ [ Dark, 1 set added.                       ] │
+├──────────────────────────────────────────────┤
+│ [ Commit to main ]                           │
 └──────────────────────────────────────────────┘
 ```
 
-Decisions:
+**Why a screen (the override, §13.3).** The first draft made this a modal card over the dimmed Changes list, on the grounds that it answers *am I sure* and modals in this panel are for one decision. It doesn't, and it isn't one decision. It carries file grouping, expandable nested token rows, per-file checkboxes, two editable text fields with live-regenerating content, a blocked-file section with its own navigation, and a `[ Sort this out ]` link that has to open *another* surface. That is a workspace wearing a dialog's clothes, and §13.3's own caveat said as much before Shyam did. A modal that you can't safely dismiss by tapping the backdrop — because you've typed a commit message into it — has already stopped being a modal.
 
-- **Files at the top level, tokens nested and collapsed by default except the first.** The commit is file-shaped (§3), the review is token-shaped, and a user who wants to check one value should not have to expand three files to find it. The first file opens because a modal that opens fully collapsed makes the user work to see anything at all.
-- **`+ 3 more` inside a file, not a scrollbar race.** Each file shows its first three token rows and a count; tapping expands in place. A 200-token commit stays readable, and the list still scrolls inside the card with the footer pinned — Phase 5 §5.2's rule, unchanged.
+What the screen shape buys, concretely:
+
+- **The back arrow is unambiguous and non-destructive.** Going back keeps the checkbox state and the typed message; nothing is lost and nothing is written. A modal's `✕` and backdrop tap both had to mean *discard my message*, which is a bad thing for a stray tap to mean.
+- **Full panel height for the diff.** The modal card had to inset itself from all four edges, so a three-file commit scrolled inside a box inside a screen. The list now scrolls against the panel, footer pinned.
+- **`[ Sort this out ]` navigates instead of stacking.** It goes forward to §9.2 in the same tab and comes back with the back arrow. In the modal draft it was a screen opening over a modal over a screen — three layers deep to resolve one file.
+- **`[ Cancel ]` is gone; only `[ Commit to main ]` remains in the footer.** Back is the way out, as on every other screen in the panel. A footer with one action, which writes, and one navigation control, in the header, which doesn't, keeps the write verb alone and unmissable.
+
+The rest is unchanged from the draft, because the content was never the problem:
+
+- **Files at the top level, tokens nested and collapsed by default except the first.** The commit is file-shaped (§3), the review is token-shaped, and a user who wants to check one value should not have to expand three files to find it. The first file opens because a screen that opens fully collapsed makes the user work to see anything at all.
+- **`+ 3 more` inside a file, not a scrollbar race.** Each file shows its first three token rows and a count; tapping expands in place. A 200-token commit stays readable, footer pinned — Phase 5 §5.2's rule, now applied to a screen rather than a card.
 - **Per-file checkboxes, all checked.** File-level, not token-level: git cannot commit half a file, and a checkbox that implies otherwise is a lie about the unit. Unchecking is the escape hatch for "push the theme change, not the manifest change yet".
-- **This is the same row component as the apply dialog**, deliberately — Phase 5 §10 said to build it as `{ target, before, after, state }` and keep it out of Phase-5-specific modules, precisely so this screen could have it. Same swatches, same `↗` reference preview, same left-truncated paths.
-- **Diverged files appear, above the button, blocked and unchecked** — never hidden. Same treatment as the apply dialog's blocked rows: the failure is visible before the write, not after.
+- **This is the same row component as the apply dialog**, deliberately — Phase 5 §10 said to build it as `{ target, before, after, state }` and keep it out of Phase-5-specific modules, precisely so this screen could have it. **The override moved the surface, not the components.** Same swatches, same `↗` reference preview, same left-truncated paths, same blocked-row treatment.
+- **Diverged files appear, above the message field, blocked and unchecked** — never hidden. Same treatment as the apply dialog's blocked rows: the failure is visible before the write, not after.
 - **The manifest row explains itself.** `tokens/$manifest.json` means nothing to a designer, so its nested line says what changed in human terms — *"Theme / Dark · 289 → 290 tokens"*, or *"1 set added"*. A file in the diff that the user cannot interpret is a file they will learn to ignore.
 - **`$import-report.json` is never in this list**, and there is no toggle to show it (ADR-0006 §5). It is not hidden; it is not part of the repo.
+
+**The one thing a screen costs, and how it's paid.** A modal's dimmed backdrop advertises *you are about to do something*; a screen doesn't. So the write button carries that weight alone: `[ Commit to main ]` names the branch, full-width, pinned, and it is the only primary control on the screen. Naming the destination in the button is what a backdrop was doing implicitly, and it does it better — a dim tells you something is happening, the branch name tells you what.
 
 ### 7.3 The commit message
 
@@ -388,13 +434,13 @@ The chip's right half drops to nothing; if the left half is also clean it become
 
 > **`main` moved while you were writing.** Nothing was pushed. `[ Check again ]`
 
-Then the status re-runs, and either the push is still clean (retry) or files are now diverged (§9). This is the one error where the plugin should offer the next step as a button, because there is exactly one sensible next step.
+Then the status re-runs, and either the push is still clean (retry) or files are now diverged (§9). This is the one error where the plugin should offer the next step as a button, because there is exactly one sensible next step. **The Review & push screen stays open with the message and the checkboxes intact** — a screen that survives its own failure is the second thing the override bought, and the reason the copy can say *nothing was pushed* and leave the user one tap from trying again.
 
 **Everything else** — §11's table. No partial commit state exists (ADR-0006 §10), so failure copy can always say *nothing was pushed* and mean it.
 
 ### 7.5 The one link out
 
-`[ View commit ↗ ]` on the success toast, and a `[ Open on GitHub ↗ ]` in Settings. That is the entire git-client surface area Phase 6 offers, and it is the deliberate answer to "shouldn't there be a history view / a PR button / a branch creator": **the user already has a git client, and it is better than anything a 460 px panel will build.** Tokenvault's job is to get tokens in and out of the repo legibly; browsing history is not that job. *Open — §13.4.*
+`[ View commit ↗ ]` on the success toast, and a `[ Open on GitHub ↗ ]` in Settings. That is the entire git-client surface area Phase 6 offers, and it is the deliberate answer to "shouldn't there be a history view / a PR button / a branch creator": **the user already has a git client, and it is better than anything a 460 px panel will build.** Tokenvault's job is to get tokens in and out of the repo legibly; browsing history is not that job. *Decided 2026-09-02 as recommended — §13.4. No branch creation, no PR flow, one link out.*
 
 ---
 
@@ -457,7 +503,7 @@ The deferred case from ADR-0006 §11, and the one most likely to be read as a bu
 
 ### 8.5 Auto-pull
 
-**No.** Status is checked automatically; pulling is not. A pull creates pending work — entries the user then has to review and apply — and an app that silently generates work-in-progress on open is an app you learn to distrust. The badge saying `↓ 2` is enough: it is visible, it is accurate, and acting on it takes one tap. *Open — §13.2.*
+**No.** Status is checked automatically; pulling is not. A pull creates pending work — entries the user then has to review and apply — and an app that silently generates work-in-progress on open is an app you learn to distrust. The badge saying `↓ 2` is enough: it is visible, it is accurate, and acting on it takes one tap. *Decided 2026-09-02 as recommended — §13.2. Manual push, manual pull, automatic status check.*
 
 ---
 
@@ -517,7 +563,7 @@ Reached from `[ Sort this out ]` in the Repo tab or the commit modal. Its own fu
 
 - **`1/2` in the header, with the next file arriving after a choice.** Two diverged files is a queue, not a list to navigate; resolving one advances. Backing out at any point leaves the rest unresolved, and the Repo tab still shows them.
 
-*The whole of §9 is marked open — §13.1. This is the recommendation, not a settled design.*
+*Decided 2026-09-02 as recommended — §13.1. Whole-file, pick-a-side, per-file blocking. §9 is settled.*
 
 ---
 
