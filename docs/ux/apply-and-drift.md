@@ -420,7 +420,16 @@ So the Phase 4 post-scan banner just gains a count:
 
 ### 6.2 Where it shows in the tree
 
-**On the value line, as `⚑ changed`**, in the existing `.badge.needs` amber. Not a new colour — Phase 4's rule holds: there is no third badge colour, and "changed in Figma" is the same *needs you* the report already speaks.
+*Shyam, 2026-09-02 (§9.11): reuse Phase 4's `⚑` flagged-chip pattern. No new glyph, no new colour, no dedicated drift tab. Consistency with the existing pattern wins.*
+
+**On the value line, as `⚑ changed`**, in the existing `.badge.needs` amber — the same `⚑` badge Phase 4 already puts on `collision`, `dangling-reference`, `partial-token`, `edit-conflict` and `orphaned-edit`. Not a new colour and not a new mark: Phase 4's rule holds that there is no third badge colour, and "changed in Figma" is the same *needs you* the report already speaks.
+
+The alternatives were a distinct drift glyph (a sync arrow, say) and a dedicated Drift tab, and both were rejected for the same reason. A second attention mark trains the user to parse two vocabularies at a glance in a 460 px column, which is exactly the failure the single `⚑` was designed to avoid — and a tab would split "things needing my attention" across two places, so that no single screen ever answers *what needs me?*. Drift is not a different kind of alert; it is one more report kind, and it inherits everything that already works for the others:
+
+- the **`⚑ N flagged` filter chip** counts it (Phase 4 §4.6) — filtering to flagged surfaces drifted lines alongside conflicts, which is the right grouping, because "rows needing a decision" is the actual task;
+- **group rows roll it up**, exactly as they do for flags today;
+- the **post-scan banner's `[ Review ]`** sets that same chip (§6.1);
+- it lands on the **value line, not the path**, like every other flag.
 
 The value preview on a drifted line keeps showing the **token's** value, with Figma's value on a muted second line only when the line is expanded. Rationale: the tree is a view of the token file. It should always show what the tokens say; the badge is what says Figma disagrees. Showing Figma's value in the primary slot would make the tree quietly stop being a token browser.
 
@@ -430,7 +439,7 @@ The value preview on a drifted line keeps showing the **token's** value, with Fi
     Dark   #f0a19a   ⚑ changed
 ```
 
-Group rows roll the badge up, exactly as they do for flags today.
+The one thing drift adds to the pattern is the **word next to the flag**. `⚑ changed`, `⚑ conflict`, `⚑ orphaned` share a mark and are told apart by a single lowercase word — which is what makes one badge colour survive five meanings.
 
 ### 6.3 The header state slot and the Changes list
 
@@ -440,7 +449,7 @@ Phase 4's header chip read `Local edits · 7`. Phase 5 has up to three counts to
 
 | Situation | Chip |
 |---|---|
-| Nothing anywhere | `In sync` (muted, not a button — but still tappable, opening an empty Changes list) |
+| Nothing anywhere | `● In sync` — **green** (§8), low-emphasis, not styled as a button but still tappable, opening an empty Changes list |
 | Local edits only | `7 local` |
 | Figma changes only | `3 changed` |
 | Both | `7 local · 3 changed` |
@@ -557,21 +566,52 @@ Everything in Phase 5 maps onto vocabulary that already exists:
 
 - `⚑ changed` is `.badge.needs` — the **same amber** as `flagged`, `conflict`, `orphaned`. Phase 4 banned a third badge colour and Phase 5 does not get an exemption. "Changed in Figma" is not more urgent than a conflict, it's the same *needs you*.
 - The **comparison block** (§6.4) is the `edit-conflict` block with one fewer row. One component, two callers.
-- The **apply dialog** is the detail overlay's chrome (back arrow, full panel, no backdrop) with the local-edits list's row shape. No new overlay style.
-- The **toast** is the existing toast, doing what it already does for delete: report + undo, 10 seconds.
+- The **apply dialog** reuses the local-edits list's row shape inside a new, deliberately small container (§5.2). It is the one place Phase 5 adds a modal, and the exemption is argued there.
+- The **toast** is the existing toast — but for canvas writes it is **report only, no action button** (§5.5). The `[ Undo ]` affordance stays on the local-edit toasts it already serves.
 - `.entry` (amber left border) carries every blocking error, as it does today.
 - The **header state slot** keeps its role: *what state is my work in*. Phase 4's chip was its first occupant; Phase 5's is its second; Phase 6's sync pill is its third.
 
-Three genuinely new pieces:
+Four genuinely new pieces:
 
-1. **A destructive red** — for `[ Delete Variable ]` (§5.7) and the `Delete in Figma…` menu label, and **nowhere else**. The rule that matters: it is a **button and menu-label colour, not a state colour**. Phase 4 banned a third *badge* colour and that ban is intact — nothing in a row, a badge, or a banner turns red. Red in this panel means exactly one thing: *this control destroys something in the file, and the plugin can't undo it.* If a second control ever wants it, that's a sign the second control needs the §5.7 treatment too, not that the palette should grow. `[ Cancel ]` beside it stays a plain text button — no competing fill, so the destructive button is the only thing with weight on that screen and it can't be hit by muscle memory aiming at a primary blue.
+1. **A destructive red** — for `[ Delete Variable ]` (§5.7) and the `Delete in Figma…` menu label, and **nowhere else**. The rule that matters: it is a **button and menu-label colour, not a state colour**. Phase 4 banned a third *badge* colour and that ban is intact — nothing in a row or a banner turns red. Red in this panel means exactly one thing: *this control destroys something in the file, and no second apply brings it back.* If a second control ever wants it, that's a sign the second control needs the §5.7 treatment too, not that the palette should grow. `[ Cancel ]` beside it stays a plain text button — no competing fill, so the destructive button is the only thing with weight on that screen and it can't be hit by muscle memory aiming at a primary blue.
 
 2. **The selection bar** — pinned bottom, one line, appears and disappears with the canvas selection. It's the only piece of chrome in the plugin that reacts to the canvas, so it should be visually quiet: same background as the header, a top border, no accent fill. It must not animate in and out; at this size, a bar that slides is a bar that's in your way.
-3. **A green.** `In sync` is the first genuinely *good* state the panel has ever had, and rendering it in the same grey as everything else wastes the one moment the user gets confirmation. Proposal: a muted success colour used **only** on the header chip's `In sync` state and nowhere else — not a badge, not a row treatment. **[ARCH-adjacent, but really a taste call — §9.6.**]
+3. **The apply dialog's modal container** — the panel's first dimmed backdrop. One card, one decision, three ways out. §5.2 argues why a confirmation earns what an editor didn't.
+
+4. **A green for `In sync`.** *Shyam, 2026-09-02 (§9.6): yes — add it, placement and shade my call.*
+
+#### The green, and the status colour language it completes
+
+`In sync` is the first genuinely *good* state the panel has ever had. Rendering it in the same grey as everything else spends the one moment the user gets confirmation on nothing. With it, the panel finally has a complete four-value colour language, and each colour answers one question:
+
+| Colour | Means | Where it appears |
+|---|---|---|
+| **Grey** | Neutral information. Not a state. | Set codes, subtype tags, muted second lines, `already matches` rows |
+| **Green** | Agreed. Token and Figma match as of the last scan; nothing to do. | Below |
+| **Amber** (`.badge.needs`) | Needs you. Flagged, changed in Figma, conflict, orphaned. | Badges, `.entry` blocks, the header chip when counts are non-zero |
+| **Red** | This control destroys something. | `[ Delete Variable ]` and `Delete in Figma…` only (§8.1 above) |
+
+**Where the green goes** — three places, and the list is closed:
+
+1. **The header chip, `● In sync`** — a filled dot plus the words, in green, replacing Phase 4's muted grey. This is the primary home: it is the answer to *what state is my work in*, and "none, you're clean" deserves to look different from "we haven't checked".
+2. **The detail overlay's per-set section** — a green `● In sync` line where a drifted or edited set shows its comparison block. This is the per-token green Shyam asked for, and the overlay is the right place for it: it is where the user has already asked a question about one specific token, so an answer is warranted and there is room to give it.
+3. **The apply dialog's `already matches` rows** (§5.3) — the checkbox slot renders a green `●` instead of an empty box. Those rows exist to say *this part is fine*; green says it in the same glance as the count.
+
+**Where it explicitly does not go** — and this is the load-bearing half of the decision:
+
+- **Not on tree rows or value lines.** 1,316 tokens, the overwhelming majority in sync: a green dot on every line is a wall of green that means nothing, drowns the ~15 amber badges that *do* mean something, and burns the panel's scarcest resource — horizontal space in a 460 px column. **In the tree, in-sync is signalled by the absence of a badge**, exactly as it is today. That is not a compromise; a clean row already reads as clean, and adding a mark to say so makes the flagged rows harder to find, not easier.
+- **Not on group rows**, for the same reason at one level up.
+- **Not as a `.badge` variant.** Phase 4's "no third badge colour" rule was about competing calls for attention, and it stands. Green here is a *confirmation* colour, not an attention colour — which is exactly why it belongs on a chip, a section header, and a checkbox slot, and nowhere a badge would go.
+
+**Shade.** A muted, desaturated success green — roughly the amber's counterpart in weight, not a saturated "success toast" green. It reads at 11 px on both the panel's light and dark backgrounds, it never appears as a fill (text and dot only, no green pills, no green buttons), and the primary action button stays blue. The concrete value is `@frontend-engineer`'s to pick against the existing amber token; the constraint is *quieter than the amber it sits beside*, since a confirmation must never out-shout a warning.
+
+**One consequence for §6.3's chip table:** the `In sync` row there says *muted, not a button — but still tappable*. That still holds, with one change — it is now green rather than muted grey, and it stays a low-emphasis element. Green is the reward for a clean state, not an invitation to go press something.
 
 ---
 
-## 9. Open questions for Shyam
+## 9. Questions — decided and still open
+
+**Still open after the 2026-09-02 pass: three, and all three are `[ARCH]` rather than taste** — §9.2 (does apply create missing Variables/Styles), §9.5 (passive change detection), §9.9 ("Take Figma's" in bulk). Everything else below is closed; the numbering is kept so earlier references still resolve.
 
 1. ~~**How much ceremony should the apply dialog have?** Options: (a) always; (b) dialog for multi-target, direct write for a single token; (c) a "don't confirm single tokens" toggle.~~
    **Resolved 2026-09-02 — Shyam: always confirm, no shortcut.** Option (a). §5.2 now states it as an invariant rather than a default: no code path writes to Figma without the dialog, including single-token applies, drift re-applies (§6.4), and bulk re-applies (§6.5). The "don't ask again" idea is off the table, not deferred.
