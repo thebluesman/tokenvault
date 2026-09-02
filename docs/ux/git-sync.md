@@ -714,7 +714,7 @@ Phase 6 introduces **no new colour and no new badge**, and exactly **one new com
 Two additions that are not colours:
 
 1. **`↑` and `↓` glyphs**, in the chip's right half only (§6.1). Never in the tree, never on a token row, never on a file row in the Repo tab — those say **To push** and **To pull** in words. The glyphs exist because the chip has 140 px; nothing else in the panel has that excuse.
-2. **The chip's divider.** A hairline, the same weight as the panel's other separators. It is not a border and does not turn the chip into two controls — tapping either half opens the Changes list, on the tab matching the half you tapped.
+2. **The chip's divider.** A hairline, the same weight as the panel's other separators. It is not a border, but since §4.1 it *does* make the chip two tap targets: the left half opens the Changes list, the right half switches to the Repo tab. One chip, one visual object, two destinations that match the two halves' meanings.
 
 **Green does not spread.** No green on a pushed file, no green tick on an in-sync file row. Phase 5 §8's rule holds: in a list, in-sync is the absence of a mark. In-sync files are not listed in the Repo tab at all, which is the strongest version of the same idea.
 
