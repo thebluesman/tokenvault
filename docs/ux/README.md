@@ -8,6 +8,7 @@ fixtures in `test/fixtures/`, not against a hypothetical schema.
 | Doc | Phase | Status |
 |---|---|---|
 | [`local-editor.md`](local-editor.md) | 4 — Local editor | Provisional |
+| [`apply-and-drift.md`](apply-and-drift.md) | 5 — Figma application + drift | Provisional |
 
-Not yet written: Figma application + drift (Phase 5), git sync and the pre-commit diff view
-(Phase 6), theming/aliasing/math (Phase 7), sync status and settings panel (Phase 9).
+Not yet written: git sync and the pre-commit diff view (Phase 6), theming/aliasing/math
+(Phase 7), sync status and settings panel (Phase 9).
