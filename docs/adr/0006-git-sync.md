@@ -1,8 +1,11 @@
 # ADR-0006 — Git sync over the GitHub REST API (PAT)
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-09-02
+**Accepted**: 2026-09-02 — Shyam resolved every open question that was his to make; the one item still open is an API fact to verify during implementation, not a decision. See [Open questions](#open-questions-not-decided-here).
 **Owner**: @tech-lead
+
+> Shyam resolved this ADR's six open questions on 2026-09-02, before acceptance. They are folded into the decision sections below and marked *(resolved 2026-09-02)*: divergence is per-file, whole-file pick-a-side and only the diverged file blocks (§6); first connect asks once whether to adopt the repo (§6); push and pull are manual, with no auto-pull (§5); the diff/commit view is its own surface (§8); Tokenvault is a sync client, not a git client (§9); and a bulk *Take Figma's* gets its own confirmation (§7).
 
 ## Context
 
@@ -100,7 +103,10 @@ No content is downloaded to answer *whether* something changed. Content is fetch
 
 This is also PRD §6.7's sync status indicator, computed rather than remembered.
 
-### 5. Push commits the whole tree; pull materializes as overlay entries
+### 5. Push commits the whole tree; pull materializes as overlay entries — both manual *(resolved 2026-09-02)*
+
+**Push and pull happen when the user asks, and never otherwise. Auto-pull is rejected.** Sync *status* (§4) refreshes on its own — it is one cheap call and the answer is only useful when it is current — but nothing moves in either direction without an explicit action. Automatic push would make the repo the live state and delete the "uncommitted work" concept §2 just established; auto-pull would queue overlay entries the user did not ask for, ahead of an apply flow (ADR-0005 §6) that assumes every pending change has an author. §10's no-polling reasoning is unchanged: a refresh is not a transfer.
+
 
 The two directions are deliberately asymmetric, because the two artifacts are.
 
@@ -140,7 +146,13 @@ Two reasons, and the second is the real one:
 
 The escape hatches are ordinary git ones, offered explicitly: pull the remote file and discard local changes for it, or push local over remote as a normal commit whose parent is the current head. Both are per-file, for the same reason ADR-0004 §4 refused a global keep-mine/take-theirs — a file-wide answer to a token-level question is a coin flip.
 
-**What the divergence UX actually looks like is Shyam's call, not this ADR's** — see [Open questions](#open-questions-not-decided-here). This section fixes only that the plugin does not merge content on its own.
+**Divergence resolves per file, whole file, pick a side** *(resolved 2026-09-02)*. The unit of the choice is the unit of the commit (§5): for each diverged path the user picks *take the repo's* or *keep mine*, and that answer applies to the whole file. There is no per-token resolution, because a per-token answer is a merge with extra steps and needs the per-token base §3 does not store.
+
+**Only the diverged file blocks.** A sync that touches ten files and finds one diverged pushes the other nine and names the one. Blocking the whole push on one file would make a single stale set unfixable without resolving it first, which is friction with no safety payoff — the nine clean files are fast-forwards by §4's own table.
+
+**First connect asks once** *(resolved 2026-09-02)*. Pointing a file with existing tokens at a repo that already has a `tokens/` tree makes §4's table call every file diverged, which is technically right and useless as a bootstrap. So connect asks a single question — *adopt this repo's tokens as your starting point?*, preselected — and answering yes seeds `blobShas` from the fetched tree, making the repo the base and reducing everything to a normal pull. Answering no leaves every file diverged and hands the user §6's per-file choice. **If the repo has no `tokens/` tree, the question is skipped** and the first push is the bootstrap. This is one question, at one moment, and it never appears again for that file.
+
+The wording and placement of all three are `@ux-designer`'s; what is fixed here is the granularity, the non-blocking behaviour, and that the plugin merges no content on its own.
 
 ### 7. Drift becomes repo-vs-Figma, and the Phase 5 framing is retired
 
@@ -154,6 +166,8 @@ ADR-0005 §8 recorded the limit and the exit: *"True drift becomes definable at 
 `src/tokens/drift.ts` takes a baseline tree as an argument today; it needs no new logic, only a different argument. The three entry kinds (`drift-value`, `drift-added`, `drift-removed`) are unchanged.
 
 Consequence for `@ux-designer`, flagged rather than designed here: **`docs/ux/apply-and-drift.md` §6.4's temporary copy comes down.** That section says so itself — *"Phase 6 takes it back… `Re-apply token` becomes the honest label, and `Take Figma's` really does produce a local edit that needs committing."* Once the repo holds a value independent of Figma, `At your last scan` / `Now in Figma` is no longer what the two rows contain; `Your token` / `Now in Figma` is. Writing that is UX's, and it should be written against the connected case with the disconnected case still falling back to Phase 5's wording.
+
+**A bulk *Take Figma's* gets its own confirmation step** *(resolved 2026-09-02)*. Resolving one drifted token in place needs no ceremony, but accepting Figma's values across a whole set stages many overlay entries at once, and the commit modal downstream is not a substitute — by the time the user reaches it the edits already exist, and unpicking them is N undos. Shyam's call, over the cheaper recommendation of relying on the commit step: a bulk action that stages many changes is confirmed explicitly, with a count. Same reasoning as ADR-0005 §6's always-confirm rule, applied to the one action here that fans out.
 
 One thing the ADR does pin, because it is semantics rather than copy: **an unconnected file keeps Phase 5's drift exactly.** Connecting a repo is what upgrades drift, and it should be visible that it did.
 
@@ -176,11 +190,16 @@ Three properties are load-bearing and worth pinning:
 
 Commit message: a generated one-liner plus a body listing the changed sets and counts, editable in the diff view before committing. Shape is UX's; that the user can edit it is this ADR's, because a repo whose history is 200 identical `Update tokens` commits is a history nobody reads.
 
-### 9. Branch selection reads; it does not write
+**The diff/commit view is its own surface, not a grown Changes panel** *(resolved 2026-09-02)*. Shyam's call, over the recommendation to extend Phase 5's Changes list: a commit is meaningfully different from an apply. It groups by file rather than by token, it carries a message field and a push button, and it is a review of what leaves the machine rather than a list of what is pending on it. Bending one panel to serve both would make the cheaper surface worse. The Changes panel keeps its sync status pill and links across; the commit view is where a push is reviewed and sent. Component reuse below the surface — the same row and value-pair rendering ADR-0005 §6 built — is expected and is `@ux-designer`'s to decide, but the two are separate screens.
+
+### 9. Branch selection reads; it does not write — Tokenvault is a sync client, not a git client *(resolved 2026-09-02)*
+
+Shyam's call, and it settles §9 permanently rather than for Phase 6 only: **one branch, push and pull, and a link out to GitHub for anything deeper.** No in-plugin branch creation, no PR flow, no merge, no history browser. Where a user needs one of those, the plugin opens the repo, the branch, or the commit in GitHub and lets GitHub be the git client. That keeps the surface honest about what it is, and keeps review state — which sits next to the team semantics PRD §4 excludes for v1 — out of the plugin entirely.
+
 
 The settings panel offers a branch picker populated from `GET /repos/{owner}/{repo}/branches`, and every sync operation targets the configured branch. Changing branch invalidates `tokenvault:sync:<file-id>` — a different branch is a different base — and the next status check re-establishes it.
 
-**No branch creation, no PR flow, no merge.** PRD §6.4 asks for "sync against a specific branch, not just `main`", which this satisfies exactly. Growing a PR flow means modelling review state, and review state is uncomfortably close to the team semantics PRD §4 rules out for v1. Whether it should grow one anyway is Shyam's call, in [Open questions](#open-questions-not-decided-here).
+**No branch creation, no PR flow, no merge.** PRD §6.4 asks for "sync against a specific branch, not just `main`", which this satisfies exactly. Growing a PR flow means modelling review state, and review state is uncomfortably close to the team semantics PRD §4 rules out for v1.
 
 ### 10. Rate limits and failure are handled explicitly, never silently
 
@@ -197,7 +216,8 @@ Named so they are visibly out of scope rather than accidentally missing.
 - **OAuth.** PRD §6.4 and §11 put it in v2, and it is the only part of this design that would need a hosted component. §12 says why that matters.
 - **Other providers.** GitHub only (PRD §4). `api.ts` is small enough to grow a second implementation later; nothing in this ADR designs toward it.
 - **Style Dictionary and the Actions workflow.** Phase 8. What Phase 6 owes it is a committed `tokens/` tree with a stable shape, which §5 delivers.
-- **Automatic or scheduled push.** Open question below; Phase 6 builds manual push and pull only.
+- **Automatic or scheduled push, and auto-pull.** Decided against, not deferred — §5. Push and pull are manual; only status refreshes on its own.
+- **Branch creation, PR flow, merge, history browsing.** Decided against — §9. GitHub is the git client; Tokenvault links out.
 - **Committing the import report, or any per-scan state.** §5.
 
 ## Consequences
@@ -207,7 +227,9 @@ Named so they are visibly out of scope rather than accidentally missing.
 - Pull introduces **no new store and no new write path** — it produces overlay entries and hands them to Phase 5's apply flow. This is the single biggest saving in the phase, and it is a direct return on ADR-0004 §1 and ADR-0005 §1.
 - The overlay is formally demoted to "uncommitted changes", answering ADR-0004's first open question. The header chip's Phase 4 wording (*local edits*, not *unsaved*) becomes literally correct: Phase 6 is where "saved" starts meaning something.
 - Drift stops being a local changelog and becomes divergence from a source of truth — which retires the reconciled copy in `docs/ux/apply-and-drift.md` §6.4 and hands `@ux-designer` a rewrite that doc already predicted.
-- A diverged file blocks rather than merges. That is friction, deliberately, and it will be felt first by whoever edits tokens on two machines. §6 names the escape hatches; if the friction turns out to be routine rather than rare, that is evidence for a real merge, not a reason to have guessed one now.
+- A diverged file blocks rather than merges, and blocks *alone* — the rest of the push goes through. That is friction, deliberately, and it will be felt first by whoever edits tokens on two machines. §6 names the escape hatches; if the friction turns out to be routine rather than rare, that is evidence for a real merge, not a reason to have guessed one now.
+- `@ux-designer` now has three surfaces to design for Phase 6, not one: the commit view (§8, its own screen), the per-file divergence chooser (§6), and the one-time connect question (§6). Plus the bulk-confirm on *Take Figma's* (§7) and the retired §6.4 copy in `docs/ux/apply-and-drift.md`. Phase 6 is a bigger UX phase than Phase 5 was.
+- Nothing in the plugin ever moves data without being asked (§5). Sync status is the only thing that refreshes on its own, and it transfers nothing.
 - Push writes to a shared repo, so Tokenvault now has two destinations that other people can see. Figma got confirmation, ordering and a per-entry report (ADR-0005 §6); git gets a reviewable diff, an editable message, and `force: false`.
 - The PAT is now the most sensitive thing the plugin holds. §1's three rules are the whole mitigation, and they are code-level, not process-level.
 - **No infra implication, and this is the phase where that was in question.** GitHub REST, a PAT, and files in a repo. No relay, no server, no scheduled worker — see §12.
@@ -240,19 +262,30 @@ Nothing here has a floor above $0. The one design that would is **OAuth**, which
 - **Commit `$import-report.json` along with the tokens.** Rejected. Every rescan would produce a repo diff dominated by timestamps and counts, which is how a token history becomes unreadable.
 - **Store the PAT in the iframe's `localStorage` to avoid passing it over `postMessage`.** Rejected. PRD §6.4 and §7 both specify `clientStorage`, iframe storage in Figma has been unreliable across versions, and the token would then be invisible to the sandbox that orchestrates every operation. The message-channel exposure is real and is mitigated in §1 rather than traded for a worse store.
 - **Build the OAuth relay now and skip PAT friction.** Rejected — PRD §11 defers it, and §12 above says why the zero-cost constraint makes "no component" categorically different from "a free component".
-- **Ship branch creation and a PR flow.** Rejected for Phase 6 (§9). PRD §6.4 asks for branch *selection*; a PR flow means modelling review, which sits next to the team semantics PRD §4 excludes. Left open for Shyam rather than silently foreclosed.
+- **Ship branch creation and a PR flow.** Rejected (§9), by Shyam, not just for Phase 6. PRD §6.4 asks for branch *selection*; a PR flow means modelling review, which sits next to the team semantics PRD §4 excludes. Tokenvault is a sync client and links out to GitHub for the rest.
+- **Grow the diff/commit view out of Phase 5's Changes panel.** Rejected (§8) by Shyam, over this ADR's own recommendation. Cheaper and more consistent, but a commit groups by file, carries a message and a push button, and reviews what leaves the machine — enough difference that one panel serving both would degrade the simpler one. Components are shared; the screens are not.
+- **Let the commit modal stand in for confirming a bulk *Take Figma's*.** Rejected (§7) by Shyam, over this ADR's own recommendation. By the time the commit modal appears the edits are already staged, and backing them out is N undos. A fan-out action confirms itself.
+- **Auto-pull on panel open.** Rejected (§5). Milder than auto-push, but it still queues overlay entries nobody authored into an apply flow that assumes an author. Status refreshes automatically; content does not move.
+- **Treat every file as diverged on first connect.** Rejected (§6). Correct by §4's table and useless as a bootstrap — it turns connecting a repo into a twelve-file conflict resolution. One preselected question at connect time collapses it to a normal pull.
 
 ## Open questions (not decided here)
 
-Four are genuinely Shyam's, and one is an API fact to verify during implementation.
+**One remains, and it is an API fact to verify during implementation, not a decision.**
 
-1. **What happens when both sides moved.** §6 fixes that the plugin does not merge content on its own. It does *not* fix what the user sees: a blocking banner that names the diverged files and offers per-file *take repo* / *keep mine*, or a diff view that lets the two versions be compared before choosing, or something narrower. This is the moment Phase 6 is most likely to be judged on, and it is a product call as much as a technical one.
-2. **Manual push only, or scheduled/automatic.** Phase 6 as designed pushes when asked. Automatic push on every edit would make the repo the live state and remove the "uncommitted work" concept entirely — a coherent design, and a much bigger behavioural change than it sounds. Auto-*pull* on panel open is a separate and milder question. Both are yours.
-3. **Is the diff view a new surface, or does it grow out of Phase 5's Changes panel?** `docs/ux/apply-and-drift.md` §6.3 already calls the Changes list *"the one place the whole state of the world is legible"* and expects Phase 6's sync pill to land in the same slot, and ADR-0005 §6 built the apply preview intending Phase 6 to inherit its list component. Reusing it is the cheaper and more consistent answer, but a commit diff has a message field, a file grouping and a push button that the Changes list does not — enough that it may want its own screen. `@ux-designer`'s to design, yours to scope.
-4. **How much git should Tokenvault expose?** §9 ships push/pull against one selected branch. The next rungs are creating a branch from the panel, and opening a PR instead of committing to the branch directly. Both are technically small on top of §8; the question is whether Tokenvault is a sync client or a git client, and that is a product decision.
-5. **Does the initial connect adopt the repo or overwrite it?** When a file with existing tokens is first pointed at a repo that already has a `tokens/` tree, §4's state table calls every file diverged, which is technically correct and practically unhelpful for what is a one-time bootstrap. A first-connect step probably needs its own answer — *adopt the repo*, *publish Figma over it*, or *review file by file*. Flagged rather than assumed, because whichever is right depends on how the first real repo comes into existence.
+**To verify during implementation:** whether Figma's iframe `fetch` sends and receives the headers this design reads (`x-ratelimit-remaining`, and the ETag a conditional status check would want). `networkAccess.allowedDomains` is already set for `api.github.com`, so the request itself is known to be permitted; header visibility under the plugin's CORS posture is not asserted here. If ETags are unavailable, §4 still works — the status check is simply never free, only cheap.
 
-**To verify during implementation, not a decision:** whether Figma's iframe `fetch` sends and receives the headers this design reads (`x-ratelimit-remaining`, and the ETag a conditional status check would want). `networkAccess.allowedDomains` is already set for `api.github.com`, so the request itself is known to be permitted; header visibility under the plugin's CORS posture is not asserted here. If ETags are unavailable, §4 still works — the status check is simply never free, only cheap.
+**Resolved since drafting** — recorded so the trail is visible rather than silently edited away.
+
+*By Shyam, 2026-09-02:*
+
+1. **Divergence UX** → per-file, whole-file pick-a-side; clean files still push, only the diverged file blocks (§6).
+2. **Push/pull cadence** → manual push and manual pull only, status refreshes automatically, auto-pull rejected (§5).
+3. **Diff/commit view surface** → its own surface, not a grown Changes panel — overriding this ADR's recommendation to reuse it, on the grounds that a commit is meaningfully different from an apply (§8).
+4. **How much git to expose** → sync client, not git client: one branch, push/pull, link out to GitHub for anything deeper (§9).
+5. **First connect** → ask once whether to adopt the repo's existing content as the starting point, preselected; skip the question when the repo is empty (§6).
+6. **Bulk *Take Figma's*** → its own confirmation step, overriding this ADR's recommendation of none, because a bulk action staging many changes deserves an explicit yes even with a commit modal downstream (§7).
+
+What the user *sees* for all six — wording, placement, the shape of the per-file chooser and the connect question — remains `@ux-designer`'s and is not restated here. This ADR owns granularity, blocking behaviour and semantics; the UX doc owns presentation, and wins on it if the two ever disagree.
 
 ## References
 
