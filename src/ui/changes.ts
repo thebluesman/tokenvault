@@ -257,7 +257,7 @@ function renderBulkBar(): void {
 
   bar.appendChild(el("span", "empty", `${selected.size} selected`));
 
-  const reapply = button("Re-apply tokens");
+  const reapply = button("Put Figma back");
   reapply.disabled = selected.size === 0;
   reapply.addEventListener("click", () => {
     // A canvas write, so it routes through the dialog like every other one (§6.5, guardrail 3).
