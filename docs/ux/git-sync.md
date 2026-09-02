@@ -607,6 +607,53 @@ Once a file is connected, ADR-0006 §7 swaps the baseline to the last-pulled rep
 
 ADR-0006 §7 pins that an unconnected file keeps Phase 5's drift exactly, and says the upgrade should be visible. It is, in two places: the disconnect prompt (§5.2) names the consequence — *"drift goes back to comparing against your last scan"* — and the block's own labels change. Nothing announces the upgrade on connect; the labels changing is the announcement, and a toast about baseline semantics is not a sentence anyone wants to read.
 
+### 10.4 Bulk `Take Figma's` gets a confirm — the second override (§13.6)
+
+Phase 5 closed this question because it dissolved: the tree already held Figma's values, so accepting forty drift flags wrote nothing. Connected to a repo, that premise is gone. Accepting in bulk turns forty flags into forty uncommitted changes headed for a shared repo, and the first draft argued that was fine because the Review & push screen downstream is a full review surface.
+
+**Shyam overrode it, and the argument that loses is one about surfaces rather than about the user.** "The consequence is confirmed where it becomes real" is true about the repo and false about the panel: forty overlay entries are themselves a real change to the user's working state — they land in the Changes list, they change what the chip says, and if the user then walks away, that is what they come back to. The downstream review confirms *what goes to the repo*. Nothing was confirming *you are about to change forty things at once*. Those are different questions and only one of them was being asked.
+
+**An inline confirm strip, in place, where the button was.**
+
+```
+┌──────────────────────────────────────────────┐
+│ ←  Changes                                   │
+│ [ Local 7 ][ Changed 40 ][ Conflicts 0 ]     │
+├──────────────────────────────────────────────┤
+│  … 40 drift rows …                           │
+├──────────────────────────────────────────────┤
+│ [ Take Figma's · 40 ]      ← before          │
+└──────────────────────────────────────────────┘
+                 │ tap
+                 ▼
+┌──────────────────────────────────────────────┐
+│  … 40 drift rows, still visible, not dimmed …│
+├──────────────────────────────────────────────┤
+│ Accept Figma's values for 40 tokens?          │
+│ They become 40 changes to push to main.       │
+│ [ Cancel ]              [ Accept 40 ]         │
+└──────────────────────────────────────────────┘
+```
+
+The rules:
+
+- **It replaces the bulk button in the footer, in place. Nothing dims, nothing overlays, the list stays visible and scrollable behind it.** A bulk action deserves a beat, not an interruption — and the forty rows the user is being asked about are right there, which a modal backdrop would have greyed out at the exact moment they mattered.
+- **The second line names the consequence in the user's units and names the branch.** *"They become 40 changes to push to `main`."* That sentence is the entire reason the confirm exists; without it this is friction, with it it is information. The number appears twice — in the question and on the button — because that is the fact being confirmed.
+- **`[ Accept 40 ]`, not `[ Confirm ]` or `[ OK ]`.** The button restates the scale so a stray tap on a confirm still tells you what it did.
+- **Cancel is the wider, quieter of the two, and `Esc` and tapping the list both cancel.** Nothing here is destructive, so backing out must be at least as easy as going through.
+- **Only bulk, and only when connected.** A single token's `Take Figma's` inside one drift block never confirms — one tap, one token, one visible outcome, and Phase 5's judgement on that still holds. Disconnected, neither confirms, because accepting still writes nothing and Phase 5's dissolved premise is intact. **The rule is: confirm when the action stages more than one change into work that is headed for a shared repo.**
+- **Its counterpart confirms too.** Bulk `Take the repo's` gets the identical strip — *"Take the repo's values for 40 tokens? They'll be pending changes to apply in Figma."* One vocabulary for picking a side (§10.2), one for confirming the pick.
+- **The toast still says what happened and offers a way back:** *"Accepted 40 changes from Figma — 40 changes to push."* `[ Undo ]`. Undo here is Phase 4's overlay undo, reverting the forty entries; it touches nothing in Figma and nothing in the repo, and the copy needs no warning because there is nothing to warn about.
+
+**Where it sits relative to the push surface.** Strictly upstream, in a different tab, asking a different question:
+
+| | Where | Unit | Question it asks |
+|---|---|---|---|
+| **Bulk confirm** (§10.4) | Changes list, `Changed` tab | tokens | *You are about to stage 40 changes at once. Yes?* |
+| **Review & push** (§7.2) | Repo tab | files | *This is exactly what goes to `main`. Send it?* |
+
+Two confirmations, and they do not duplicate each other: one is about scale, one is about content, and skipping either leaves a real gap. The user who accepts forty and then pushes still sees both, and the second one is where they read the diff.
+
 ---
 
 ## 11. Empty and error states
@@ -617,7 +664,7 @@ ADR-0006 §7 pins that an unconnected file keeps Phase 5's drift exactly, and sa
 |---|---|
 | Repo tab, not connected | **This file isn't connected to a repo.** Point it at a GitHub repo to push and pull your tokens. `[ Open settings ]` |
 | Repo tab, connected, nothing to do | **Everything's pushed.** `main` matches your tokens. *(green, per Phase 5 §8)* |
-| Commit modal with nothing checked | `[ Commit to main ]` disabled, `Nothing selected` beneath it |
+| Review & push with nothing checked | `[ Commit to main ]` disabled, `Nothing selected` beneath it |
 | Repo has no tokens folder yet | **Nothing in `tokens/` yet.** Your first push creates it. |
 | Pull with nothing incoming | *(no modal)* toast: **`main` has nothing new.** |
 | Settings, never configured | Fields empty, status line reads `● Not connected`, `[ Test connection ]` disabled until a repo and token exist |
@@ -633,9 +680,9 @@ Every one of these is named, per ADR-0006 §10 — the panel never reports a bar
 | **404 — repo, branch, or access** | `.entry` in Settings, under the repo field | **Can't find `owner/repo` on `main`.** Either it doesn't exist, or your token doesn't have access to it — GitHub's answer is the same either way. |
 | **403 with a rate limit** | `.entry`, with the reset time | **GitHub's rate limit is used up.** Try again after 14:32. |
 | **Rate limit running low** | Quiet grey line in the Repo tab, below the freshness line | `142 GitHub requests left this hour.` |
-| **Token lacks write access** (read worked, push 403) | `.entry` on the commit modal, which stays open with the message intact | **This token can only read the repo.** Push needs a token with Contents: read **and** write. `[ Open settings ]` |
-| **Branch moved mid-push** | Modal stays open, nothing written | **`main` moved while you were writing.** Nothing was pushed. `[ Check again ]` — §7.4 |
-| **File diverged** | Blocked row in the commit modal; flagged item in the Repo tab | **Changed in the repo and here.** Tokenvault won't guess which is right. `[ Sort this out ]` — §9 |
+| **Token lacks write access** (read worked, push 403) | `.entry` on the Review & push screen, which stays put with the message and checkboxes intact | **This token can only read the repo.** Push needs a token with Contents: read **and** write. `[ Open settings ]` |
+| **Branch moved mid-push** | Review & push screen stays put, nothing written | **`main` moved while you were writing.** Nothing was pushed. `[ Check again ]` — §7.4 |
+| **File diverged** | Blocked row on the Review & push screen; flagged item in the Repo tab | **Changed in the repo and here.** Tokenvault won't guess which is right. `[ Sort this out ]` — §9 |
 | **Pulled token has no Figma counterpart** | Listed in the pull result, no action | §8.4's copy |
 | **Pulled reference can't be aliased** | Blocked or explicitly-flattened row in the apply dialog | Phase 5 §5.6's copy, unchanged — now reachable for the first time |
 | **Repo file isn't valid token JSON** | `.entry` in the Repo tab, that file excluded from pull | **Can't read `tokens/theme/light.json`** — it isn't valid token JSON. Other files pulled normally. |
