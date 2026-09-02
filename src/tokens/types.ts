@@ -374,7 +374,24 @@ export type ReportEntryKind =
    */
   | "edit-conflict"
   /** The Variable or Style a local edit targeted no longer exists in the file (ADR-0004 §4–5). */
-  | "orphaned-edit";
+  | "orphaned-edit"
+  /**
+   * Figma moved since the last scan, on a token carrying no local edit (ADR-0005 §7).
+   *
+   * The three `drift-*` kinds are the *imported* side moving, not a third source: a token that
+   * also carries an edit reports as `edit-conflict` instead, through ADR-0004's merge. Additive,
+   * so `ImportReport.version` stays `1` (ADR-0003 §6's precedent).
+   *
+   * Phase 5's baseline is the import cache, so these mean "changed since your last scan", not
+   * "diverged from the source of truth" — ADR-0005 §8 is explicit that the honest limit is stated
+   * rather than implied. Phase 6 swaps the baseline for the pulled git tree; the comparator does
+   * not change.
+   */
+  | "drift-value"
+  /** A Variable or Style present now, absent from the baseline (ADR-0005 §7). */
+  | "drift-added"
+  /** Present in the baseline, gone from Figma now (ADR-0005 §7). */
+  | "drift-removed";
 
 /**
  * Which criterion decided a collision, so the report can justify itself (Amendment 1 §F).
@@ -446,6 +463,14 @@ export interface ImportCounts {
   editsApplied?: number;
   /** Of those, how many were `edit-conflict`s. */
   editConflicts?: number;
+  /**
+   * Tokens Figma changed since the baseline scan, with no local edit of their own (ADR-0005 §7).
+   *
+   * Optional and, deliberately, **absent rather than `0` when there is no baseline**: ADR-0005 §8
+   * calls a "no drift detected" that actually meant "no baseline" the worst possible lie this
+   * feature could tell, so unknown and none are different states all the way down.
+   */
+  drifted?: number;
 }
 
 export interface ImportReport {

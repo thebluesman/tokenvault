@@ -11,6 +11,23 @@
         --accent: #0d99ff;
         --warn: #b8730a;
         --warn-bg: #fff6e5;
+        /*
+          Phase 5 adds two colours, both tightly fenced (UX apply-and-drift §8).
+
+          --ok is the "agreed" green: muted and desaturated, deliberately quieter than the amber
+          it sits beside, because a confirmation must never out-shout a warning. It appears in
+          exactly three places — the header chip, the detail overlay's per-set in-sync line, and
+          the apply dialog's `already matches` rows — and never on a tree row or a value line,
+          where in-sync stays signalled by the *absence* of a badge across 1,316 tokens.
+
+          --danger is a **button and menu-label colour, not a state colour**. Phase 4's ban on a
+          third badge colour is intact: nothing in a row or a banner turns red. Red here means
+          exactly one thing — this control destroys something in the file, and no second apply
+          brings it back.
+        */
+        --ok: #2f7d55;
+        --ok-bg: #eef7f1;
+        --danger: #c4382f;
       }
       * {
         box-sizing: border-box;
@@ -649,6 +666,179 @@
         background: none;
         text-decoration: underline;
       }
+      /* ---------------- Phase 5: apply, drift, delete ---------------- */
+
+      .chip.ok,
+      .ok-line {
+        color: var(--ok);
+      }
+      .chip.ok {
+        border-color: var(--ok);
+        background: var(--ok-bg);
+      }
+      .ok-line {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+      button.danger {
+        background: var(--danger);
+        border-color: var(--danger);
+        color: #fff;
+      }
+      button.danger:hover {
+        background: var(--danger);
+        filter: brightness(0.92);
+      }
+      /* The menu label, and the only other place red is allowed. */
+      .popover .item.danger {
+        color: var(--danger);
+      }
+      .popover .divider {
+        height: 1px;
+        background: var(--border);
+        margin: 4px 6px;
+      }
+
+      /*
+        The apply dialog — the panel's first and only dimmed backdrop (UX §5.2).
+
+        Phase 4's anti-modal rule survives intact: it refused a centred modal for *editing*,
+        because at 460×640 backdrop plus chrome eats a third of a workspace you need to stay in.
+        A confirmation is the opposite shape of thing — transient, one decision, free to dismiss —
+        and the full-panel overlay is wrong for it precisely because that chrome reads as "you have
+        gone to a new screen". The dimmed tree behind the card is doing real work: it says you are
+        still on the Tokens tab.
+      */
+      #modal {
+        position: absolute;
+        inset: 0;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(0, 0, 0, 0.32);
+      }
+      .modal-card {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        /* Sized to content, capped at roughly two-thirds of the panel; the list scrolls inside. */
+        max-height: 66%;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.24);
+        overflow: hidden;
+      }
+      .modal-head {
+        flex: none;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      .modal-head .grow {
+        flex: 1;
+        min-width: 0;
+      }
+      .modal-head .title {
+        font-weight: 500;
+      }
+      .modal-head .sub {
+        color: var(--muted);
+      }
+      .modal-close {
+        flex: none;
+        border: none;
+        background: none;
+        color: var(--muted);
+        padding: 0 4px;
+        cursor: pointer;
+      }
+      .modal-body {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 8px 12px;
+      }
+      /* The footer never scrolls: a 40-row apply must not push the button off the bottom. */
+      .modal-foot {
+        flex: none;
+        border-top: 1px solid var(--border);
+        padding: 8px 12px;
+      }
+      .modal-foot .note {
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .modal-foot .actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .modal-foot .actions .grow {
+        flex: 1;
+      }
+      .plan-group {
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-size: 10px;
+        margin: 8px 0 4px;
+      }
+      .plan-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        padding: 4px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .plan-row .grow {
+        flex: 1;
+        min-width: 0;
+      }
+      .plan-row .path {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .plan-row .diff {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        flex-wrap: wrap;
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .plan-row .diff .to {
+        color: #1a1a1a;
+      }
+      .plan-row.blocked {
+        color: var(--muted);
+      }
+      .plan-row .why {
+        color: var(--warn);
+      }
+      .plan-row .dot {
+        flex: none;
+        width: 13px;
+        text-align: center;
+        color: var(--ok);
+      }
+      .plan-row input[type="checkbox"] {
+        flex: none;
+        margin: 2px 0 0;
+      }
+      /* The resolved literal under a pointer: informative, never mistakable for the value. */
+      .plan-row .resolved {
+        color: var(--muted);
+        font-size: 10px;
+      }
+
       #clipboard {
         position: absolute;
         left: -9999px;
@@ -693,6 +883,9 @@
         <div id="tokens-scroll"><div id="tokens-canvas"></div></div>
       </div>
       <div id="panel" class="hidden"></div>
+      <!-- The apply dialog's backdrop. Inside #views so it dims the tree, not the header —
+           the header is what tells you where you still are. -->
+      <div id="modal" class="hidden"></div>
     </div>
     <div id="toast"></div>
     <textarea id="clipboard"></textarea>

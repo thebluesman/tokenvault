@@ -8,6 +8,9 @@ import type {
   SubtypeCandidate,
   SubtypeSelection,
 } from "./tokens/types";
+import type { DriftEntry } from "./tokens/drift";
+import type { Refusal } from "./tokens/toFigma";
+import type { ConsumerCount, PlannedWrite, WriteOutcome } from "./figma/apply";
 
 /** One generated file, already serialized deterministically, ready to display or copy. */
 export interface SerializedFile {
@@ -21,6 +24,8 @@ export interface MergeSummary {
   conflicts: number;
   orphaned: number;
   retired: number;
+  /** Tokens Figma changed under us, added by Phase 5 to the same banner (UX §6.1). */
+  drifted: number;
 }
 
 export interface ImportPayload {
@@ -52,6 +57,41 @@ export interface ImportPayload {
    * tree hasn't changed shape, so the UI keeps its expansion state instead of resetting it.
    */
   refresh?: boolean;
+
+  // --- Phase 5 (ADR-0005) ---
+
+  /**
+   * What Figma changed since the baseline scan, for tokens carrying no local edit (§7).
+   *
+   * Sent alongside the report entries rather than folded into them because the tree needs the
+   * *keys* to badge a value line, and the report is keyed by path — which a rename would break.
+   */
+  drift: DriftEntry[];
+  /**
+   * Whether a baseline existed to compare against at all.
+   *
+   * `false` means drift is **unknown**, not **none** (§8). The import cache is evictable by design
+   * (ADR-0004 §6), and a "no drift detected" that actually meant "we had nothing to compare with"
+   * would be the worst possible lie for this feature to tell — so the two states stay distinct all
+   * the way to the chip.
+   */
+  driftKnown: boolean;
+  /**
+   * Styles apply must refuse, by `styleId` (ADR-0005 §3). Derived plugin-side from the scan, where
+   * the live shape is known, and shipped to the UI so it can build a plan without a round trip.
+   */
+  styleGuards: Array<[string, Refusal]>;
+  /** Normalised dotted paths naming a published-library variable — §11's up-front locality check. */
+  nonLocalPaths: string[];
+}
+
+/** What one apply run did, per entry (ADR-0005 §6 — a report, never a rollback). */
+export interface ApplyReport {
+  outcomes: WriteOutcome[];
+  applied: number;
+  failed: number;
+  /** True for the delete flow, so the toast and the follow-up differ from a value apply. */
+  destructive: boolean;
 }
 
 export type UiToPluginMessage =
@@ -79,7 +119,31 @@ export type UiToPluginMessage =
   /** Resolve an `edit-conflict` by keeping the local value, rebased on Figma's (UX §5.5). */
   | { type: "keep-mine"; target: OverlayTarget; op: OverlayOp }
   /** The edited token tree, serialized — the only durable exit until Phase 6 (UX §5.4). */
-  | { type: "copy-tree" };
+  | { type: "copy-tree" }
+  /**
+   * Write a confirmed plan to Figma — ADR-0005 §6.
+   *
+   * The plan itself is built in the UI, because `plan.ts` is pure and the UI already holds the
+   * tree and the overlay; the plugin's half is the write and the rescan that retires the entries.
+   * **There is no code path to this message that does not pass through the apply dialog**
+   * (UX §5.2, and §10's "assert it if that's cheap").
+   */
+  | { type: "apply"; writes: PlannedWrite[] }
+  /**
+   * Remove Variables or Styles from the file — ADR-0005 §5, its own message on purpose.
+   *
+   * UX §10: *"don't let a delete become an op in the apply batch"*. Separate message, separate
+   * handler, separate confirmation, and no shared code path with `apply` beyond the executor.
+   *
+   * `clearOverlayFor` drops any local edits on the removed targets, which is the checked-by-default
+   * "Also remove the token from the local tree" (UX §5.7) — without it those edits orphan on the
+   * next scan and the user has to clean up after their own deliberate deletion.
+   */
+  | { type: "delete-in-figma"; writes: PlannedWrite[]; clearOverlayFor: OverlayTarget[] }
+  /** The delete confirmation's blast radius. Expensive, so it runs only for that one screen. */
+  | { type: "count-consumers"; targets: Array<{ key: string; variableId?: string; styleId?: string }> }
+  /** `[ Show them ]` / `[ Details ]` — selects those nodes on the canvas (UX §5.5, §5.7). */
+  | { type: "select-nodes"; nodeIds: string[] };
 
 export type PluginToUiMessage =
   | { type: "plugin-ready"; fileName: string }
@@ -94,4 +158,14 @@ export type PluginToUiMessage =
    */
   | { type: "overlay-state"; overlay: EditOverlay; storageError?: string }
   | { type: "tree-json"; json: string; files: number }
+  /**
+   * The apply report — ADR-0005 §6.
+   *
+   * Every entry's outcome, success and failure alike. There is no rollback: a rollback pass has
+   * the same failure modes as the pass it undoes, and a failed rollback leaves a state neither
+   * side modelled. A precise per-entry report plus Figma's own undo is the honest answer.
+   */
+  | { type: "apply-result"; report: ApplyReport }
+  /** Layer counts for the delete confirmation's blast radius (UX §5.7). */
+  | { type: "consumer-counts"; counts: ConsumerCount[] }
   | { type: "import-error"; message: string };

@@ -15,6 +15,9 @@ import type { ReportEntry, Token, TokenGroup, TokenType, TokenValue } from "../t
 import type { EditOverlay, OverlayEntry, OverlayOp, OverlayTarget } from "../tokens/overlay";
 import type { FlatToken, PathRow, SetInfo, TreeNode } from "../tokens/view";
 import type { InboundIndex, Referrer } from "../tokens/references";
+import type { DriftEntry } from "../tokens/drift";
+import type { Refusal } from "../tokens/toFigma";
+import type { ApplyPlan, PlanScope } from "../tokens/plan";
 import {
   applyOverlay,
   dropEntry,
@@ -23,12 +26,14 @@ import {
   keepMine,
   recordEdit,
   removeEntries,
+  targetKey,
   targetOfToken,
   tokenKey,
   valuesEqual,
 } from "../tokens/overlay";
 import { buildPathRows, buildTree, describeSets, flattenImport } from "../tokens/view";
 import { buildInboundIndex, inboundReferrers } from "../tokens/references";
+import { buildApplyPlan } from "../tokens/plan";
 import { normalizePathKey } from "../tokens/paths";
 import { stableStringify } from "../tokens/serialize";
 
@@ -51,6 +56,14 @@ export interface Line {
   target: OverlayTarget | null;
   edited: boolean;
   conflict?: OverlayEntry;
+  /**
+   * Figma moved under this token since the baseline scan (ADR-0005 §7).
+   *
+   * Only ever set on a line with **no** overlay entry: a token that has both is a conflict, and
+   * `conflict` says so with both values in hand. Two badges for one situation is exactly what
+   * UX §6.2's single-`⚑` vocabulary exists to avoid.
+   */
+  drift?: DriftEntry;
   flags: ReportEntry[];
 }
 
@@ -86,12 +99,41 @@ export interface EditorModel {
   /** Number/string tokens still carrying `subtypeSource: "default"`. */
   unconfirmed: number;
   flagged: number;
+
+  // --- Phase 5 (ADR-0005) ---
+
+  /** ISO timestamp of the last real read of the file — the "scanned 12 minutes ago" line (§6.1). */
+  scannedAt: string;
+  /** Undismissed drift, by target key. */
+  drift: Map<string, DriftEntry>;
+  /**
+   * Whether a baseline existed at all.
+   *
+   * `false` is *unknown*, not *none* (§8), and the header chip must never render "In sync" on it —
+   * a green all-clear that actually meant "we had nothing to compare with" is the one lie this
+   * feature cannot afford.
+   */
+  driftKnown: boolean;
+  /** The pristine tree, for the apply plan's `before` column and for "put Figma back" (§6.4). */
+  imported: FlatToken[];
+  styleGuards: Map<string, Refusal>;
+  nonLocalPaths: Set<string>;
 }
 
 let payload: ImportPayload | null = null;
 let overlay: EditOverlay = emptyOverlay();
 let model: EditorModel = blankModel();
 let listeners: Array<() => void> = [];
+
+/**
+ * Drift the user has waved off this session, by target key.
+ *
+ * Session-local and deliberately unpersisted. Phase 5 drift is a changelog against a local
+ * watermark (ADR-0005 §8), and the watermark advances on the very next scan — so a durable
+ * dismissal store would outlive the thing it was dismissing and add a third state
+ * (`clientStorage`) to a feature the ADR was careful to keep at one baseline and one store.
+ */
+let dismissedDrift = new Set<string>();
 
 export const filters: Filters = { query: "", sets: null, types: null, flaggedOnly: false };
 
@@ -110,6 +152,12 @@ function blankModel(): EditorModel {
     orphans: [],
     unconfirmed: 0,
     flagged: 0,
+    scannedAt: "",
+    drift: new Map(),
+    driftKnown: false,
+    imported: [],
+    styleGuards: new Map(),
+    nonLocalPaths: new Set(),
   };
 }
 
@@ -130,8 +178,18 @@ function notify(): void {
 // ---------------------------------------------------------------------------
 
 export function setPayload(next: ImportPayload): void {
+  // A fresh scan carries a fresh drift set, so anything waved off against the previous baseline is
+  // answered — the watermark moved past it. A `refresh` re-derives the same snapshot, so those
+  // dismissals still stand.
+  if (next.refresh !== true) dismissedDrift = new Set();
   payload = next;
   overlay = next.overlay;
+  rebuild();
+}
+
+/** Waves off one drift row — UX §6.4's *Take Figma's*, which for an unedited token is local only. */
+export function dismissDrift(keys: string[]): void {
+  for (const key of keys) dismissedDrift.add(key);
   rebuild();
 }
 
@@ -188,6 +246,12 @@ function rebuild(storageError?: string): void {
     else list.push(entry);
   }
 
+  const drift = new Map<string, DriftEntry>();
+  for (const entry of payload.drift) {
+    if (dismissedDrift.has(entry.key)) continue;
+    drift.set(entry.key, entry);
+  }
+
   const ops = indexOverlay(overlay);
   const modelRows: Row[] = rows.map((row) => ({
     row,
@@ -215,9 +279,19 @@ function rebuild(storageError?: string): void {
         target,
         edited: key !== null && applied.edited.has(key),
         conflict,
-        flags: (flags.get(flagKey(entry.path, entry.setId)) ?? []).concat(
-          flags.get(flagKey(entry.path, undefined)) ?? []
-        ),
+        // A line with an overlay entry is never drifted: it is either clean or in conflict, and
+        // the conflict block already shows both sides (ADR-0005 §7's two-row table).
+        drift: key === null || targetOps !== undefined ? undefined : drift.get(key),
+        // Drift report rows ride the same `⚑` badge as every other flag (UX §6.2), but only while
+        // the drift is still live: a row the user has waved off, or one that turned out to be a
+        // conflict, must not keep claiming attention it no longer needs.
+        flags: (flags.get(flagKey(entry.path, entry.setId)) ?? [])
+          .concat(flags.get(flagKey(entry.path, undefined)) ?? [])
+          .filter(
+            (flag) =>
+              flag.kind.indexOf("drift-") !== 0 ||
+              (key !== null && targetOps === undefined && drift.has(key))
+          ),
       };
     }),
   }));
@@ -249,8 +323,133 @@ function rebuild(storageError?: string): void {
     storageError,
     unconfirmed,
     flagged: payload.entries.filter((entry) => entry.path !== undefined).length,
+    scannedAt: payload.importedAt,
+    drift,
+    driftKnown: payload.driftKnown,
+    imported: pristine,
+    styleGuards: new Map(payload.styleGuards),
+    nonLocalPaths: new Set(payload.nonLocalPaths),
   };
   notify();
+}
+
+// ---------------------------------------------------------------------------
+// The apply plan — ADR-0005 §1
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the plan for a scope, from the model the UI already holds.
+ *
+ * `plan.ts` is pure and the UI has the tree, the overlay and the guards, so there is no round trip
+ * here — the plugin's half of apply is the write and the rescan. It also means the dialog can
+ * render the plan it is about to send, rather than a description of one.
+ */
+export function planFor(scope: PlanScope = {}): ApplyPlan {
+  return buildApplyPlan(
+    {
+      tokens: allEntries(),
+      imported: model.imported,
+      overlay: model.overlay,
+      styleGuards: model.styleGuards,
+      nonLocalPaths: model.nonLocalPaths,
+    },
+    scope
+  );
+}
+
+/**
+ * The plan for putting Figma back to what it said at the last scan — UX §6.4's *Re-apply token*.
+ *
+ * Phase 5's honest shape for that action. With no git sync the tree is re-derived from Figma on
+ * every scan, so a drifted-but-unedited token *already shows Figma's new value* — there is no
+ * "the token's value" left to push. What the user can still ask for is the change reverted, and
+ * the baseline value is the only record of what it was.
+ *
+ * Modelled as a temporary overlay rather than a second plan producer: it is exactly an edit back
+ * to the old value, and routing it through the same builder means it inherits every guard —
+ * aliases, cycles, style losses — instead of re-deriving a subset of them.
+ */
+export function planRestoreDrift(keys: string[]): ApplyPlan {
+  const wanted = new Set(keys);
+  const entries: OverlayEntry[] = [];
+  const at = now();
+
+  for (const row of model.rows) {
+    for (const line of row.lines) {
+      if (line.key === null || !wanted.has(line.key) || line.target === null) continue;
+      const entry = model.drift.get(line.key);
+      if (entry === undefined || entry.kind !== "drift-value") continue;
+      entries.push({
+        target: line.target,
+        path: line.entry.path,
+        set: line.entry.setId,
+        op: entry.reason === "description-changed" ? "set-description" : "set-value",
+        value: entry.baseline,
+        base: entry.current,
+        at,
+      });
+    }
+  }
+
+  const restored = allLines().map((line) => {
+    const entry = line.key === null ? undefined : model.drift.get(line.key);
+    if (entry === undefined || !wanted.has(line.key as string) || entry.kind !== "drift-value") {
+      return line.entry;
+    }
+    return entry.reason === "description-changed"
+      ? { ...line.entry, token: { ...line.entry.token, $description: entry.baseline as string } }
+      : { ...line.entry, token: { ...line.entry.token, $value: entry.baseline as never } };
+  });
+
+  return buildApplyPlan(
+    {
+      tokens: restored,
+      imported: allEntries(),
+      overlay: { version: 1, entries },
+      styleGuards: model.styleGuards,
+      nonLocalPaths: model.nonLocalPaths,
+    },
+    { keys: wanted }
+  );
+}
+
+/** Every value line in the tree. The row grouping is a display construct (UX §11), not an index. */
+function allLines(): Line[] {
+  const lines: Line[] = [];
+  for (const row of model.rows) {
+    for (const line of row.lines) lines.push(line);
+  }
+  return lines;
+}
+
+function allEntries(): FlatToken[] {
+  return allLines().map((line) => line.entry);
+}
+
+/** Target keys for a set of lines, for scoping a plan to a row, a path or a group. */
+export function keysOf(lines: Line[]): Set<string> {
+  const keys = new Set<string>();
+  for (const line of lines) {
+    if (line.key !== null) keys.add(line.key);
+  }
+  return keys;
+}
+
+/** Every drifted line in the tree, for the Changes list's *Changed* section. */
+export function driftedLines(): Line[] {
+  return allLines().filter((line) => line.drift !== undefined);
+}
+
+/** Every line whose overlay entry is in conflict — the Changes list's *Conflicts* section. */
+export function conflictedLines(): Line[] {
+  return allLines().filter((line) => line.conflict !== undefined);
+}
+
+/** The line behind an overlay target, for the Changes list's *Local* rows. */
+export function lineForTarget(target: OverlayTarget): Line | undefined {
+  const key = targetKey(target);
+  if (key === null) return undefined;
+  return allLines().filter((line) => line.key === key)[0];
 }
 
 /** Rebuilds the tree for the current filters — used by the browser, never cached. */

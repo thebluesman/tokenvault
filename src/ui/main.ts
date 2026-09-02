@@ -11,9 +11,17 @@ import type { PluginToUiMessage, UiToPluginMessage } from "../messages";
 import { copy, el, toast } from "./dom";
 import { closeDetail, isDetailOpen, renderDetail, setNavigator } from "./detail";
 import { initImportView, setImportPayload, setImportScanning, showImportError } from "./importView";
-import { getModel, onChange, send, setOverlay, setPayload } from "./state";
+import { conflictedLines, driftedLines, getModel, onChange, send, setOverlay, setPayload } from "./state";
 import {
-  editsListPopover,
+  closeChanges,
+  isChangesOpen,
+  openChanges,
+  renderChanges,
+  setChangesNavigator,
+} from "./changes";
+import { closeModal } from "./applyDialog";
+import { closeDeletePanel, isDeletePanelOpen, setConsumerCounts } from "./deleteFigma";
+import {
   initTokens,
   renderTokens,
   resetExpansion,
@@ -37,6 +45,9 @@ function showTab(next: Tab): void {
   if (next === "tokens" && !hasImport && getModel().overlay.entries.length === 0) return;
   tab = next;
   closeDetail();
+  closeChanges();
+  closeDeletePanel();
+  closeModal();
   importTab.classList.toggle("active", tab === "import");
   tokensTab.classList.toggle("active", tab === "tokens");
   contentEl.classList.toggle("hidden", tab !== "import");
@@ -45,20 +56,66 @@ function showTab(next: Tab): void {
 }
 
 /**
- * The header's right slot.
+ * The header's right slot — UX apply-and-drift §6.3.
  *
- * "Local edits", not "unsaved changes" (UX §5.4): `clientStorage` is per-device and unsynced, so
- * the edits are durable on this machine, invisible on another, and not committed anywhere.
- * "Unsaved" implies a Save button that doesn't exist until Phase 6; "saved" implies they're
- * somewhere safe, which they aren't. The slot itself is reserved for Phase 6's sync pill.
+ * Phase 4 put **Local edits · 7** here and called it the first occupant of a permanent slot. Phase
+ * 5 makes it plural, not different: the chip **names the state, not the arithmetic**, and there are
+ * 100px to do it in.
+ *
+ * | Situation           | Chip                                              |
+ * |---------------------|---------------------------------------------------|
+ * | Nothing anywhere    | `● In sync` — green, low emphasis, still tappable  |
+ * | Local edits only    | `7 local`                                         |
+ * | Figma changes only  | `3 changed`                                       |
+ * | Both                | `7 local · 3 changed`                             |
+ * | Any conflicts       | `2 conflicts` — amber, wins the slot outright     |
+ *
+ * Conflicts win because they are the only state where the panel is showing a value two sources
+ * disagree about; everything else is merely pending.
+ *
+ * "Local edits", not "unsaved changes" (local-editor §5.4): `clientStorage` is per-device and
+ * unsynced, so the edits are durable on this machine, invisible on another, and not committed
+ * anywhere. The slot itself still belongs to Phase 6's sync pill in the end.
  */
 function renderStateSlot(): void {
   stateSlot.textContent = "";
-  const count = getModel().overlay.entries.length;
-  if (count === 0) return;
+  const model = getModel();
+  if (!model.ready && model.overlay.entries.length === 0) return;
 
-  const chip = el("button", "chip on", `Local edits · ${count}`);
-  chip.addEventListener("click", () => editsListPopover(chip));
+  const conflicts = conflictedLines().length;
+  const drifted = driftedLines().length;
+  const local = model.overlay.entries.filter((entry) => entry.conflict === undefined).length;
+
+  let label: string;
+  let className: string;
+
+  if (conflicts > 0) {
+    label = `${conflicts} conflict${conflicts === 1 ? "" : "s"}`;
+    className = "chip warn on";
+  } else if (local === 0 && drifted === 0) {
+    // Never a green all-clear without a baseline (ADR-0005 §8): "we haven't checked" and "nothing
+    // to report" are different answers, and only one of them has earned a green dot.
+    if (!model.driftKnown) {
+      label = "Not compared";
+      className = "chip";
+    } else {
+      label = "● In sync";
+      className = "chip ok";
+    }
+  } else {
+    const parts: string[] = [];
+    if (local > 0) parts.push(`${local} local`);
+    if (drifted > 0) parts.push(`${drifted} changed`);
+    label = parts.join(" · ");
+    className = "chip on";
+  }
+
+  const chip = el("button", className, label);
+  chip.title = "What state is my work in?";
+  chip.addEventListener("click", () => {
+    showTab("tokens");
+    openChanges();
+  });
   stateSlot.appendChild(chip);
 }
 
@@ -66,18 +123,23 @@ function renderStateSlot(): void {
 
 initImportView(send);
 initTokens();
-setNavigator((path) => {
+const goToPath = (path: string): void => {
   showTab("tokens");
   revealPath(path);
-});
+};
+setNavigator(goToPath);
+setChangesNavigator(goToPath);
 setImportNavigator(() => showTab("import"));
 
 onChange(() => {
   renderStateSlot();
-  if (tab === "tokens") {
-    renderTokens();
-    if (isDetailOpen()) renderDetail();
-  }
+  if (tab !== "tokens") return;
+  renderTokens();
+  // The three full-panel surfaces share one element, so exactly one of them owns it at a time.
+  // Repainting the detail over the Changes list (or over the delete confirmation, mid-decision)
+  // is the failure this ordering exists to prevent.
+  if (isChangesOpen()) renderChanges();
+  else if (!isDeletePanelOpen() && isDetailOpen()) renderDetail();
 });
 
 importTab.addEventListener("click", () => showTab("import"));
@@ -115,7 +177,11 @@ window.onmessage = (event: MessageEvent) => {
     renderStateSlot();
 
     const merge = message.payload.merge;
-    if (merge !== undefined && merge.conflicts + merge.orphaned === 0 && merge.applied > 0) {
+    if (
+      merge !== undefined &&
+      merge.conflicts + merge.orphaned + merge.drifted === 0 &&
+      merge.applied > 0
+    ) {
       // Nothing needs attention, so nothing should hold screen space in a 640px panel — a toast,
       // not the banner (UX §5.5).
       toast(`${merge.applied} local edit${merge.applied === 1 ? "" : "s"} reapplied.`);
@@ -130,6 +196,35 @@ window.onmessage = (event: MessageEvent) => {
     setOverlay(message.overlay, message.storageError);
     tokensTab.disabled = hasImport === false && message.overlay.entries.length === 0;
     renderStateSlot();
+    return;
+  }
+
+  if (message.type === "apply-result") {
+    // Nothing about a canvas write is visible in the panel afterwards, so the toast carries real
+    // weight — and it is **report only, with no action button**: there is no plugin-side undo for
+    // anything that touches the file (UX §5.5). Phase 4's `[ Undo ]` stays on the local-edit
+    // toasts it already serves, and only those.
+    const { report } = message;
+    const verb = report.destructive ? "Deleted" : "Applied";
+    if (report.outcomes.length === 0) {
+      toast("Nothing to apply.");
+    } else if (report.failed === 0) {
+      toast(`${verb} ${report.applied} change${report.applied === 1 ? "" : "s"} in Figma.`);
+    } else if (report.applied === 0) {
+      // Nothing landed, so there is nothing to take back — the reason is what matters.
+      toast(`Couldn't ${report.destructive ? "delete" : "apply"} — ${firstFailure(message)}`);
+    } else {
+      // Partial success never rounds up to success. The failed entries did not match after the
+      // rescan, so they are still in the overlay and still visible in the tree.
+      toast(
+        `${verb} ${report.applied} of ${report.outcomes.length}. ${report.failed} failed — ${firstFailure(message)}`
+      );
+    }
+    return;
+  }
+
+  if (message.type === "consumer-counts") {
+    setConsumerCounts(message.counts);
     return;
   }
 
@@ -153,5 +248,11 @@ window.onmessage = (event: MessageEvent) => {
     showImportError(message.message);
   }
 };
+
+/** The first failure's own words. Figma's message beats any sentence we could write over it. */
+function firstFailure(message: { report: { outcomes: Array<{ ok: boolean; message?: string }> } }): string {
+  const failed = message.report.outcomes.filter((outcome) => !outcome.ok);
+  return failed[0]?.message ?? "Figma refused the write.";
+}
 
 send({ type: "ui-ready" } satisfies UiToPluginMessage);

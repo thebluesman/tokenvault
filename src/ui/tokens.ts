@@ -15,6 +15,7 @@ import type { TokenType } from "../tokens/types";
 import type { Line, Row } from "./state";
 import {
   deleteBlockers,
+  dismissDrift,
   editBlockedReason,
   editValue,
   filters,
@@ -22,17 +23,18 @@ import {
   hiddenMatches,
   pathsUnder,
   revert,
-  revertAll,
+  send,
   setCounts,
   typeCounts,
   visibleRows,
 } from "./state";
+import { openDeleteInFigma } from "./deleteFigma";
 import { hasMixedTypes } from "../tokens/view";
 import { previewOf } from "../tokens/preview";
 import { parseHexColor, parseNumberValue, parseStringValue } from "../tokens/edit";
 import { normalizePathKey } from "../tokens/paths";
 import { button, clear, closePopover, copy, el, highlight, popover, toast } from "./dom";
-import { closeDetail, deleteButton, openDetail, runDelete } from "./detail";
+import { applyLines, closeDetail, deleteButton, openDetail, runDelete } from "./detail";
 
 const GLYPHS: Record<TokenType, string> = {
   color: "■",
@@ -242,16 +244,30 @@ function renderNotices(): void {
     noticesEl.appendChild(box);
   }
 
+  // Staleness is stated, not hidden (UX §6.1). The absence of `⚑ changed` badges has to read as
+  // "we last checked 12 minutes ago", not as a live guarantee — the architecture makes no such
+  // promise, and a stale "in sync" claim is worse than no claim.
+  if (model.ready) {
+    const line = el("div", "empty");
+    line.style.marginBottom = "6px";
+    line.appendChild(document.createTextNode(`${scannedAgo(model.scannedAt)} · `));
+    const rescan = el("button", "toast-action", "Rescan");
+    rescan.style.color = "var(--accent)";
+    rescan.addEventListener("click", () => send({ type: "scan" }));
+    line.appendChild(rescan);
+    noticesEl.appendChild(line);
+  }
+
   const merge = model.merge;
-  if (merge !== undefined && !bannerDismissed && merge.conflicts + merge.orphaned > 0) {
+  if (merge !== undefined && !bannerDismissed && merge.conflicts + merge.orphaned + merge.drifted > 0) {
     const box = el("div", "entry");
-    box.appendChild(
-      el(
-        "span",
-        "kind",
-        `${merge.applied} edit${merge.applied === 1 ? "" : "s"} reapplied · ${merge.conflicts} conflict${merge.conflicts === 1 ? "" : "s"} · ${merge.orphaned} orphaned`
-      )
-    );
+    const parts = [
+      `${merge.applied} edit${merge.applied === 1 ? "" : "s"} reapplied`,
+      `${merge.drifted} changed in Figma`,
+      `${merge.conflicts} conflict${merge.conflicts === 1 ? "" : "s"}`,
+      `${merge.orphaned} orphaned`,
+    ];
+    box.appendChild(el("span", "kind", parts.join(" · ")));
     const actions = el("div", "toolbar");
     const review = button("Review");
     review.addEventListener("click", () => {
@@ -332,6 +348,21 @@ function renderOrphans(orphans: OverlayEntry[]): HTMLElement {
   }
 
   return details;
+}
+
+/** "Scanned 12 minutes ago" — deliberately relative, because the point is the staleness. */
+function scannedAgo(iso: string): string {
+  if (iso === "") return "Not scanned yet";
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return "Scanned earlier";
+  const minutes = Math.floor((Date.now() - at) / 60000);
+  if (minutes < 1) return "Scanned just now";
+  if (minutes === 1) return "Scanned 1 minute ago";
+  if (minutes < 60) return `Scanned ${minutes} minutes ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Scanned ${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `Scanned ${days} day${days === 1 ? "" : "s"} ago`;
 }
 
 function describeValue(entry: OverlayEntry): string {
@@ -541,6 +572,24 @@ function groupMenu(group: GroupNode, close: () => void): HTMLElement {
     runDelete(lines, paths, `${group.name} — ${rows.length} tokens`);
   });
   wrap.appendChild(del);
+
+  if (lines.some((each) => each.edited)) {
+    const apply = el("button", "item", `Apply ${group.name}`) as HTMLButtonElement;
+    apply.addEventListener("click", () => {
+      close();
+      applyLines(lines, `Apply ${group.path}`);
+    });
+    wrap.insertBefore(apply, del);
+  }
+
+  wrap.appendChild(el("div", "divider"));
+  const inFigma = el("button", "item danger", "Delete in Figma…") as HTMLButtonElement;
+  inFigma.addEventListener("click", () => {
+    close();
+    openDeleteInFigma(lines, { navigate: revealPath, onClose: () => renderTokens() });
+  });
+  wrap.appendChild(inFigma);
+
   return wrap;
 }
 
@@ -677,12 +726,24 @@ function isComposite(line: Line): boolean {
   return type === "typography" || type === "shadow" || type === "grid";
 }
 
+/**
+ * The one lowercase word next to the flag.
+ *
+ * `⚑ changed`, `⚑ conflict`, `⚑ orphaned` share a mark and are told apart by a single word — which
+ * is what makes one badge colour survive seven meanings (UX §6.2). Phase 5 adds three words and no
+ * new glyph, no new colour, and no drift tab: a second attention mark would force the user to parse
+ * two vocabularies at a glance in a 460px column, which is exactly the failure the single `⚑` was
+ * designed to avoid.
+ */
 function shortKind(kind: string): string {
   if (kind === "partial-token") return "partial";
   if (kind === "dangling-reference") return "dangling";
   if (kind === "redundant-style") return "redundant";
   if (kind === "edit-conflict") return "conflict";
   if (kind === "orphaned-edit") return "orphaned";
+  if (kind === "drift-value") return "changed";
+  if (kind === "drift-added") return "added";
+  if (kind === "drift-removed") return "removed";
   return kind;
 }
 
@@ -780,6 +841,31 @@ function rowMenu(row: Row, line?: Line): HTMLElement {
       wrap.appendChild(edit);
 
       const lines = line === undefined ? row.lines : [line];
+
+      // UX §5.3: the same dialog, differently pre-populated. A value line applies that one target;
+      // a path name applies every set's target for that path.
+      if (lines.some((each) => each.edited)) {
+        const apply = el("button", "item", "Apply") as HTMLButtonElement;
+        apply.addEventListener("click", () => {
+          close();
+          applyLines(lines, `Apply ${row.row.path}`);
+        });
+        wrap.appendChild(apply);
+      }
+
+      if (lines.some((each) => each.drift !== undefined)) {
+        const accept = el("button", "item", "Take Figma's change") as HTMLButtonElement;
+        accept.addEventListener("click", () => {
+          close();
+          const keys = lines
+            .filter((each) => each.drift !== undefined && each.key !== null)
+            .map((each) => each.key as string);
+          dismissDrift(keys);
+          toast("Accepted Figma's change.");
+        });
+        wrap.appendChild(accept);
+      }
+
       if (lines.some((each) => each.edited)) {
         const revertItem = el("button", "item", "Revert to imported value") as HTMLButtonElement;
         revertItem.addEventListener("click", () => {
@@ -805,6 +891,16 @@ function rowMenu(row: Row, line?: Line): HTMLElement {
       del.className = "item";
       del.addEventListener("click", () => closePopover());
       wrap.appendChild(del);
+
+      // Below a divider, red, with a trailing ellipsis — everything about it says "a different
+      // kind of thing" so it can never be mis-tapped as the row above (UX §5.7).
+      wrap.appendChild(el("div", "divider"));
+      const inFigma = el("button", "item danger", "Delete in Figma…") as HTMLButtonElement;
+      inFigma.addEventListener("click", () => {
+        close();
+        openDeleteInFigma(lines, { navigate: revealPath, onClose: () => renderTokens() });
+      });
+      wrap.appendChild(inFigma);
 
       return wrap;
     });
@@ -918,57 +1014,9 @@ function noResults(): HTMLElement {
   return wrap;
 }
 
-// ---------------------------------------------------------------------------
-// The local-edits list — §5.4
-// ---------------------------------------------------------------------------
-
-/**
- * One row per overlay entry: the path, its set, the imported value and the current one.
- *
- * The list exists because deletions have no row left to hang a `⋯` menu off, and because "what
- * have I actually changed?" is a question with N answers and no other place to ask it.
- */
-export function editsListPopover(anchor: HTMLElement): void {
-  popover(anchor, (close) => {
-    const model = getModel();
-    const wrap = el("div");
-
-    if (model.overlay.entries.length === 0) {
-      wrap.appendChild(el("div", "group-label", "No local edits"));
-      return wrap;
-    }
-
-    const undoAll = el("button", "item", "Undo all") as HTMLButtonElement;
-    undoAll.addEventListener("click", () => {
-      close();
-      revertAll();
-      toast("Reverted every local edit");
-    });
-    wrap.appendChild(undoAll);
-
-    for (const entry of model.overlay.entries) {
-      const row = el("div", "row");
-      const name = el("div", "name", entry.path);
-      name.title = `${entry.op} · ${entry.set}`;
-      name.style.cursor = "pointer";
-      name.addEventListener("click", () => {
-        close();
-        revealPath(entry.path);
-      });
-      row.appendChild(name);
-      row.appendChild(el("span", "badge", entry.op === "delete" ? "deleted" : entry.set));
-      if (entry.orphaned === true) row.appendChild(el("span", "badge needs", "orphaned"));
-      if (entry.conflict !== undefined) row.appendChild(el("span", "badge needs", "conflict"));
-
-      const revertOne = button("Revert");
-      revertOne.addEventListener("click", () => {
-        close();
-        revert([entry.target], entry.op);
-      });
-      row.appendChild(revertOne);
-      wrap.appendChild(row);
-    }
-
-    return wrap;
-  });
-}
+// The local-edits list moved to `changes.ts` in Phase 5.
+//
+// Phase 4's popover became the "Local" section of the Changes list (UX apply-and-drift §6.3),
+// which grew a second and third section for drift and conflicts. Keeping the popover alongside it
+// would have left two surfaces answering "what have I actually changed?" with two implementations
+// that could disagree — and only one of them could offer Apply.

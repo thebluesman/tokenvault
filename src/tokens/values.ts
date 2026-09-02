@@ -42,6 +42,34 @@ export function rgbaToHex(color: RgbaSnapshot): string {
   return alpha >= 1 ? base : `${base}${channelToHex(alpha)}`;
 }
 
+const HEX_VALUE = /^#([0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+/**
+ * The inverse of `rgbaToHex` — ADR-0005 §3's hand-written apply direction.
+ *
+ * Deliberately strict: it accepts only the two forms `rgbaToHex` emits, because its job is to
+ * hand a token value back to Figma, not to parse user input. Shorthand and case normalisation
+ * happen once, on the way in, in `parseHexColor` (`edit.ts`); accepting them again here would
+ * give the plugin two spellings of the same colour that disagree about what round-trips.
+ *
+ * Returns `null` rather than a black fallback. A colour that cannot be read is a refusal
+ * (ADR-0005 §3) — writing `#000000` into a designer's file because a string looked odd is the
+ * exact class of silent damage the refusal rules exist to prevent.
+ */
+export function hexToRgba(hex: string): RgbaSnapshot | null {
+  const match = HEX_VALUE.exec(hex.trim());
+  if (match === null) return null;
+
+  const digits = match[1];
+  const channel = (at: number): number => parseInt(digits.slice(at, at + 2), 16) / 255;
+  const color: RgbaSnapshot = { r: channel(0), g: channel(2), b: channel(4) };
+  // `a` stays absent for a 6-digit hex, mirroring `rgbaToHex`'s own asymmetry: Figma's `RGB` has
+  // no alpha, and materialising `a: 1` would make an opaque paint's snapshot differ from the one
+  // the scanner produces for the same paint.
+  if (digits.length === 8) color.a = channel(6);
+  return color;
+}
+
 /**
  * Recovers the decimal a human actually typed from Figma's float32 storage.
  *

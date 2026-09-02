@@ -43,14 +43,20 @@ import type { GridField, ShadowField, TypographyField } from "../tokens/edit";
 import {
   deleteBlockers,
   deleteLines,
+  dismissDrift,
   editBlockedReason,
   editDescription,
   editValue,
   getModel,
+  keysOf,
+  planFor,
+  planRestoreDrift,
   resolveKeepMine,
   revert,
   send,
 } from "./state";
+import { openApplyDialog } from "./applyDialog";
+import { openDeleteInFigma } from "./deleteFigma";
 import { button, copy, el, toast } from "./dom";
 import { stableStringify } from "../tokens/serialize";
 import { normalizePathKey } from "../tokens/paths";
@@ -163,11 +169,14 @@ function renderNow(): void {
   panelEl.appendChild(head);
 
   const body = el("div", "panel-body");
+  // Phase 5's whole job was to remove Phase 4's "editing changes nothing on the canvas" sentence.
+  // What replaces it has to be equally precise about the *new* boundary: edits are still local
+  // until applied, and applying is still not committing anything (git sync is Phase 6).
   body.appendChild(
     el(
       "p",
       "empty",
-      "Editing changes the local token tree only. Nothing is written to Figma, and nothing is committed anywhere — git sync lands in Phase 6."
+      "Editing changes the local token tree. Use Apply to write it into Figma — nothing is committed anywhere until git sync lands in Phase 6."
     )
   );
 
@@ -202,6 +211,8 @@ function renderSetSection(row: Row, line: Line): HTMLElement {
   section.title = line.set.label;
 
   if (line.conflict !== undefined) section.appendChild(renderConflict(line));
+  else if (line.drift !== undefined) section.appendChild(renderDrift(line));
+  else if (!line.edited) section.appendChild(renderInSync());
 
   // An edit is keyed on Figma provenance (ADR-0004 §2). Without one there is nothing to key on, so
   // say it up front rather than letting every field accept a value and quietly discard it (§8).
@@ -218,6 +229,11 @@ function renderSetSection(row: Row, line: Line): HTMLElement {
 
   const actions = el("div", "toolbar");
   if (line.edited) {
+    const apply = button("Apply", "primary");
+    apply.title = "Write this value into Figma.";
+    apply.addEventListener("click", () => applyLines([line], `Apply ${row.row.path}`));
+    actions.appendChild(apply);
+
     const revertOne = button("Revert to imported value");
     revertOne.addEventListener("click", () => {
       if (line.target !== null) revert([line.target]);
@@ -226,8 +242,13 @@ function renderSetSection(row: Row, line: Line): HTMLElement {
     actions.appendChild(revertOne);
   }
   actions.appendChild(
-    deleteButton([line], { action: "Delete", subject: `${row.row.path} in ${line.set.code}` })
+    deleteButton([line], { action: "Delete token", subject: `${row.row.path} in ${line.set.code}` })
   );
+  // Two separate actions with two separate names, and the second is styled as a different kind of
+  // thing (UX §5.7): "Delete token" is Phase 4's local tombstone, "Delete in Figma…" removes the
+  // Variable or Style from the file. The ellipsis promises a further step; the colour promises
+  // consequences.
+  actions.appendChild(deleteInFigmaButton([line]));
   section.appendChild(actions);
 
   for (const flag of line.flags) {
@@ -267,6 +288,86 @@ function describe(value: TokenValue | undefined): string {
   if (value === undefined) return "—";
   if (typeof value === "object") return stableStringify(value).trim().replace(/\s+/g, " ");
   return String(value);
+}
+
+/**
+ * UX §6.4's comparison block — the `edit-conflict` component with one row fewer.
+ *
+ * The two labels are deliberately **not** the doc's "Your token / Now in Figma". That pairing
+ * assumes the token file can disagree with Figma for an unedited token, which is only true from
+ * Phase 6: today the tree is re-derived from Figma on every scan, so a drifted-but-unedited row
+ * *already shows Figma's new value*. ADR-0005 §8 is explicit that this is a changelog against a
+ * local watermark, and the labels say exactly that instead of implying a divergence the
+ * architecture cannot yet produce. Same component, honest nouns.
+ */
+function renderDrift(line: Line): HTMLElement {
+  const drift = line.drift as NonNullable<Line["drift"]>;
+  const box = el("div", "conflict-box");
+  box.appendChild(el("div", undefined, "⚑ Changed in Figma"));
+
+  if (drift.kind === "drift-added") {
+    box.appendChild(el("div", undefined, "This is new in Figma since your last scan."));
+  } else if (drift.kind === "drift-removed") {
+    box.appendChild(el("div", undefined, "This was in Figma at your last scan and isn't any more."));
+  } else {
+    box.appendChild(el("div", "mono", `At your last scan  ${describe(drift.baseline)}`));
+    box.appendChild(el("div", "mono", `Now in Figma       ${describe(drift.current)}`));
+    box.appendChild(
+      el("div", undefined, "Someone edited this in Figma after your last scan. Your tree already shows the new value.")
+    );
+  }
+
+  const actions = el("div", "actions");
+
+  if (drift.kind === "drift-value") {
+    // "Re-apply token" in UX §6.4's table. In Phase 5 the token's value *is* Figma's, so the only
+    // thing left to push is the value from before the change — i.e. put Figma back. A canvas
+    // write, so it routes through the dialog like every other one.
+    const restore = button("Put Figma back");
+    restore.title = `Writes ${describe(drift.baseline)} — the value at your last scan — back into Figma.`;
+    restore.addEventListener("click", () => {
+      openApplyDialog({
+        plan: planRestoreDrift([line.key as string]),
+        title: `Put back ${line.entry.path}`,
+        nothingToDo: "Nothing to put back.",
+        onNothingToDo: toast,
+      });
+    });
+    actions.appendChild(restore);
+  }
+
+  const accept = button("Take Figma's");
+  accept.title = "Accepts the change and clears the flag. Nothing is written.";
+  accept.addEventListener("click", () => {
+    dismissDrift([line.key as string]);
+    toast("Accepted Figma's change.");
+  });
+  actions.appendChild(accept);
+
+  box.appendChild(actions);
+  return box;
+}
+
+/**
+ * The per-token green — UX §8's second of exactly three places it is allowed.
+ *
+ * The overlay is the right home for it: the user has already asked a question about one specific
+ * token, so an answer is warranted and there is room to give it. It stays off tree rows, where a
+ * green dot on 1,300 mostly-clean lines would be a wall of green that means nothing and drowns the
+ * fifteen amber badges that do.
+ */
+function renderInSync(): HTMLElement {
+  const model = getModel();
+  const row = el("div", "ok-line");
+  if (!model.driftKnown) {
+    // Never a green all-clear on an unknown (§8). Grey, and it says which it is.
+    const unknown = el("div", "empty");
+    unknown.textContent = "Not compared yet — there's no earlier scan to check this against.";
+    return unknown;
+  }
+  row.appendChild(el("span", undefined, "●"));
+  row.appendChild(el("span", undefined, "In sync — matches Figma as of the last scan."));
+  return row;
 }
 
 // ---------------------------------------------------------------------------
@@ -751,14 +852,54 @@ function renderProvenance(line: Line): HTMLElement {
 function renderPathActions(row: Row): HTMLElement {
   const section = el("div", "toolbar");
   if (row.lines.length > 1) {
+    if (row.lines.some((line) => line.edited)) {
+      const apply = button(`Apply all ${row.lines.length} sets`, "primary");
+      apply.addEventListener("click", () => applyLines(row.lines, `Apply ${row.row.path}`));
+      section.appendChild(apply);
+    }
     section.appendChild(
       deleteButton(row.lines, {
         action: `Delete from all ${row.lines.length} sets`,
         subject: `${row.row.path} from all ${row.lines.length} sets`,
       })
     );
+    section.appendChild(deleteInFigmaButton(row.lines));
   }
   return section;
+}
+
+/**
+ * Every apply entry point in this module funnels here, and here funnels into the dialog.
+ *
+ * UX §5.2's invariant restated as code: a one-row dialog *is* the confirmation, and there is no
+ * path around it — not even for a single token.
+ */
+export function applyLines(lines: Line[], title: string): void {
+  openApplyDialog({
+    plan: planFor({ keys: keysOf(lines) }),
+    title,
+    nothingToDo: "Figma already matches this.",
+    onNothingToDo: toast,
+  });
+}
+
+/** The destructive control. Red, ellipsised, and it opens a screen rather than acting. */
+export function deleteInFigmaButton(lines: Line[]): HTMLButtonElement {
+  const control = button("Delete in Figma…", "danger");
+  control.title = "Removes the Variable or Style from this file. Not undoable from the plugin.";
+  control.addEventListener("click", () => {
+    const key = openKey;
+    const set = focusSet;
+    openDeleteInFigma(lines, {
+      navigate: (path) => navigate(path),
+      // Hand the panel back to the detail view it replaced, rather than dumping the user in the
+      // tree having lost their place.
+      onClose: () => {
+        if (key !== null && getModel().byPath.has(key)) openDetail(key, set);
+      },
+    });
+  });
+  return control;
 }
 
 /**
