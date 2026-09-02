@@ -41,9 +41,9 @@ Connecting a Figma file to one GitHub repo and branch with a fine-grained PAT (�
 | Not this phase | Where it lives | What that means here |
 |---|---|---|
 | **Creating a Figma Variable or Style for a pulled token that has no counterpart in this file** | Its own ticket, probably its own ADR (ADR-0006 §11) | A repo authored outside Tokenvault **pulls in read-only**. These tokens are reported, named, and do nothing — §8.4. This is the single most likely thing to read as a bug, so it gets copy rather than silence. |
-| Branch creation, PRs, merge, history browsing | Open question §13.4 | The branch picker **reads** (`GET …/branches`). There is no `[ New branch ]` and no `[ Open a PR ]` — see §7.5 for the one link that hands the user to GitHub instead. |
+| Branch creation, PRs, merge, history browsing | Decided out — §13.4 | The branch picker **reads** (`GET …/branches`). There is no `[ New branch ]` and no `[ Open a PR ]` — see §7.5 for the one link that hands the user to GitHub instead. |
 | OAuth, GitLab, Bitbucket | v2 / PRD §4 | The settings panel says "GitHub" in the section header, not "Git provider". Don't design a provider picker for one provider. |
-| Automatic or scheduled push | Open question §13.2 | Phase 6 pushes when asked. Status checks are automatic; writes never are. |
+| Automatic or scheduled push | Decided out — §13.2 | Phase 6 pushes when asked. Status checks are automatic; writes never are. |
 | Theme composition, math, authoring or editing references | Phase 7 | Unchanged from Phases 4 and 5. **But pulled data can now contain references the user never authored** — which makes Phase 5 §5.6's alias-apply spec reachable for the first time. §8.3. |
 | Merging diverged content | Refused by ADR-0006 §6, not deferred | There is no three-way merge UI to design, and §9 is about making a refusal feel like a decision point rather than a dead end. |
 | Committing `$import-report.json` | Never (ADR-0006 §5) | It never appears in the diff, the file list, or the commit message. It is not a hidden file the user can reveal; it is not part of the repo. |
@@ -720,34 +720,38 @@ Two additions that are not colours:
 
 ---
 
-## 13. Open questions for Shyam
+## 13. Questions, and Shyam's answers (2026-09-02)
 
-Five come from ADR-0006, one is inherited from Phase 5 and comes due now. Each carries a recommendation so there's something to push against — but **none of them is decided.**
+All six are closed. Four went as recommended; **two were overridden, and both are structural** — they moved surfaces rather than words, and §4.1, §6.2, §7.2 and §10.4 are written to the decision, not to the recommendation. The recommendations are kept below so the trail reads.
 
 1. **What divergence actually looks like.** ADR-0006 §6 fixes that the plugin doesn't merge; it doesn't fix what the user sees.
    **Recommended:** §9 as written — per-file blocking (never global, never a full-panel interruption), a dedicated *Diverged files* screen reached from a flagged item, both sides summarized with an overlap count, `[ Compare ]` for a read-only token-level diff, and two symmetric buttons `Take the repo's` / `Keep mine` that apply to the whole file.
-   **The alternatives:** a blocking banner across the Tokens tab (rejected — it stops the user doing unrelated work over a file they may not care about today), or per-token selection in the compare view (rejected — that *is* the three-way merge the ADR refuses, arriving through the UI).
-   **The thing to react to:** whether "whole file, pick a side" is too blunt. It will be, occasionally. The bet is that it's rare, and that a bad merge is worse than an annoying refusal.
+   **✅ Decided as recommended.** Whole-file, pick-a-side. Clean files still push together; only the diverged file blocks, on its own screen, with both sides shown, the overlap count called out, a read-only compare, and symmetric buttons. Per-token selection stays refused — it *is* the three-way merge ADR-0006 §6 rules out. **Lives in §9**, with §9.2's screen relocated into the Repo tab by decision 3.
 
 2. **Manual push only, or scheduled/automatic?** And separately, auto-pull on panel open.
-   **Recommended:** manual push, manual pull, **automatic status check**. Status is a read, costs one request, and answers a question the user always wants answered. Push and pull both create consequences someone else can see — a commit in a shared repo, or pending work in your panel — and neither should happen without a tap.
-   **The thing to react to:** auto-push is a coherent design, not a lazy one — it would make the repo the live state and delete the "uncommitted" concept entirely. It's a different product, and worth saying no to deliberately rather than by default.
+   **Recommended:** manual push, manual pull, **automatic status check**.
+   **✅ Decided as recommended.** Push is manual, pull is manual, sync status refreshes on its own; no auto-pull, no auto-push, no timer. Status is a read that costs one request; push and pull both create consequences someone else can see, and neither happens without a tap. **§6.2, §8.5.**
 
 3. **New surface, or grow Phase 5's Changes panel?**
-   **Recommended:** grow it. A fourth tab, `Repo`, in the existing Changes list (§6.2), with the commit surface as a **modal over it** (§7.2) rather than a screen beside it. The Changes list keeps its role as the one place the whole state of the world is legible; the modal answers *am I sure*, which is what modals in this panel are for.
-   **The thing to react to:** the commit modal is doing more than the apply dialog — file grouping, nested token rows, two text fields, per-file checkboxes. If it grows one more control it stops being a confirmation and should become its own screen. §7.2 is close to that line already.
+   **Recommended:** grow it — a fourth `Repo` tab inside the Changes list, with the commit surface as a modal over it.
+   **⛔ Overridden. The commit and diff view gets its own surface.**
+   **What that resolved to:** a **third top-level tab, `Repo`**, beside Import and Tokens (§4.1, §6.2), holding three screens — **Review & push** (§7.2), **Diverged files** (§9.2) and **Compare** (§9.2). The commit modal is gone; reviewing and pushing is a screen with a back arrow, a pinned `[ Commit to main ]` footer, and no backdrop. The Changes list keeps its three Phase 5 tabs and gains no Repo tab (§6.3). The chip's two halves now open two surfaces — left to Changes, right to the Repo tab — which is the divider's semantics finally getting a destination on each side.
+   **Why the override is right, and not just different:** the recommendation's own caveat said the commit surface was already over the line for a modal. Phase 4's rule is that tabs are for places you work, and reviewing a diff, choosing files and writing a message *is* work. The original objection to a third tab — that it would split *what needs me?* across two screens — is answered by the chip staying in the header and remaining readable from every tab. What moved into the tab is the acting, not the knowing.
+   **What was explicitly preserved:** the row component (`{ target, before, after, state }`), the swatches, the `↗` reference preview, the blocked-row treatment, the file-shaped grouping with token rows nested. The override was about location and identity, not about discarding reusable pieces.
 
 4. **How much git should Tokenvault expose?**
-   **Recommended:** push and pull against one selected branch, and nothing else. No branch creation, no PR flow, no history browsing — instead, one `[ View commit ↗ ]` link that hands the user to GitHub, which is better at all three than a 460 px panel will ever be (§7.5).
-   **The thing to react to:** branch creation is genuinely small on top of ADR-0006 §8, and "commit to a new branch" is a real safety valve for someone nervous about pushing to `main`. If that's the actual use case, the cheapest version isn't a branch creator — it's the branch picker gaining a `+ New branch from main` row, and no PR flow at all.
+   **Recommended:** push and pull against one selected branch, and nothing else, plus one `[ View commit ↗ ]` link out.
+   **✅ Decided as recommended.** One branch, push and pull, a link to the commit on GitHub. No branch creation, no PR flow, no history browsing in-plugin. The branch picker still *reads* the branch list. **§7.5.**
 
 5. **Does the first connect adopt the repo or overwrite it?**
-   **Recommended:** ask once, in a modal, with **adopt the repo preselected** (§5.3) — it's the source of truth by ADR-0006 §2, and it's the direction that writes nothing until a second confirmation. Skip the question entirely when the repo has no tokens folder, or when the file has never been scanned.
-   **The thing to react to:** the alternative is refusing to guess and dropping all twelve files into §9's divergence queue. More honest, and a miserable first five minutes. The recommendation trades a small amount of honesty for a first run that works.
+   **Recommended:** ask once, in a modal, adopt-the-repo preselected; skip when the repo has no tokens folder or the file has never been scanned.
+   **✅ Decided as recommended.** **§5.3.** The alternative — refusing to guess and dropping twelve files into §9's queue — is rejected as an honest but miserable first five minutes.
 
-6. **Inherited from Phase 5 §9.9, and now due: does bulk `Take Figma's` need a confirmation?** Phase 5 closed this because the question dissolved — the tree already held Figma's values, so accepting forty drift flags wrote nothing. Connected to a repo, that premise is gone: accepting in bulk now produces forty uncommitted changes headed for a shared repo. Phase 5 flagged this exact reopening.
-   **Recommended:** still no confirmation dialog — but the outcome is now stated in the toast (*"Accepted 40 changes from Figma — 40 changes to push."*) and visible in the chip, and nothing reaches the repo without the commit modal, which is a full review surface. The consequence is confirmed at the point it becomes real, which is push, not accept.
-   **The thing to react to:** whether two taps between "accept forty" and "commit forty" is enough separation.
+6. **Inherited from Phase 5 §9.9: does bulk `Take Figma's` need a confirmation?**
+   **Recommended:** no dialog — the toast states the outcome, the chip shows it, and the push surface downstream is a full review.
+   **⛔ Overridden. Bulk `Take Figma's` confirms before it stages anything.**
+   **What that resolved to:** an **inline confirm strip in the Changes list footer** (§10.4), replacing the bulk button in place — nothing dims, nothing overlays, the rows stay visible. Two lines: the question with the count, and the consequence in the user's units naming the branch (*"They become 40 changes to push to `main`."*), then `[ Cancel ]` and `[ Accept 40 ]`. Deliberately lighter than the apply dialog: this is a beat, not an interruption. Bulk `Take the repo's` gets the same strip. Single-token accepts never confirm, and nothing confirms while disconnected, because there the action still writes nothing.
+   **Where it sits:** upstream of the Repo tab and asking a different question. The strip confirms **scale** (*40 things at once*) in the Changes list; **Review & push** confirms **content** (*exactly this, to `main`*) in the Repo tab. The recommendation's mistake was treating the repo as the only place a consequence becomes real — forty overlay entries are a real change to the user's working state before any push, and nothing was asking about them.
 
 ---
 
@@ -756,9 +760,12 @@ Five come from ADR-0006, one is inherited from Phase 5 and comes due now. Each c
 - **Read ADR-0006 first.** This doc specifies how states *read*; the ADR owns the transport, the SHA comparison, the commit sequence, storage keys and the failure taxonomy. Where they disagree, the ADR wins.
 - **The PAT never enters the DOM.** §5.2's field renders `••••` plus four characters from stored metadata, not from the token. No `value` attribute, no reveal toggle, no autofill-able input, and the field is inert until `[ Replace ]` swaps it for an empty one. This is ADR-0006 §1 as a UI requirement, not a nicety.
 - **No error message passes through unscrubbed.** Every string in §11's table is written by us from a status code. Never render GitHub's response body, and never a URL that could carry a token.
-- **The chip is one component with two slots.** Don't build two chips that happen to sit together — the divider and the shared tap target are what make *in sync with what* answerable. Right slot renders empty and takes no space when not connected.
-- **File state and token state are separate models.** §3. The Repo tab and the commit modal are file-keyed; everything else is `{ path, setId }`-keyed. Don't unify them behind one "change" type — they have different identities, different counts, and different resolutions.
-- **Reuse Phase 5's row component for the commit diff, the compare view, and the apply dialog.** Phase 5 §10 built it as `{ target, before, after, state }` for exactly this. If Phase 6 introduces a second diff row, something went wrong.
+- **The chip is one component with two slots and two tap targets.** Don't build two chips that happen to sit together — the divider is what makes *in sync with what* answerable. Left slot navigates to the Changes list, right slot switches to the Repo tab (§4.1). Right slot renders empty, takes no space, and takes no taps when not connected.
+- **Reuse Phase 5's row component for the commit diff, the compare view, and the apply dialog.** Phase 5 §10 built it as `{ target, before, after, state }` for exactly this. If Phase 6 introduces a second diff row, something went wrong. Moving the commit surface out of a modal changed its container, not its rows.
+- **Bulk `Take Figma's` and bulk `Take the repo's` both confirm inline before staging** (§10.4) — footer strip, list not dimmed, `Esc` and a tap on the list both cancel. Single-token accepts never confirm. Nothing confirms while disconnected. The threshold is "more than one change staged", not a magic number.
+- **The Repo tab is a top-level tab, and its screens are screens.** §4.1, §7.2. The tab strip goes to three items; Review & push, Diverged files and Compare are pushed screens within it, each with a back arrow that preserves state. There is no commit modal — an earlier draft of this doc had one, and any component named for it is from the draft, not the spec.
+- **Going back from Review & push preserves checkbox state and the typed message.** So does a failed push (§7.4, §11). The screen is only torn down on a successful commit or a tab switch away from Repo — and a tab switch away and back should restore it, because a user who taps Tokens to check a value mid-review has not cancelled anything.
+- **File state and token state are separate models.** §3. The Repo tab and its screens are file-keyed; everything else is `{ path, setId }`-keyed. Don't unify them behind one "change" type — they have different identities, different counts, and different resolutions.
 - **A status check runs on panel open, on Repo tab open, and after every push and pull** — and never on a timer (ADR-0006's no-polling position, and Phase 5 §9.5's).
 - **Pull writes overlay entries with `origin: "pulled"` and nothing else.** No Figma writes, no second write path, no bypassing the apply dialog. The `from repo` tag is grey text on the row, not a badge.
 - **`$import-report.json` is excluded at the push boundary**, not filtered in the UI. It should be impossible for it to reach the diff list.
