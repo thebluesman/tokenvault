@@ -516,12 +516,12 @@ The state ADR-0006 refuses to merge, and the moment §1 says this phase will be 
 Three rules, and the second is the one that makes this liveable:
 
 1. **Divergence blocks per file, never globally.** Two files diverged out of twelve means ten files still push and pull normally. A push with one diverged file is one commit containing the ten clean ones — which is exactly what git would do, and refusing the whole operation over one file would make a single stale file lock the plugin.
-2. **Nothing about it is a full-panel interruption.** No blocking banner over the Tokens tab, no modal on panel open, no *"you must resolve this before continuing"*. The user came here to edit tokens and can keep doing that; the diverged file is a flagged item in the Repo tab and a blocked row in the commit modal, in the amber `.entry` treatment every other blocker in this panel already uses.
+2. **Nothing about it is a full-panel interruption.** No blocking banner over the Tokens tab, no modal on panel open, no *"you must resolve this before continuing"*. The user came here to edit tokens and can keep doing that; the diverged file is a flagged item in the Repo tab and a blocked row on the Review & push screen, in the amber `.entry` treatment every other blocker in this panel already uses.
 3. **Both escape hatches are per-file and both are named plainly.** *Take the repo's* and *Keep mine*. No third "merge" option, because there isn't one, and no greyed one, because a greyed control promises a feature.
 
 ### 9.2 The Diverged files screen
 
-Reached from `[ Sort this out ]` in the Repo tab or the commit modal. Its own full-panel overlay, because it is a screen you go to deliberately to make a real decision — the same weight rationale as Phase 5's delete confirmation, and the opposite of a modal you dismiss with a stray backdrop tap.
+Reached from `[ Sort this out ]` on either the Repo tab or the Review & push screen. **A screen inside the Repo tab**, forward from wherever you were, back arrow returning you there — because it is a place you go deliberately to make a real decision, and the opposite of a modal you dismiss with a stray backdrop tap. Since §7.2's override, both entry points are now screens in the same tab, so this is a sibling rather than a third layer stacked over a modal.
 
 ```
 ┌──────────────────────────────────────────────┐
@@ -552,7 +552,7 @@ Reached from `[ Sort this out ]` in the Repo tab or the commit modal. Its own fu
 
 - **Both sides are summarized before either button.** Counts first, then the first two token rows of each, then `[ Compare ]` for the full side-by-side. A file-wide decision made without seeing what is in the file is a coin flip, and this screen exists to stop it being one.
 - **The overlap count is called out separately** — *"2 tokens changed on both sides"* — because that is the number that tells the user whether this is a real collision or two people working in different corners of the same file. Four-and-six-with-zero-overlap is a merge anyone would want; four-and-six-with-two-overlap is a conversation.
-- **`[ Compare ]` opens a read-only token-level diff** for that file, using the commit modal's row component with `repo` and `here` columns and unchanged tokens collapsed. Read-only and per-token selection is **not** offered: picking tokens individually is the three-way merge ADR-0006 §6 refuses, and building a UI for it here would be smuggling it in.
+- **`[ Compare ]` opens a read-only token-level diff** for that file — a third screen in the Repo tab, using the Review & push screen's row component with `repo` and `here` columns and unchanged tokens collapsed. Read-only and per-token selection is **not** offered: picking tokens individually is the three-way merge ADR-0006 §6 refuses, and building a UI for it here would be smuggling it in.
 - **Neither button is styled destructive.** Both discard something, symmetrically, and neither deletes anything from the file or the repo — *Keep mine* is a normal commit whose parent is the current head, so the repo's version stays in history and is recoverable by ordinary git means. Making one red would imply the other is safe.
 - **What each does, stated under the buttons rather than in a tooltip:**
 
@@ -600,7 +600,7 @@ Once a file is connected, ADR-0006 §7 swaps the baseline to the last-pulled rep
 
 - **`In the repo`, not `Your token`.** The original Phase 4 framing was `Your token`, and it is still not quite right: the tree renders `build(scan) + overlay`, so "your token" is showing Figma's value on this row. `In the repo` names the thing the row actually holds, which is the whole point of the correction.
 - **The button pair is now symmetric, and it matches §8.2's conflict block verbatim.** `Take the repo's` / `Take Figma's` — two sources, two buttons, one vocabulary for picking between them everywhere in the panel. `Put Figma back` survives only in the disconnected case, where there is no repo to name.
-- **`Take Figma's` gains a consequence it did not have in Phase 5.** It now creates an uncommitted change. The toast says so: *"Accepted the change from Figma — 1 change to push."* — where Phase 5's was *"Accepted the change from Figma."* full stop. Phase 5's build note *"`Take Figma's` writes nothing"* is true only while disconnected, and needs an `if connected` beside it.
+- **`Take Figma's` gains a consequence it did not have in Phase 5.** It now creates an uncommitted change. The toast says so: *"Accepted the change from Figma — 1 change to push."* — where Phase 5's was *"Accepted the change from Figma."* full stop. Phase 5's build note *"`Take Figma's` writes nothing"* is true only while disconnected, and needs an `if connected` beside it. **On a single token that is the whole story; in bulk it now needs a confirm — §10.4.**
 - **The added / removed drift kinds are unchanged.** A target that appeared or vanished between scans still has no baseline to restore and still offers `Take Figma's` alone.
 
 ### 10.3 Connecting visibly upgrades drift
