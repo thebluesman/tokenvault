@@ -18,6 +18,7 @@ import type {
   VariableSnapshot,
   VariableValueSnapshot,
 } from "../src/tokens/types";
+import type { FlatToken } from "../src/tokens/view";
 import { isToken } from "../src/tokens/paths";
 
 export function collection(
@@ -212,4 +213,49 @@ export function fileAt(
   const found = files.find((file) => file.path === path);
   if (!found) throw new Error(`No generated file at ${path}. Got: ${files.map((f) => f.path).join(", ")}`);
   return found.content as TokenGroup;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 — apply and drift (ADR-0005)
+// ---------------------------------------------------------------------------
+
+/** A Variables-derived token, keyed the way `targetOfToken` reads provenance. */
+export function varToken(
+  type: Token["$type"],
+  value: unknown,
+  figma: Record<string, unknown> = {},
+  extras: Record<string, unknown> = {}
+): Token {
+  return {
+    $type: type,
+    $value: value as Token["$value"],
+    $extensions: {
+      "com.tokenvault": {
+        figma: { variableId: "VariableID:1:1", modeId: "1:0", ...figma },
+        ...extras,
+      } as Token["$extensions"]["com.tokenvault"],
+    },
+  };
+}
+
+/** A Styles-derived token — the other half of the structurally discriminated provenance. */
+export function styleToken(
+  type: Token["$type"],
+  value: unknown,
+  figma: Record<string, unknown> = {}
+): Token {
+  return {
+    $type: type,
+    $value: value as Token["$value"],
+    $extensions: {
+      "com.tokenvault": {
+        figma: { styleId: "S:abc", styleType: "PAINT", ...figma },
+      } as Token["$extensions"]["com.tokenvault"],
+    },
+  };
+}
+
+/** One `FlatToken`, the unit the view model and the apply plan are both keyed by. */
+export function flat(path: string, setId: string, token: Token): FlatToken {
+  return { path, segments: path.split("."), setId, token };
 }

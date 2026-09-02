@@ -1,4 +1,5 @@
 import type {
+  ApplyReport,
   ImportPayload,
   MergeSummary,
   PluginToUiMessage,
@@ -6,11 +7,17 @@ import type {
   UiToPluginMessage,
 } from "./messages";
 import type { FileScan, ImportResult, SubtypeSelection } from "./tokens/types";
-import type { EditOverlay, OverlayEntry, OverlayOp, OverlayTarget } from "./tokens/overlay";
+import type { EditOverlay, EntryRef, OverlayEntry, OverlayOp, OverlayTarget } from "./tokens/overlay";
+import type { DriftResult } from "./tokens/drift";
+import type { FlatToken } from "./tokens/view";
+import type { PlannedWrite } from "./figma/apply";
+import type { Refusal } from "./tokens/toFigma";
 import {
   applyOverlayToFiles,
+  dropEntries,
   dropEntry,
   emptyOverlay,
+  indexOverlay,
   keepMine,
   mergeOverlay,
   parseOverlay,
@@ -21,8 +28,12 @@ import {
 import { flattenImport, treeIndex } from "./tokens/view";
 import { buildMergedImport } from "./tokens/merge";
 import { stableStringify } from "./tokens/serialize";
+import { detectDrift, emptyDrift } from "./tokens/drift";
+import { styleGuards } from "./tokens/toFigma";
+import { normalizePathKey, toDottedPath } from "./tokens/paths";
 import { scanFile } from "./figma/scan";
 import { scanStyles } from "./figma/scanStyles";
+import { applyWrites, countConsumers, selectNodes } from "./figma/apply";
 
 /**
  * Where user subtype tags live until Phase 6 gives us a git working copy.
@@ -78,6 +89,50 @@ let importFromCache = false;
 
 /** When the last real read of the Figma file happened — not when a tag was last edited. */
 let lastScanAt: string | null = null;
+
+/**
+ * The drift baseline — the tree as of the last scan we have a record of (ADR-0005 §7).
+ *
+ * Held flattened rather than re-derived per scan: it is read once per scan and the flatten is the
+ * expensive half. `baselineKnown` is deliberately separate from `baseline.length === 0`, because
+ * "the cache was evicted" and "the file has no tokens" are different answers to *is anything
+ * drifting?* and §8 refuses to collapse them.
+ */
+let baseline: FlatToken[] = [];
+let baselineKnown = false;
+
+/** The last scan's drift, carried to the UI on every emit so a refresh doesn't drop the badges. */
+let drift: DriftResult = emptyDrift();
+
+/**
+ * Targets this plugin wrote in the apply that is about to be followed by a rescan.
+ *
+ * Without this, every apply would report itself as drift on the very next scan: the baseline still
+ * holds the pre-apply value, and a target whose edit has just retired is no longer in the overlay,
+ * so nothing else would exclude it. Deletion is the loudest version — removing a Variable on
+ * purpose would come back as `drift-removed`, i.e. the plugin telling the user that someone
+ * deleted the thing they just deleted.
+ *
+ * Drift means *someone else moved it*. Figma's own `documentchange` draws the same line — it never
+ * notifies a plugin about changes that plugin caused — and this is that rule, applied to a
+ * mechanism that has to infer authorship by comparison rather than being told.
+ *
+ * Consumed by the next scan and cleared, so it can never suppress a *later*, genuine change to the
+ * same target.
+ */
+let justWrote = new Set<string>();
+
+/**
+ * The apply guards from the last scan, restored alongside the import cache.
+ *
+ * `styleGuards` and `nonLocalPaths` are derived from the *live* Figma read, so before Phase 5 they
+ * had no way to survive a panel reopen: `emitImport` sent two empty collections and the plan built
+ * from them refused nothing, because an unpopulated guard map answers every lookup with
+ * `undefined`. Caching them alongside the tree they belong to keeps Apply usable on reopen without
+ * forcing a rescan; `null` means the cache predates them, and Apply refuses until a scan runs.
+ */
+let cachedGuards: Array<[string, Refusal]> | null = null;
+let cachedNonLocal: string[] | null = null;
 
 /**
  * Guards against a subtype edit landing against a stale snapshot mid-scan, and against an
@@ -183,10 +238,14 @@ async function persistImportCache(result: ImportResult): Promise<void> {
       await figma.clientStorage.deleteAsync(IMPORT_CACHE_PREFIX + previous);
     }
     await figma.clientStorage.setAsync(importCacheKey(), {
-      version: 1,
+      version: 2,
       importedAt: lastScanAt,
       fileName: snapshot === null ? figma.root.name : snapshot.variables.fileName,
       result,
+      // Cached with the tree rather than in a third store, for the same reason the tree *is* the
+      // drift baseline: they describe the same scan and must never be restorable apart from it.
+      styleGuards: snapshot === null ? [] : Array.from(styleGuards(snapshot.styles).entries()),
+      nonLocalPaths: nonLocalPaths(),
     });
     await figma.clientStorage.setAsync(IMPORT_CACHE_OWNER_KEY, owner);
   } catch {
@@ -204,20 +263,37 @@ interface CachedImport {
   importedAt: string | null;
   fileName: string;
   result: ImportResult;
+  /** `null` for a v1 cache, written before the guards were part of it. Unknown, not empty. */
+  styleGuards: Array<[string, Refusal]> | null;
+  nonLocalPaths: string[] | null;
 }
 
 async function loadImportCache(): Promise<CachedImport | null> {
   try {
     const stored = await figma.clientStorage.getAsync(importCacheKey());
     if (stored === null || typeof stored !== "object") return null;
-    const record = stored as { version?: unknown; result?: unknown; importedAt?: unknown; fileName?: unknown };
-    if (record.version !== 1 || record.result === null || typeof record.result !== "object") return null;
+    const record = stored as {
+      version?: unknown;
+      result?: unknown;
+      importedAt?: unknown;
+      fileName?: unknown;
+      styleGuards?: unknown;
+      nonLocalPaths?: unknown;
+    };
+    // v1 is still readable — it just predates the guards, and losing a whole cached tree over a
+    // field the payload marks as unknown anyway would cost a rescan for no safety gained.
+    if (record.version !== 1 && record.version !== 2) return null;
+    if (record.result === null || typeof record.result !== "object") return null;
     const result = record.result as ImportResult;
     if (!Array.isArray(result.files) || result.manifest === undefined) return null;
     return {
       importedAt: typeof record.importedAt === "string" ? record.importedAt : null,
       fileName: typeof record.fileName === "string" ? record.fileName : figma.root.name,
       result,
+      styleGuards: Array.isArray(record.styleGuards)
+        ? (record.styleGuards as Array<[string, Refusal]>)
+        : null,
+      nonLocalPaths: Array.isArray(record.nonLocalPaths) ? (record.nonLocalPaths as string[]) : null,
     };
   } catch {
     return null;
@@ -241,6 +317,12 @@ function emitImport(fileName: string, refresh = false): void {
     json: stableStringify(file.content),
   }));
 
+  // Live where there is a snapshot, restored from the cache where there isn't, `null` where neither
+  // has them — never silently empty.
+  const guards =
+    snapshot === null ? cachedGuards : Array.from(styleGuards(snapshot.styles).entries());
+  const nonLocal = snapshot === null ? cachedNonLocal : nonLocalPaths();
+
   post({
     type: "import-result",
     payload: {
@@ -255,9 +337,30 @@ function emitImport(fileName: string, refresh = false): void {
       merge: pendingMerge,
       fromCache: importFromCache,
       refresh,
+      drift: drift.entries,
+      driftKnown: baselineKnown,
+      styleGuards: guards ?? [],
+      nonLocalPaths: nonLocal ?? [],
+      // Empty-because-clean and empty-because-unasked are different answers to "what would this
+      // write overwrite?", and only one of them may enable Apply — §8's rule, applied a second time.
+      guardsKnown: guards !== null && nonLocal !== null,
     } satisfies ImportPayload,
   });
   pendingMerge = undefined;
+}
+
+/**
+ * Paths that name a variable in a published team library — ADR-0005 §11's locality check.
+ *
+ * Not re-derived: `scan.ts` populates `aliasTargetNames` for exactly the alias targets that were
+ * **not** in the local set, so this set is already the non-local one by construction. Every token
+ * in the tree is local (the scan reads only `getLocalVariablesAsync`), which is why apply never
+ * has to ask whether its *write* target is writable — only whether an *alias* target is.
+ */
+function nonLocalPaths(): string[] {
+  if (snapshot === null) return [];
+  const names = snapshot.variables.aliasTargetNames;
+  return Object.keys(names).map((id) => normalizePathKey(toDottedPath(names[id])));
 }
 
 /**
@@ -281,13 +384,34 @@ async function rebuild(fromScan: boolean, refresh = false): Promise<void> {
   const now = new Date().toISOString();
   const merged = mergeOverlay(flat, overlay, now);
 
+  // Drift is computed **before** the merge's outcome retires anything, and against the overlay as
+  // it stood going in: a token carrying an edit is excluded here and reported as `edit-conflict`
+  // by the merge instead (ADR-0005 §7). One mechanism widened, not two that can disagree.
+  if (fromScan) {
+    const edited = new Set(indexOverlay(overlay).keys());
+    for (const key of justWrote) edited.add(key);
+    justWrote = new Set();
+    drift = baselineKnown ? detectDrift(baseline, flat, edited) : emptyDrift();
+    baseline = flat;
+    baselineKnown = true;
+  }
+
   const changed = stableStringify(merged.overlay) !== stableStringify(overlay);
   overlay = merged.overlay;
 
-  if (merged.entries.length > 0) {
-    result.report.entries = result.report.entries.concat(merged.entries);
+  // Drift rides the existing report rather than a parallel channel, which is what lets it inherit
+  // the `⚑` badge, the flagged filter chip and the post-scan banner's `[ Review ]` for free
+  // (UX §6.2) instead of growing a second attention vocabulary in a 460px column.
+  const reported = merged.entries.concat(drift.report);
+  if (reported.length > 0) {
+    result.report.entries = result.report.entries.concat(reported);
     result.report.counts.flagged = result.report.entries.length;
     result.counts.flagged = result.report.entries.length;
+  }
+  // Absent, not zero, when there is no baseline — §8's "unknown is not none", all the way down.
+  if (baselineKnown) {
+    result.report.counts.drifted = drift.entries.length;
+    result.counts.drifted = drift.entries.length;
   }
   result.report.counts.editsApplied = merged.applied;
   result.report.counts.editConflicts = merged.conflicts;
@@ -299,12 +423,14 @@ async function rebuild(fromScan: boolean, refresh = false): Promise<void> {
   // The merge summary belongs to a rescan (UX §5.5). A subtype retag rebuilds against the same
   // snapshot, so reporting "7 edits reapplied" there would announce an event that didn't happen.
   pendingMerge =
-    fromScan && merged.applied + merged.conflicts + merged.orphaned + merged.retired > 0
+    fromScan &&
+    merged.applied + merged.conflicts + merged.orphaned + merged.retired + drift.entries.length > 0
       ? {
           applied: merged.applied,
           conflicts: merged.conflicts,
           orphaned: merged.orphaned,
           retired: merged.retired,
+          drifted: drift.entries.length,
         }
       : undefined;
 
@@ -406,6 +532,103 @@ async function handleRevert(targets: OverlayTarget[], op: OverlayOp | undefined)
   await commitOverlay(next, resolvedFlag);
 }
 
+/**
+ * Drops exactly the named entries — the durable half of the Changes list's *Undo all*.
+ *
+ * Never `emptyOverlay()`. That button lives on a tab that filters conflicts out, so clearing the
+ * whole store would silently discard resolutions the user was never shown under it. The UI sends
+ * the list it rendered, and this drops that list and nothing else.
+ */
+async function handleRevertEntries(refs: EntryRef[]): Promise<void> {
+  const resolvedFlag = refs.some((ref) => carriesFlag(ref.target, ref.op));
+  await commitOverlay(dropEntries(overlay, refs), resolvedFlag);
+}
+
+// ---------------------------------------------------------------------------
+// Writing to Figma — ADR-0005 §5, §6
+// ---------------------------------------------------------------------------
+
+/**
+ * Applies a confirmed plan and rescans.
+ *
+ * The rescan is not housekeeping — **it is what retires the overlay** (§6). ADR-0004 §4's merge
+ * table already says *"Value equals the entry's `value` → Figma caught up to the edit. Retire the
+ * entry silently."* An applied edit is exactly that case, so applied entries retire through
+ * existing code with no new retirement logic and no new lifecycle state. An entry that failed to
+ * apply does not match, stays in the overlay, and stays visible — which is the whole reason this
+ * needs no bookkeeping of its own.
+ *
+ * The report goes out *before* the rescan so the toast lands immediately rather than after a
+ * full re-read of the file.
+ */
+async function handleApply(writes: PlannedWrite[], destructive: boolean): Promise<void> {
+  if (writes.length === 0) {
+    post({ type: "apply-result", report: { outcomes: [], applied: 0, failed: 0, destructive } });
+    return;
+  }
+
+  const outcomes = await applyWrites(writes);
+  const succeeded = new Set(outcomes.filter((outcome) => outcome.ok).map((outcome) => outcome.key));
+  // Only what actually landed. A write that failed did *not* move Figma, so if the value differs
+  // from the baseline on the next scan it is genuinely someone else's change and must still report.
+  for (const write of writes) {
+    if (succeeded.has(write.key)) justWrote.add(write.targetKey);
+  }
+
+  const applied = outcomes.filter((outcome) => outcome.ok).length;
+  const report: ApplyReport = {
+    outcomes,
+    applied,
+    failed: outcomes.length - applied,
+    destructive,
+  };
+  post({ type: "apply-result", report });
+
+  // Even a fully failed apply rescans: something refused the write, and the tree the user is
+  // looking at is the one that made a claim about Figma that turned out to be wrong.
+  await handleScan();
+}
+
+/**
+ * The delete flow — its own handler, never a branch inside `handleApply` (UX §10).
+ *
+ * `clearOverlayFor` is the confirmation's checked-by-default *"Also remove the token from the local
+ * tree"*. Dropping the target's overlay entries is what that means in practice: the Variable is
+ * gone, so the token leaves the tree on the next scan either way, and any edit still keyed to it
+ * would otherwise surface as an `orphaned-edit` the user has to clean up after their own
+ * deliberate deletion (UX §5.7, *Afterwards*).
+ */
+async function handleDeleteInFigma(
+  writes: PlannedWrite[],
+  clearOverlayFor: OverlayTarget[]
+): Promise<void> {
+  if (clearOverlayFor.length > 0) {
+    let next = overlay;
+    for (const target of clearOverlayFor) next = removeEntries(next, target);
+    overlay = next;
+    const storageError = await persistOverlay();
+    post({ type: "overlay-state", overlay, storageError });
+  }
+  await handleApply(writes, true);
+}
+
+/**
+ * What `[ Show them ]` actually managed, said in one line.
+ *
+ * Figma's selection is per-page, so consumers spread across pages cannot all be selected at once.
+ * The count on the delete screen ("Used by 14 layers") counts every page, and a toast reading
+ * "Selected 9 layers" against it would look like five layers had quietly gone missing — so the
+ * remainder is named rather than dropped.
+ */
+function describeSelection(result: { selected: number; found: number; pages: number }): string {
+  if (result.found === 0) return "Those layers aren't reachable any more.";
+  const selected = `Selected ${result.selected} layer${result.selected === 1 ? "" : "s"}`;
+  if (result.pages <= 1) return `${selected}.`;
+  const elsewhere = result.found - result.selected;
+  const others = result.pages - 1;
+  return `${selected} on this page. ${elsewhere} more ${elsewhere === 1 ? "is" : "are"} on ${others} other page${others === 1 ? "" : "s"} — Figma can only select one page at a time.`;
+}
+
 function handleCopyTree(): void {
   if (!importResult) {
     post({ type: "tree-json", json: "", files: 0 });
@@ -444,6 +667,12 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
         importResult = cached.result;
         lastScanAt = cached.importedAt;
         importFromCache = true;
+        // The cache *is* the drift baseline (ADR-0005 §7) — no third store. Restoring it here is
+        // what lets the first scan of a session say what changed while the panel was closed.
+        baseline = flattenImport(treeIndex(cached.result.files), cached.result.manifest);
+        baselineKnown = true;
+        cachedGuards = cached.styleGuards;
+        cachedNonLocal = cached.nonLocalPaths;
         emitImport(cached.fileName);
       } else if (overlay.entries.length > 0) {
         post({ type: "overlay-state", overlay });
@@ -466,11 +695,8 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
       await handleRevert(message.targets, message.op);
       return;
     }
-    if (message.type === "revert-all") {
-      const resolvedFlag = overlay.entries.some(
-        (entry) => entry.conflict !== undefined || entry.orphaned === true
-      );
-      await commitOverlay(emptyOverlay(), resolvedFlag);
+    if (message.type === "revert-entries") {
+      await handleRevertEntries(message.entries);
       return;
     }
     if (message.type === "keep-mine") {
@@ -480,6 +706,22 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
     }
     if (message.type === "copy-tree") {
       handleCopyTree();
+      return;
+    }
+    if (message.type === "apply") {
+      await handleApply(message.writes, false);
+      return;
+    }
+    if (message.type === "delete-in-figma") {
+      await handleDeleteInFigma(message.writes, message.clearOverlayFor);
+      return;
+    }
+    if (message.type === "count-consumers") {
+      post({ type: "consumer-counts", counts: await countConsumers(message.targets) });
+      return;
+    }
+    if (message.type === "select-nodes") {
+      figma.notify(describeSelection(await selectNodes(message.nodeIds)));
       return;
     }
     if (message.type === "copy-scan") {
