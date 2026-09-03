@@ -128,11 +128,13 @@ Three things go by "themes" in PRD §6.2. Phase 7 needs them in this order, and 
 
 Default is the first theme in the manifest, including ADR-0002 Amendment 1 §D's synthesised `Default`. If the stored name is gone after a rescan or pull, fall back to the first theme **and say so** — silently resolving against a stack the user did not choose would change every displayed value with no explanation.
 
-**(b) Theme composition — lands, as manifest editing only.** Create, rename, delete a theme; add, remove and reorder its `selectedTokenSets`. This is the answer ADR-0002 §6 deferred to Phase 7 by name: a file with two or more multi-mode collections currently gets *no* themes and a `theme-composition` / `ambiguous` report entry, which means §7(a) would have nothing to select and the resolver nothing to resolve. Composition editing is what makes that file usable, and it is the smallest thing that does.
+**(b) Theme composition editing — designed here, NOT built in Phase 7** *(resolved 2026-09-03)*. Shyam's call, taking the smaller scope: **Phase 7 ships read-only theme selection and switching only** — pick and switch between the themes import already derives from Figma's collections and modes (ADR-0002 §6). Creating, renaming, deleting a theme, and editing its `selectedTokenSets`, are out of this phase. Nothing in §1–§6 depends on composition editing; §7(a) selects among the themes that exist and the resolver resolves against them, exactly as it would have.
 
-Storage follows the `userSubtypes` precedent (ADR-0004 §3), not the overlay: the overlay is keyed by Figma provenance id and a theme has none. A separate small store, `tokenvault:themes:<file-id>`, holds an override of the manifest's `themes[]` and is merged over the import-generated value on every build — the same "declared, inspectable transform over a reproducible build" shape ADR-0004 §4 chose for the overlay, so ADR-0002 §7's byte-identical build guarantee survives. Once connected to a repo, the committed `$manifest.json` is authoritative and the override is uncommitted work.
+The design below stands as the intended shape *if and when* composition editing is picked up. It is recorded rather than cut so that whoever builds it is not re-deriving it, but **none of it is Phase 7 work and none of it should appear in Phase 7's module layout (§8) or storage budget**:
 
-Whether (b) is the right Phase 7 scope, or whether read-only theme *selection* is enough to ship, is the largest scope lever in this phase — Open question 3.
+> Storage follows the `userSubtypes` precedent (ADR-0004 §3), not the overlay: the overlay is keyed by Figma provenance id and a theme has none. A separate small store, `tokenvault:themes:<file-id>`, holds an override of the manifest's `themes[]` and is merged over the import-generated value on every build — the same "declared, inspectable transform over a reproducible build" shape ADR-0004 §4 chose for the overlay, so ADR-0002 §7's byte-identical build guarantee survives. Once connected to a repo, the committed `$manifest.json` is authoritative and the override is uncommitted work.
+
+**What the deferral costs, stated rather than buried.** ADR-0002 §6's deferral is *not* discharged by this ADR. A file with two or more multi-mode collections still gets no themes and a `theme-composition` / `ambiguous` report entry, so for that file §7(a) has nothing to select and the resolver nothing theme-scoped to resolve against — references and expressions still work off the synthesised `Default` stack (ADR-0002 Amendment 1 §D), but themes are inert. That is an accepted, visible gap, not an oversight: it needs a decision on when it stops being acceptable, and the answer will come from whether Shyam's own files hit it. Whoever picks it up amends this ADR (§7b above is the design), rather than re-deciding it quietly.
 
 **(c) Live canvas switching — lands, and needs no new data.** Every mode entry in the manifest already carries `$figmaCollectionId` and `$figmaModeId` back-references (ADR-0002 §6), so a theme's `selectedTokenSets` already maps to a list of (collection, mode) pairs. Switching is setting the explicit variable mode per collection on the Figma side and nothing else.
 
@@ -140,10 +142,10 @@ Four rules:
 
 - **It is a view operation, not an apply.** It writes no token values, so it does **not** go through `ApplyPlan`, does not use the apply preview, and does not touch the overlay. Routing it through the apply confirmation would train users to click through a dialog that guards nothing.
 - **It is still a document mutation** (explicit modes live on nodes/pages, not in plugin state), so it is a deliberate action in the Themes surface, plainly reversible with ⌘Z, and it uses ADR-0005's `commitUndo` bracketing so it is its own undo step.
-- **Partial mapping is reported, never silent.** A theme composed by hand may contain sets with no Figma counterpart. Switch every collection the theme *can* map and name every set it could not. Refusing the whole switch on one unmappable set would make hand-composed themes permanently unswitchable.
+- **Partial mapping is reported, never silent.** A theme may contain sets with no Figma counterpart — hand-authored themes cannot originate in the plugin now that (b) is deferred, but they arrive readily enough from a pulled `$manifest.json` (ADR-0006 §5). Switch every collection the theme *can* map and name every set it could not. Refusing the whole switch on one unmappable set would make hand-composed themes permanently unswitchable.
 - **Styles-backed sets (ADR-0003) are expected-unmappable, not errors.** Figma Styles have no mode concept. They are excluded from the mapping silently, because reporting them every time would train the user to ignore the report.
 
-What "switching" targets — the current page, the document root, or the current selection — is a product/UX call, Open question 4.
+What "switching" targets — the current page, the document root, or the current selection — is still open, for Phase 7's implementation to settle with Shyam (Open question 1).
 
 **Apply stays single-mode.** ADR-0005 writes the mode a token came from, and Phase 7 does not add "apply this token across every mode". Deferred, §10.
 
@@ -153,7 +155,8 @@ What "switching" targets — the current page, the document root, or the current
 src/tokens/expr.ts        NEW — pure. tokenize / parse / evaluate → number | ExpressionError
 src/tokens/graph.ts       NEW — pure. forward reference graph + cycle detection (§3), one implementation
 src/tokens/resolve.ts     NEW — pure. active theme + set stack → resolver for references and expressions
-src/tokens/themes.ts      NEW — pure. manifest themes + user override → effective themes
+src/tokens/themes.ts      NEW — pure. manifest themes → effective themes + active-theme
+                          selection. Read-only; no composition override store (§7b deferred)
 src/figma/modes.ts        NEW — the only module that sets explicit variable modes (§7c)
 src/tokens/references.ts  reused, UNCHANGED — the anchored recogniser stays as-is (§1)
 src/tokens/plan.ts        widened — cycle check covers expression edges; expressions flatten (§4)
@@ -180,13 +183,13 @@ Named so they are visibly out of scope rather than accidentally missing.
 
 ## Consequences
 
-- `@frontend-engineer` can build Phase 7 against this: the grammar, the three value shapes, the storage format, the three evaluation points, the four authoring rules, the three report kinds, the two new stores and the five modules are pinned.
+- `@frontend-engineer` can build Phase 7 against this: the grammar, the three value shapes, the storage format, the three evaluation points, the four authoring rules, the three report kinds, the one new store and the five modules are pinned.
 - **References become authorable, which is the feature Phase 4 and 5 both deferred and both built toward.** ADR-0005 §11's resolver has had no producer since it shipped; Phase 7 gives it one, and does so against a write path that has already been exercised by Phase 6 pulls.
 - **PRD §6.3's circular-reference requirement is met at three points rather than one**, and the earliest of them is the editor — so a cycle is normally something a user is told about while typing, not something they discover at apply time.
-- **Themes stop being import-shaped.** ADR-0002 §6's `ambiguous` report entry gets a resolution path, and a file with several multi-mode collections becomes usable for the first time.
+- **Themes become selectable but stay import-shaped.** Phase 7 gives themes an active selection and live canvas switching, both read-only over what import derived. **ADR-0002 §6's `ambiguous` entry is not discharged** (§7b): a file with several multi-mode collections still has no themes, and stays that way until composition editing is picked up. That is the price of the smaller phase, and it is a known gap rather than a surprise.
 - **A new merge case in ADR-0004 §4, and a dated addendum there pointing here** (§6). It is the one place Phase 7 changes an accepted decision rather than extending it, and it is changed in the open.
 - **Expressions are the one place Tokenvault flattens on the way into Figma**, which is the exact thing ADR-0002 §2, ADR-0003 §3 and ADR-0005 §11 all refused to do for aliases. The difference is that a flattened alias loses information Figma *could* have held, and a flattened expression loses information Figma *cannot* hold. Worth restating whenever someone reads §4 and objects.
-- **Two more `clientStorage` keys**, both a few bytes. ADR-0004 §6's quota story is unchanged; the import cache is still the only large tenant.
+- **One more `clientStorage` key** — the active theme name, a few bytes (the composition override store goes with §7b's deferral). ADR-0004 §6's quota story is unchanged; the import cache is still the only large tenant.
 - Phase 8's Style Dictionary export now has to evaluate expressions, or hand them to Style Dictionary's own resolver, which understands `{a}` references but not arithmetic. That is a Phase 8 decision and this ADR does not make it — but §2's choice to store the string rather than the number is what leaves Phase 8 free to make it either way.
 - No infra implication (§9).
 
@@ -200,9 +203,10 @@ Named so they are visibly out of scope rather than accidentally missing.
 - **Cap reference-chain depth as a defensive stop.** Rejected (§1). Cycle detection already guarantees termination, so a cap adds no safety and does add false negatives on legitimately deep chains.
 - **Blame only the token whose edit closed a cycle.** Rejected (§3). Any token on the cycle can be edited to break it, so singling one out is arbitrary and misleads the user about where to look.
 - **Fall back to the last good value, or zero, when a reference is unresolvable.** Rejected (§3). A number that is silently wrong is strictly worse than a visible error, and the whole point of the feature is that the number is derived rather than typed.
-- **Refuse to author a reference that dangles in some theme.** Rejected (§5, pending Open question 2). Theme-specific tokens are normal; refusing them makes the theme feature and the reference feature mutually exclusive.
+- **Refuse to author a reference that dangles in some theme.** Rejected (§5, confirmed by Shyam 2026-09-03). Theme-specific tokens are normal; refusing them makes the theme feature and the reference feature mutually exclusive.
 - **A new overlay op for reference and expression edits.** Rejected (§6). They are value edits — ADR-0004 §2's `set-value` entry already carries a string, and adding an op would fork the merge, the local-edits list and the apply plan for no gain. Only the merge *comparison* needed a change.
-- **Put theme composition in the edit overlay.** Rejected (§7b). The overlay keys on Figma provenance id (ADR-0004 §2) and a theme has none. The `userSubtypes` precedent is the right one, and it already exists.
+- **Put theme composition in the edit overlay.** Rejected (§7b) — recorded against the deferred design, so that picking it up does not start from the overlay. The overlay keys on Figma provenance id (ADR-0004 §2) and a theme has none. The `userSubtypes` precedent is the right one, and it already exists.
+- **Ship theme composition editing in Phase 7.** Rejected by Shyam 2026-09-03 (§7b), over the recommendation to include it. It is a new store, a new surface and a new merge path, and the case it unlocks — two or more multi-mode collections in one file — may not be one Shyam's own files hit. Read-only selection and switching is the smaller phase that still gives §1–§6 the theme scoping they require. The design survives in §7b for whoever needs it.
 - **Route live theme switching through `ApplyPlan` and the apply confirmation.** Rejected (§7c). It writes no token values, so the confirmation would guard nothing — and a dialog that guards nothing is how users learn to click through the ones that do.
 - **Refuse a theme switch when any of its sets is unmappable to a Figma mode.** Rejected (§7c). Styles-backed sets are unmappable by construction, so this would make most hand-composed themes permanently unswitchable. Partial-plus-named-report is the honest version.
 - **Derive theme composition automatically from the cartesian product of multi-mode collections.** Rejected — this is exactly what ADR-0002 §6 refused to guess, and nothing has changed to make the guess safer. The answer is to let the user say, not to guess better.
