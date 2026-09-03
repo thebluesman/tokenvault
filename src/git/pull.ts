@@ -1,0 +1,323 @@
+// A pulled repo tree → pending overlay entries — ADR-0006 §5.
+//
+// Pure, and the reason Phase 6 adds no new store and no second write path. A pulled value that
+// differs from Figma is *a value the plugin holds that Figma does not*, which is precisely ADR-0004's
+// overlay entry: a target, a new value, and the `base` it was derived against. So a pull writes
+// overlay entries and hands them to Phase 5's apply flow, and every confirmation, ordering rule and
+// per-entry failure report that flow already has is inherited rather than rebuilt.
+//
+// **Matching is by `set` + dotted path, not by provenance id** (§5). ADR-0004 §2 chose ids for the
+// overlay and that was right when both sides of the comparison were Figma. Here one side is a JSON
+// file whose only notion of identity is its key path — a repo-side rename genuinely *is* a rename of
+// that token, and id-matching would read it as a delete plus an add and destroy it. Provenance is
+// carried and used only to disambiguate a path that matches nothing by set.
+
+import type { Manifest, Token, TokenGroup } from "../tokens/types";
+import type { FlatToken } from "../tokens/view";
+import type { EditOverlay, OverlayEntry, OverlayOp } from "../tokens/overlay";
+import { describeSets } from "../tokens/view";
+import { isToken, normalizePathKey } from "../tokens/paths";
+import { compareKeys } from "../tokens/serialize";
+import {
+  mergeConflict,
+  originOf,
+  targetKey,
+  targetOfToken,
+  tokenKey,
+  valuesEqual,
+} from "../tokens/overlay";
+
+/** One token the repo has that this Figma file has no counterpart for — ADR-0006 §11. */
+export interface PullUnmatched {
+  path: string;
+  /** The set it was found in, or the repo file when the file maps to no known set. */
+  set: string;
+  type?: string;
+}
+
+export interface PullResult {
+  /** Ready to hand to the `edit` message. `at` is stamped by the caller. */
+  entries: Array<Omit<OverlayEntry, "at">>;
+  /**
+   * Repo tokens with no Figma counterpart. Reported, never acted on: creating a Variable needs a
+   * collection, a mode, a resolved type and a scope set, which is the authoring decision Phases 4
+   * and 5 both declined (ADR-0006 §11). A repo authored outside Tokenvault pulls in read-only
+   * until that lands, and this list is what stops that being silent.
+   */
+  unmatched: PullUnmatched[];
+  /** Tokens this file has that the repo's version of the same set does not. Named, not deleted. */
+  localOnly: Array<{ path: string; set: string }>;
+  /** Repo files that aren't valid token JSON — excluded from the pull, named in the UI (UX §11). */
+  unreadable: string[];
+}
+
+export interface PullInput {
+  /** Build-shaped repo path (`tokens/theme/light.json`) → the file's parsed content. */
+  remote: Map<string, unknown>;
+  /** The tree as Figma has it — the pristine import, before the overlay. Supplies every `base`. */
+  imported: FlatToken[];
+  manifest: Manifest;
+  /** Restrict the pull to these build-shaped paths. Absent means every file in `remote`. */
+  paths?: Set<string>;
+}
+
+interface RemoteToken {
+  path: string;
+  set: string;
+  token: Token;
+}
+
+/**
+ * Turns the repo's version of the changed files into pending changes.
+ *
+ * Nothing here writes anywhere. The output is overlay entries, and getting them onto the canvas is
+ * the apply dialog — the sentence UX §8.1 says has to land, made structural.
+ */
+export function buildPull(input: PullInput): PullResult {
+  const sets = describeSets(input.manifest);
+  const setByFile = new Map<string, string>();
+  for (const info of sets) setByFile.set(`tokens/${info.file}`, info.id);
+
+  // `\u0000` written as an escape, never as a literal NUL byte: a literal one makes git and GitHub
+  // treat this whole file as binary, and a source file nobody can read a diff of cannot be reviewed.
+  // Same joiner as `plan.ts`, for the same reason — set ids and dotted paths can both contain any
+  // printable character, and a separator that appears inside the parts is not a separator.
+  const localBySetPath = new Map<string, FlatToken>();
+  const localByTarget = new Map<string, FlatToken>();
+  for (const entry of input.imported) {
+    const key = `${entry.setId}\u0000${normalizePathKey(entry.path)}`;
+    if (!localBySetPath.has(key)) localBySetPath.set(key, entry);
+    const target = tokenKey(entry.token);
+    if (target !== null && !localByTarget.has(target)) localByTarget.set(target, entry);
+  }
+
+  const entries: Array<Omit<OverlayEntry, "at">> = [];
+  const unmatched: PullUnmatched[] = [];
+  const unreadable: string[] = [];
+  const seen = new Set<string>();
+  const touchedSets = new Set<string>();
+
+  const paths = Array.from(input.remote.keys()).sort(compareKeys);
+
+  for (const path of paths) {
+    if (input.paths !== undefined && !input.paths.has(path)) continue;
+    // `$manifest.json` describes the sets, not the tokens; a pull reconciles values, and adopting
+    // somebody else's set inventory is a scan's job, not a pull's.
+    if (path.startsWith("tokens/$")) continue;
+
+    const setId = setByFile.get(path);
+    const content = input.remote.get(path);
+    if (content === null || typeof content !== "object" || Array.isArray(content)) {
+      unreadable.push(path);
+      continue;
+    }
+
+    const remoteTokens: RemoteToken[] = [];
+    collect(content as TokenGroup, [], setId ?? path, remoteTokens);
+    if (setId !== undefined) touchedSets.add(setId);
+
+    for (const remote of remoteTokens) {
+      const local =
+        setId === undefined
+          ? matchByProvenance(remote.token, localByTarget)
+          : localBySetPath.get(`${setId}\u0000${normalizePathKey(remote.path)}`) ??
+            matchByProvenance(remote.token, localByTarget);
+
+      if (local === undefined) {
+        unmatched.push({ path: remote.path, set: remote.set, type: remote.token.$type });
+        continue;
+      }
+
+      const target = targetOfToken(local.token);
+      if (target === null) {
+        // No provenance means nothing can key an edit for it (ADR-0004 §2). Reported rather than
+        // dropped, because the user would otherwise see a pull that quietly skipped a token.
+        unmatched.push({ path: remote.path, set: remote.set, type: remote.token.$type });
+        continue;
+      }
+
+      const key = tokenKey(local.token);
+      if (key !== null) seen.add(key);
+
+      if (!valuesEqual(remote.token.$value, local.token.$value)) {
+        entries.push({
+          target,
+          path: local.path,
+          set: local.setId,
+          op: "set-value",
+          value: remote.token.$value,
+          // What this diverges from: Figma's current value, exactly as an authored edit records it.
+          base: local.token.$value,
+          origin: "pulled",
+        });
+      }
+
+      const remoteDescription = remote.token.$description ?? "";
+      const localDescription = local.token.$description ?? "";
+      if (remoteDescription !== localDescription) {
+        entries.push({
+          target,
+          path: local.path,
+          set: local.setId,
+          op: "set-description",
+          value: remoteDescription,
+          base: localDescription,
+          origin: "pulled",
+        });
+      }
+    }
+  }
+
+  const localOnly: Array<{ path: string; set: string }> = [];
+  for (const entry of input.imported) {
+    if (!touchedSets.has(entry.setId)) continue;
+    const key = tokenKey(entry.token);
+    if (key === null || seen.has(key)) continue;
+    localOnly.push({ path: entry.path, set: entry.setId });
+  }
+
+  return { entries, unmatched, localOnly, unreadable };
+}
+
+/** Depth-first over a DTCG group, in the same key order everything else in the repo uses. */
+function collect(group: TokenGroup, segments: string[], set: string, into: RemoteToken[]): void {
+  for (const key of Object.keys(group).sort(compareKeys)) {
+    const child = group[key];
+    if (child === null || typeof child !== "object") continue;
+    const next = segments.concat([key]);
+    if (isToken(child)) into.push({ path: next.join("."), set, token: child });
+    else collect(child as TokenGroup, next, set, into);
+  }
+}
+
+/**
+ * The disambiguation half of §5, and only that.
+ *
+ * Provenance is *carried* through the repo file (ADR-0002 §7's `$extensions."com.tokenvault"`) and
+ * is used when the path match finds nothing — a repo file that maps to no set this file knows, or a
+ * token whose path moved on both sides. It is never the primary key, because that would turn a
+ * repo-side rename into a delete plus an add.
+ */
+function matchByProvenance(
+  token: Token,
+  localByTarget: Map<string, FlatToken>
+): FlatToken | undefined {
+  const key = tokenKey(token);
+  return key === null ? undefined : localByTarget.get(key);
+}
+
+// ---------------------------------------------------------------------------
+// Landing a pull on the overlay
+// ---------------------------------------------------------------------------
+
+export interface PullMerge {
+  overlay: EditOverlay;
+  /** Entries that landed cleanly — the number the toast counts. */
+  applied: number;
+  /** Pulled values that collided with a local edit and are waiting on a per-token answer. */
+  conflicts: number;
+}
+
+/**
+ * Merges pulled entries into the overlay — UX §8.2.
+ *
+ * The interesting case is the third one, and it is why this is not a loop over `recordEdit`:
+ *
+ * | Existing entry for this target and op | Outcome                                          |
+ * |---------------------------------------|--------------------------------------------------|
+ * | none                                  | record it, `origin: "pulled"`                     |
+ * | a previous pull                       | replace it — the repo moved again                 |
+ * | a local edit with the same value      | replace it; both sides want the same thing        |
+ * | a local edit with a different value    | **keep the local edit** and flag `conflict`      |
+ *
+ * The local edit wins the *tree* on a conflict for exactly ADR-0004 §4's reason — it is the only
+ * side that cannot be recovered, since the repo's value is one pull away and an overwritten edit is
+ * gone — and the flag is what makes that provisional rather than silent. `conflict.origin: "repo"`
+ * is what lets the block say *From the repo* instead of *Now in Figma*.
+ */
+export function applyPull(
+  overlay: EditOverlay,
+  pulled: Array<Omit<OverlayEntry, "at">>,
+  now: string
+): PullMerge {
+  // Indexed, not scanned. This runs on the plugin's single main thread, and on a first-connect
+  // *adopt the repo* every token in the repo arrives as a pulled entry — a scan per entry over an
+  // overlay that grows by one per entry is quadratic, and quadratic here is a frozen panel on a
+  // few-hundred-token design system. `slots` is the entry list with removals blanked out rather
+  // than spliced; `at` maps target+op to the slot holding it, so every lookup and every
+  // replacement is O(1).
+  const slots: Array<OverlayEntry | null> = overlay.entries.slice();
+  const at = new Map<string, number>();
+  for (let i = 0; i < slots.length; i += 1) {
+    const slot = slots[i] as OverlayEntry;
+    const key = targetKey(slot.target);
+    // First match wins, matching the `.filter(...)[0]` this replaced.
+    if (key !== null && !at.has(slotKey(key, slot.op))) at.set(slotKey(key, slot.op), i);
+  }
+
+  let applied = 0;
+  let conflicts = 0;
+
+  const clear = (key: string, op: OverlayOp): void => {
+    const index = at.get(slotKey(key, op));
+    if (index === undefined) return;
+    slots[index] = null;
+    at.delete(slotKey(key, op));
+  };
+
+  for (const entry of pulled) {
+    const key = targetKey(entry.target);
+    if (key === null) continue;
+
+    const index = at.get(slotKey(key, entry.op));
+    const existing = index === undefined ? undefined : (slots[index] as OverlayEntry);
+
+    if (
+      existing !== undefined &&
+      existing.orphaned !== true &&
+      originOf(existing) === "local" &&
+      !valuesEqual(existing.value, entry.value)
+    ) {
+      conflicts += 1;
+      slots[index as number] = {
+        ...existing,
+        // Merged rather than assigned: an entry can already carry a Figma-drift conflict from an
+        // earlier rescan, and overwriting it would leave the user choosing against a value the
+        // panel can no longer show them.
+        conflict: mergeConflict(
+          { figma: entry.value, at: now, origin: "repo" as const },
+          existing.conflict
+        ),
+      };
+      continue;
+    }
+
+    // `recordEdit`'s rules, applied against the index instead of a fresh pass over every entry.
+    // Kept in step with it deliberately — `test/gitPull.test.ts` asserts the two agree.
+    if (entry.op === "delete") {
+      // A delete supersedes the value and description edits on the same target.
+      clear(key, "set-value");
+      clear(key, "set-description");
+    }
+    // Re-editing an already-edited token keeps the original `base`, so the merge still knows what
+    // Figma said when the edit started.
+    const base = existing !== undefined && existing.orphaned !== true ? existing.base : entry.base;
+    clear(key, entry.op);
+    // An edit that lands back on the imported value stores no entry at all.
+    if (entry.op !== "delete" && valuesEqual(entry.value, base)) {
+      applied += 1;
+      continue;
+    }
+    slots.push({ ...entry, base, at: now });
+    at.set(slotKey(key, entry.op), slots.length - 1);
+    applied += 1;
+  }
+
+  const entries: OverlayEntry[] = [];
+  for (const slot of slots) if (slot !== null) entries.push(slot);
+  return { overlay: { version: 1, entries }, applied, conflicts };
+}
+
+function slotKey(target: string, op: OverlayOp): string {
+  return `${target}\u0000${op}`;
+}

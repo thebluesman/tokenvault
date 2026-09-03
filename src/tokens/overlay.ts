@@ -37,9 +37,28 @@ export type OverlayOp = "set-value" | "set-description" | "delete";
  * later, and the "Now in Figma" side has to still be there when they do.
  */
 export interface OverlayConflict {
-  /** What the fresh import produced — the side the user is choosing against. */
+  /** What the other side says — the value the user is choosing against. */
   figma?: TokenValue;
   at: string;
+  /**
+   * Which other side that is — ADR-0006 §5's `origin` field, doing UX work.
+   *
+   * `"figma"` (the default, and everything written before Phase 6) is ADR-0004's conflict: a rescan
+   * found the target moved under the edit. `"repo"` is Phase 6's: a pull landed on a token the user
+   * had also edited. The two are structurally identical and resolve identically; they differ only in
+   * what the block can honestly call the opposing value — *Now in Figma* or *From the repo*
+   * (UX §8.2). Guessing wrong there is the difference between blaming a colleague and blaming a bot.
+   */
+  origin?: "figma" | "repo";
+  /**
+   * A conflict from the *other* side that was already outstanding when this one was recorded.
+   *
+   * A token can genuinely conflict with both Figma and the repo — a rescan flags a drifted target,
+   * then a pull lands on the same edit. Overwriting one with the other loses the value the user was
+   * choosing against, so the earlier side is kept here. At most one level deep: there are only two
+   * sides, and a second conflict from the same side is a refresh of that side, not a third opinion.
+   */
+  previous?: OverlayConflict;
 }
 
 /**
@@ -66,6 +85,25 @@ export interface OverlayEntry {
    */
   orphaned?: boolean;
   conflict?: OverlayConflict;
+  /**
+   * Where this pending change came from — ADR-0006 §5, and the only field Phase 6 adds.
+   *
+   * `"local"` is the default and is what every entry written before Phase 6 means, so it is left
+   * absent rather than backfilled. `"pulled"` marks an entry materialised from the repo, which
+   * exists so the panel can say *where* a pending change came from and so a conflict message can
+   * name the repo rather than the user (UX §8.2).
+   *
+   * Nothing in ADR-0004 §4's merge table changes: a pulled entry merges, conflicts and retires
+   * exactly like an authored one. This is a label on an existing thing, not a second kind of thing.
+   */
+  origin?: OverlayOrigin;
+}
+
+export type OverlayOrigin = "local" | "pulled";
+
+/** The default, said once, so no call site has to remember that absent means local. */
+export function originOf(entry: OverlayEntry): OverlayOrigin {
+  return entry.origin === "pulled" ? "pulled" : "local";
 }
 
 export interface EditOverlay {
@@ -136,6 +174,78 @@ export function tokenKey(token: Token): string | null {
 export function valuesEqual(a: TokenValue | undefined, b: TokenValue | undefined): boolean {
   if (a === undefined || b === undefined) return a === b;
   return stableStringify(a) === stableStringify(b);
+}
+
+/**
+ * A newly discovered conflict, without throwing away one the entry already carried.
+ *
+ * A conflict from the same side is a refresh of that side and replaces it; one from the other side
+ * is a second, independent fact about the same token — Figma moved *and* the repo moved — and is
+ * kept on `previous` so neither opposing value is lost before the user has answered.
+ */
+export function mergeConflict(
+  next: OverlayConflict,
+  prior: OverlayConflict | undefined
+): OverlayConflict {
+  if (prior === undefined) return next;
+  const sameSide = (prior.origin ?? "figma") === (next.origin ?? "figma");
+  const carried = sameSide ? prior.previous : stripPrevious(prior);
+  return carried === undefined ? next : { ...next, previous: carried };
+}
+
+/** One level deep, always: two sides means at most one conflict each. */
+function stripPrevious(conflict: OverlayConflict): OverlayConflict {
+  const out: OverlayConflict = { at: conflict.at };
+  if ("figma" in conflict) out.figma = conflict.figma;
+  if (conflict.origin !== undefined) out.origin = conflict.origin;
+  return out;
+}
+
+/** Which side of the stack a conflict speaks for. Absent means Figma — everything before Phase 6. */
+export function sideOf(conflict: OverlayConflict): "figma" | "repo" {
+  return conflict.origin === "repo" ? "repo" : "figma";
+}
+
+/** The stack flattened, most recent first. At most two, because there are only two sides. */
+function stack(conflict: OverlayConflict | undefined): OverlayConflict[] {
+  if (conflict === undefined) return [];
+  const rest = conflict.previous;
+  return rest === undefined ? [stripPrevious(conflict)] : [stripPrevious(conflict), stripPrevious(rest)];
+}
+
+/** The inverse of `stack` — a list, most recent first, back into one nested conflict. */
+function restack(list: OverlayConflict[]): OverlayConflict | undefined {
+  if (list.length === 0) return undefined;
+  if (list.length === 1) return list[0];
+  return { ...list[0], previous: list[1] };
+}
+
+/**
+ * Resolving *one* conflict, not the entry's whole conflict history.
+ *
+ * A token can carry a Figma conflict and a repo conflict at once (`previous`). Answering the one on
+ * screen answers one question; deleting the entry's `conflict` outright would silently discard the
+ * other side's still-unanswered value, which is the exact loss `previous` exists to prevent. So the
+ * outstanding one is promoted to the top and becomes what the panel shows next.
+ */
+function dropVisible(conflict: OverlayConflict | undefined): OverlayConflict | undefined {
+  return restack(stack(conflict).slice(1));
+}
+
+/** The same, for one named side — a rescan resolves Figma's side and says nothing about the repo's. */
+function dropSide(
+  conflict: OverlayConflict | undefined,
+  side: "figma" | "repo"
+): OverlayConflict | undefined {
+  return restack(stack(conflict).filter((entry) => sideOf(entry) !== side));
+}
+
+/** Writes a possibly-absent conflict onto an entry, keeping "no conflict" as an absent field. */
+function withConflict(entry: OverlayEntry, conflict: OverlayConflict | undefined): OverlayEntry {
+  const out: OverlayEntry = { ...entry };
+  if (conflict === undefined) delete out.conflict;
+  else out.conflict = conflict;
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -373,13 +483,14 @@ export function mergeOverlay(flat: FlatToken[], overlay: EditOverlay, now: strin
     }
 
     if (valuesEqual(current, entry.base)) {
-      delete refreshed.conflict;
-      kept.push(refreshed);
+      // Figma agrees with the base, so *Figma's* side of the conflict is settled — but a repo
+      // conflict on the same entry is a separate, still-unanswered question and survives.
+      kept.push(withConflict(refreshed, dropSide(entry.conflict, "figma")));
       applied += 1;
       continue;
     }
 
-    refreshed.conflict = { figma: current, at: now };
+    refreshed.conflict = mergeConflict({ figma: current, at: now }, entry.conflict);
     kept.push(refreshed);
     applied += 1;
     conflicts += 1;
@@ -469,17 +580,28 @@ export function removeEntries(overlay: EditOverlay, target: OverlayTarget): Edit
  *
  * Rebasing is the whole point: without it the same conflict re-reports on every subsequent scan,
  * and a flag the user has already answered stops meaning anything (UX §5.5).
+ *
+ * Two things it must not get wrong, both of which follow from a conflict stack having two sides:
+ *
+ *   1. `conflict.figma` is only Figma's value when the conflict *is* Figma's. On a repo conflict it
+ *      holds the repo's value (ADR-0006 §5), and rebasing `base` onto it would compare Figma's real
+ *      value against something Figma never said — manufacturing a conflict on the next rescan for a
+ *      token the user has already answered. So the rebase happens only for the Figma side; keeping
+ *      the repo's value out means `base` stays what it already was, which *is* Figma's current value.
+ *   2. Answering the visible conflict does not answer the one stacked under it. That one is promoted
+ *      rather than deleted, and becomes what the panel asks about next.
  */
 export function keepMine(overlay: EditOverlay, target: OverlayTarget, op: OverlayOp): EditOverlay {
   const key = targetKey(target);
   return {
     version: 1,
     entries: overlay.entries.map((entry) => {
-      if (targetKey(entry.target) !== key || entry.op !== op || entry.conflict === undefined) {
+      const conflict = entry.conflict;
+      if (targetKey(entry.target) !== key || entry.op !== op || conflict === undefined) {
         return entry;
       }
-      const rebased: OverlayEntry = { ...entry, base: entry.conflict.figma };
-      delete rebased.conflict;
+      const rebased = withConflict(entry, dropVisible(conflict));
+      if (sideOf(conflict) === "figma") rebased.base = conflict.figma;
       return rebased;
     }),
   };

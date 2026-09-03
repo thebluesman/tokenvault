@@ -219,6 +219,28 @@ test("Figma caught up to the edit — the entry retires silently", () => {
   assert.equal(merged.entries.length, 0);
 });
 
+test("a rescan conflict keeps an outstanding repo conflict alongside it", () => {
+  // A token can conflict with both sides at once: a pull landed on the edit, and then Figma moved
+  // too. Overwriting one flag with the other loses the value the user is choosing against, so the
+  // earlier side is carried on `previous` — one level deep, because there are only two sides.
+  const moved = flat(LIGHT.path, LIGHT.setId, variableToken("VariableID:1:4", "1:0", "#b4342a"));
+  const pulled = overlayOf({
+    ...valueEdit("#000000", "#c33a2e"),
+    conflict: { figma: "#123456" as Token["$value"], at: NOW, origin: "repo" as const },
+  });
+
+  const merged = mergeOverlay([moved], pulled, NOW);
+  const conflict = merged.overlay.entries[0].conflict;
+  assert.equal(conflict?.figma, "#b4342a");
+  assert.equal(conflict?.previous?.origin, "repo");
+  assert.equal(conflict?.previous?.figma, "#123456");
+
+  // A second rescan is the same side again — it refreshes rather than stacking another level.
+  const again = mergeOverlay([moved], merged.overlay, NOW);
+  assert.equal(again.overlay.entries[0].conflict?.previous?.origin, "repo");
+  assert.equal(again.overlay.entries[0].conflict?.previous?.previous, undefined);
+});
+
 test("both sides moved — the local edit wins and is reported as edit-conflict", () => {
   const moved = flat(LIGHT.path, LIGHT.setId, variableToken("VariableID:1:4", "1:0", "#b4342a"));
   const merged = mergeOverlay([moved], overlayOf(valueEdit("#000000", "#c33a2e")), NOW);
@@ -445,6 +467,69 @@ test("keep-mine rebases on Figma's value so the same conflict does not re-report
   assert.equal(kept.entries[0].base, "#b4342a");
   const again = mergeOverlay([moved], kept, NOW);
   assert.equal(again.conflicts, 0, "the flag the user already answered must stop firing");
+});
+
+test("keep-mine on a repo conflict does not rebase onto the repo's value", () => {
+  // ADR-0006 §5: on a repo conflict, `conflict.figma` holds the *repo's* value. Rebasing `base`
+  // onto it would leave the entry claiming Figma had said something Figma never said, and the very
+  // next rescan would raise a fresh conflict for a token the user had already answered.
+  const target = { variableId: "VariableID:1:4", modeId: "1:0" };
+  const overlay = overlayOf({
+    ...valueEdit("#000000", "#c33a2e"),
+    conflict: { figma: "#abcdef" as Token["$value"], at: NOW, origin: "repo" as const },
+  });
+
+  const kept = keepMine(overlay, target, "set-value");
+  assert.equal(kept.entries[0].conflict, undefined);
+  assert.equal(kept.entries[0].base, "#c33a2e", "base stays Figma's value, not the repo's");
+  assert.equal(mergeOverlay([LIGHT], kept, NOW).conflicts, 0);
+});
+
+test("resolving the visible conflict promotes the one stacked under it rather than erasing it", () => {
+  // A token can conflict with Figma and then again with a repo pull; the Figma side is carried on
+  // `previous` precisely so neither opposing value is lost. Answering the repo question is not
+  // answering the Figma one, so that one becomes what the panel asks about next.
+  const target = { variableId: "VariableID:1:4", modeId: "1:0" };
+  const overlay = overlayOf({
+    ...valueEdit("#000000", "#c33a2e"),
+    conflict: {
+      figma: "#abcdef" as Token["$value"],
+      at: NOW,
+      origin: "repo" as const,
+      previous: { figma: "#222222" as Token["$value"], at: NOW, origin: "figma" as const },
+    },
+  });
+
+  const kept = keepMine(overlay, target, "set-value");
+  const conflict = kept.entries[0].conflict;
+  assert.equal(conflict?.origin, "figma", "the Figma side is still unanswered and is now visible");
+  assert.equal(conflict?.figma, "#222222");
+  assert.equal(conflict?.previous, undefined, "one level deep, always");
+
+  // And answering *that* one rebases, because this time the value on offer really is Figma's.
+  const both = keepMine(kept, target, "set-value");
+  assert.equal(both.entries[0].conflict, undefined);
+  assert.equal(both.entries[0].base, "#222222");
+});
+
+test("a rescan that settles Figma's side leaves a repo conflict standing", () => {
+  // `mergeOverlay`'s "Figma agrees with the base" row used to delete the whole conflict object,
+  // which took an unanswered repo conflict with it.
+  const overlay = overlayOf({
+    ...valueEdit("#000000", "#c33a2e"),
+    conflict: {
+      figma: "#abcdef" as Token["$value"],
+      at: NOW,
+      origin: "repo" as const,
+      previous: { figma: "#222222" as Token["$value"], at: NOW, origin: "figma" as const },
+    },
+  });
+
+  const merged = mergeOverlay([LIGHT], overlay, NOW);
+  const conflict = merged.overlay.entries[0].conflict;
+  assert.equal(conflict?.origin, "repo");
+  assert.equal(conflict?.figma, "#abcdef");
+  assert.equal(conflict?.previous, undefined, "Figma's side is settled and does not linger");
 });
 
 test("resolving a conflict either way clears the report entry, not just the conflict field", () => {

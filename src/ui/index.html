@@ -311,6 +311,203 @@
         color: var(--warn);
         background: var(--warn-bg);
       }
+
+      /* --- Phase 6: git sync (UX docs/ux/git-sync.md) --------------------- */
+
+      /* The gear (§5.1). One state mark only: amber when the connection is broken. A settings icon
+         that is decorated when everything is fine teaches the user to ignore its decoration. */
+      .gear {
+        flex: none;
+        padding: 2px 6px;
+        border: 1px solid transparent;
+        background: none;
+        color: var(--muted);
+      }
+      .gear.needs {
+        color: var(--warn);
+        border-color: var(--warn);
+        background: var(--warn-bg);
+      }
+
+      /* One chip, two halves, split by a hairline divider — §6.1. Left is Figma, right is the repo,
+         and the divider is doing semantic work rather than decoration: it is what makes "in sync
+         with what" answerable without a word. Two tap targets, two destinations (§4.1). */
+      .sync-chip {
+        display: inline-flex;
+        align-items: stretch;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        background: #fff;
+      }
+      .sync-chip > button {
+        border: none;
+        background: none;
+        color: var(--muted);
+        padding: 2px 7px;
+        font: inherit;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .sync-chip > button + button {
+        border-left: 1px solid var(--border);
+      }
+      .sync-chip.on {
+        border-color: var(--accent);
+      }
+      .sync-chip.on > button {
+        color: var(--accent);
+      }
+      .sync-chip.warn {
+        border-color: var(--warn);
+        background: var(--warn-bg);
+      }
+      .sync-chip.warn > button {
+        color: var(--warn);
+      }
+      .sync-chip > button.ok {
+        color: var(--ok);
+      }
+
+      #repo,
+      #settings {
+        position: absolute;
+        inset: 0;
+        background: #fff;
+        display: flex;
+        flex-direction: column;
+      }
+      #repo {
+        z-index: 5;
+      }
+      /* Above the Changes panel (20) because Settings is reachable from every tab, and below the
+         modal (30) because the phase's one modal — first connect — opens over Settings. Stated as
+         numbers rather than left to document order: a connect question rendered *under* the
+         overlay that raised it is unanswerable. */
+      #settings {
+        z-index: 25;
+      }
+      #repo .panel-head,
+      #settings .panel-head {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      #repo .panel-head .title,
+      #settings .panel-head .title {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #repo .panel-body,
+      #settings .panel-body {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 12px;
+      }
+      /* The pinned footer every screen in this tab shares — the list scrolls against the panel and
+         the write verb never scrolls out of reach (§7.2). */
+      .panel-foot {
+        flex: none;
+        border-top: 1px solid var(--border);
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .panel-foot .grow {
+        flex: 1;
+      }
+      .panel-foot .note {
+        color: var(--muted);
+      }
+      /* Files, not tokens, at the top level — §6.2. This is the one place in the panel whose unit
+         is a file, because it is the place about the repo (§3). */
+      .file-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .file-row .fname {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .file-row .fcount {
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .repo-section {
+        margin: 0 0 14px;
+      }
+      .repo-section > h3 {
+        margin: 0 0 4px;
+        font-size: 11px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .file-children {
+        padding: 4px 0 6px 18px;
+      }
+      .more-line {
+        color: var(--muted);
+        cursor: pointer;
+        padding: 2px 0;
+      }
+      .msg-field {
+        width: 100%;
+        box-sizing: border-box;
+        font: inherit;
+        padding: 4px 6px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        margin-bottom: 6px;
+      }
+      /* §10.4's one new component: a footer strip replacing the bulk button in place. Nothing
+         dims, nothing overlays, and the rows the user is being asked about stay visible behind it. */
+      .confirm-strip {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        border-top: 1px solid var(--border);
+        padding-top: 8px;
+        margin-top: 8px;
+      }
+      .confirm-strip .actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .confirm-strip .actions .grow {
+        flex: 1;
+      }
+      /* The token field is write-only and looks it — §5.2, ADR-0006 §1. Inert, never a `value`. */
+      .pat-field {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .pat-mask {
+        flex: 1;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 4px 6px;
+        color: var(--muted);
+        background: var(--bg-subtle);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
       #tokens-notices {
         flex: none;
         padding: 8px 12px 0;
@@ -863,7 +1060,14 @@
         <nav class="tabs">
           <button id="tab-import" class="tab active">Import</button>
           <button id="tab-tokens" class="tab" disabled title="Scan the file first">Tokens</button>
+          <!-- Phase 6's third top-level tab (UX git-sync §4.1, §6.2). A sibling of Import and
+               Tokens, not a section tab on the Changes list: reviewing a diff, choosing files and
+               writing a commit message is work, and tabs are for places you work. -->
+          <button id="tab-repo" class="tab">Repo</button>
         </nav>
+        <!-- The settings gear (UX git-sync §5.1). Carries one state mark and only one: an amber
+             flag when the connection is broken. No count, no green dot when healthy. -->
+        <button id="gear" class="gear" title="Settings">⚙</button>
         <!-- The header's state slot. Phase 4 puts the "Local edits · N" chip here; Phase 6's
              sync pill lands in the same slot, absorbing this state as "uncommitted". -->
         <div id="state-slot"></div>
@@ -882,7 +1086,13 @@
         <div id="tokens-notices"></div>
         <div id="tokens-scroll"><div id="tokens-canvas"></div></div>
       </div>
+      <!-- The Repo tab's own view. Its three screens — Review & push, Diverged files, Compare —
+           are rendered into it and pushed with a back arrow that preserves state (UX §7.2, §9.2). -->
+      <div id="repo" class="hidden"></div>
       <div id="panel" class="hidden"></div>
+      <!-- The Settings overlay (UX §5.2): full-panel with a back arrow, reachable from every tab,
+           so it sits outside the tab views rather than inside one of them. -->
+      <div id="settings" class="hidden"></div>
       <!-- The apply dialog's backdrop. Inside #views so it dims the tree, not the header —
            the header is what tells you where you still are. -->
       <div id="modal" class="hidden"></div>

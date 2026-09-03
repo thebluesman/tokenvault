@@ -1,11 +1,24 @@
 import type {
   ApplyReport,
+  GitConfig,
   ImportPayload,
   MergeSummary,
   PluginToUiMessage,
   SerializedFile,
   UiToPluginMessage,
 } from "./messages";
+import type { RepoSettings, SyncState } from "./git/types";
+import type { TokenGroup } from "./tokens/types";
+import {
+  PAT_KEY,
+  SETTINGS_KEY,
+  lastFour,
+  parseSettings,
+  parseSyncState,
+  syncKey,
+  syncStateApplies,
+} from "./git/state";
+import { applyPull } from "./git/pull";
 import type { FileScan, ImportResult, SubtypeSelection } from "./tokens/types";
 import type { EditOverlay, EntryRef, OverlayEntry, OverlayOp, OverlayTarget } from "./tokens/overlay";
 import type { DriftResult } from "./tokens/drift";
@@ -100,6 +113,32 @@ let lastScanAt: string | null = null;
  */
 let baseline: FlatToken[] = [];
 let baselineKnown = false;
+
+/**
+ * The repo's version of the tree — ADR-0006 §7's baseline swap.
+ *
+ * When present, this is what drift compares against, and drift stops being a changelog against a
+ * local watermark and becomes divergence from the source of truth (PRD §6.5.3's actual sense).
+ * `drift.ts` needs no new logic for that; it takes a baseline tree as an argument, and this is a
+ * different argument.
+ *
+ * **In memory only, never persisted.** §3 refuses a second ~700KB blob in a 5MB store that already
+ * holds the overlay and the import cache, for a tree one cheap request re-derives. The honest
+ * consequence, and it is deliberate: a connected file whose repo content hasn't been fetched yet
+ * this session falls back to the scan baseline and says so, rather than claiming a comparison it
+ * hasn't made.
+ */
+let repoBaseline: FlatToken[] | null = null;
+/** Whether this file currently has repo settings — the gate on accepting a repo drift baseline. */
+let repoConnected = false;
+
+/** Set when the repo baseline changed, so the next rebuild recomputes drift without a rescan. */
+let driftDirty = false;
+
+/** Whether there was anything to compare against at all. Unknown is not none (ADR-0005 §8). */
+function driftKnown(): boolean {
+  return repoBaseline !== null || baselineKnown;
+}
 
 /** The last scan's drift, carried to the UI on every emit so a refresh doesn't drop the badges. */
 let drift: DriftResult = emptyDrift();
@@ -338,12 +377,13 @@ function emitImport(fileName: string, refresh = false): void {
       fromCache: importFromCache,
       refresh,
       drift: drift.entries,
-      driftKnown: baselineKnown,
+      driftKnown: driftKnown(),
       styleGuards: guards ?? [],
       nonLocalPaths: nonLocal ?? [],
       // Empty-because-clean and empty-because-unasked are different answers to "what would this
       // write overwrite?", and only one of them may enable Apply — §8's rule, applied a second time.
       guardsKnown: guards !== null && nonLocal !== null,
+      driftBaseline: repoBaseline === null ? "scan" : "repo",
     } satisfies ImportPayload,
   });
   pendingMerge = undefined;
@@ -387,13 +427,25 @@ async function rebuild(fromScan: boolean, refresh = false): Promise<void> {
   // Drift is computed **before** the merge's outcome retires anything, and against the overlay as
   // it stood going in: a token carrying an edit is excluded here and reported as `edit-conflict`
   // by the merge instead (ADR-0005 §7). One mechanism widened, not two that can disagree.
-  if (fromScan) {
+  // Recomputed on a scan, and also when the repo baseline moved under us (ADR-0006 §7): connecting
+  // a repo, or pulling one, changes what "drifted" *means* without the Figma file having moved at
+  // all, and a stale drift set would keep describing the previous question.
+  if (fromScan || driftDirty) {
     const edited = new Set(indexOverlay(overlay).keys());
-    for (const key of justWrote) edited.add(key);
-    justWrote = new Set();
-    drift = baselineKnown ? detectDrift(baseline, flat, edited) : emptyDrift();
-    baseline = flat;
-    baselineKnown = true;
+    if (fromScan) {
+      for (const key of justWrote) edited.add(key);
+      justWrote = new Set();
+    }
+    const against = repoBaseline ?? baseline;
+    const known = repoBaseline !== null || baselineKnown;
+    drift = known ? detectDrift(against, flat, edited) : emptyDrift();
+    driftDirty = false;
+    if (fromScan) {
+      // The scan watermark advances whether or not it is the drift baseline: disconnecting a repo
+      // has to leave Phase 5's behaviour intact and immediately correct, not stale by one scan.
+      baseline = flat;
+      baselineKnown = true;
+    }
   }
 
   const changed = stableStringify(merged.overlay) !== stableStringify(overlay);
@@ -409,7 +461,7 @@ async function rebuild(fromScan: boolean, refresh = false): Promise<void> {
     result.counts.flagged = result.report.entries.length;
   }
   // Absent, not zero, when there is no baseline — §8's "unknown is not none", all the way down.
-  if (baselineKnown) {
+  if (driftKnown()) {
     result.report.counts.drifted = drift.entries.length;
     result.counts.drifted = drift.entries.length;
   }
@@ -629,6 +681,121 @@ function describeSelection(result: { selected: number; found: number; pages: num
   return `${selected} on this page. ${elsewhere} more ${elsewhere === 1 ? "is" : "are"} on ${others} other page${others === 1 ? "" : "s"} — Figma can only select one page at a time.`;
 }
 
+// ---------------------------------------------------------------------------
+// Git sync — ADR-0006 §1, §3, §5, §7
+// ---------------------------------------------------------------------------
+
+/**
+ * The sandbox half of git sync: storage, and nothing else.
+ *
+ * `clientStorage` is sandbox-only and `fetch` is iframe-only, so the plugin controller owns the
+ * connection and the credential while the iframe owns every request. Neither half can do the other's
+ * job, which is why the PAT crosses the channel at all (§1) — the ADR says so rather than implying
+ * otherwise, and the mitigation is that it crosses for one operation and is never stored on the
+ * far side.
+ */
+async function loadGitConfig(): Promise<GitConfig> {
+  const settings = parseSettings(await figma.clientStorage.getAsync(SETTINGS_KEY));
+  repoConnected = settings !== null;
+  const stored = parseSyncState(await figma.clientStorage.getAsync(syncKey(resolveFileIdentity())));
+  const token = await figma.clientStorage.getAsync(PAT_KEY);
+  return {
+    settings,
+    // A sync state for a different repo or branch is not a base — §9: *"a different branch is a
+    // different base"*. Filtered on read rather than deleted on write, so switching branch and back
+    // doesn't throw away a perfectly good base the user still had.
+    sync: syncStateApplies(stored, settings) ? stored : null,
+    hasToken: typeof token === "string" && token.length > 0,
+  };
+}
+
+async function handleGitSaveSettings(
+  settings: RepoSettings | null,
+  token: string | undefined | null
+): Promise<void> {
+  if (token === null) {
+    await figma.clientStorage.deleteAsync(PAT_KEY);
+  } else if (typeof token === "string" && token.trim().length > 0) {
+    await figma.clientStorage.setAsync(PAT_KEY, token.trim());
+  }
+
+  if (settings === null) {
+    // Disconnect. The credential is cleared with the settings, and the sync state with it — but
+    // nothing touches the tokens, the overlay, Figma, or the repo (UX §5.2). The one consequence
+    // worth naming, and the prompt names it: drift goes back to comparing against the last scan.
+    await figma.clientStorage.deleteAsync(SETTINGS_KEY);
+    await figma.clientStorage.deleteAsync(PAT_KEY);
+    await figma.clientStorage.deleteAsync(syncKey(resolveFileIdentity()));
+    setRepoBaseline(null);
+  } else {
+    const next: RepoSettings = { ...settings };
+    if (typeof token === "string" && token.trim().length > 0) {
+      // Derived once, at save time, and stored beside the token — so rendering the masked field
+      // never requires reading the PAT out of storage at all (§1).
+      next.patLastFour = lastFour(token);
+    } else if (token === null) {
+      delete next.patLastFour;
+    }
+    await figma.clientStorage.setAsync(SETTINGS_KEY, next);
+  }
+
+  post({ type: "git-config", config: await loadGitConfig() });
+  if (settings === null && snapshot !== null && !scanning) await rebuild(false, true);
+}
+
+async function handleGitSaveSync(state: SyncState | null): Promise<void> {
+  const key = syncKey(resolveFileIdentity());
+  if (state === null) await figma.clientStorage.deleteAsync(key);
+  else await figma.clientStorage.setAsync(key, state);
+  post({ type: "git-config", config: await loadGitConfig() });
+}
+
+/** Swaps the drift baseline — ADR-0006 §7. `null` reverts to Phase 5's scan watermark. */
+function setRepoBaseline(files: SerializedFile[] | null): void {
+  if (files === null) {
+    if (repoBaseline === null) return;
+    repoBaseline = null;
+    driftDirty = true;
+    return;
+  }
+  // A baseline fetch that resolves after the user disconnected must not silently re-point drift at
+  // a repo this file is no longer connected to — the disconnect prompt promised the opposite (§7).
+  if (importResult === null || !repoConnected) return;
+
+  const trees = new Map<string, TokenGroup>();
+  for (const file of files) {
+    if (file.path.startsWith("tokens/$")) continue;
+    try {
+      trees.set(file.path, JSON.parse(file.json) as TokenGroup);
+    } catch {
+      // An unreadable repo file is named in the UI (UX §11) and excluded here. One bad file must
+      // not cost the baseline for the eleven good ones.
+    }
+  }
+  repoBaseline = flattenImport(trees, importResult.manifest);
+  driftDirty = true;
+}
+
+/**
+ * Lands a pull as overlay entries — ADR-0006 §5, and the phase's biggest saving.
+ *
+ * **Pull never writes to Figma.** It leaves pending entries, and getting them onto the canvas is
+ * Phase 5's existing apply flow: the same preview modal, the same executor, the same per-entry
+ * report. This is the second `ApplyPlan` producer ADR-0005 §1 built the seam for, and it arrives
+ * without a second write path.
+ */
+async function handleGitPull(entries: Array<Omit<OverlayEntry, "at">>): Promise<void> {
+  const merged = applyPull(overlay, entries, new Date().toISOString());
+  overlay = merged.overlay;
+  const storageError = await persistOverlay();
+  post({ type: "overlay-state", overlay, storageError });
+  post({ type: "git-pull-result", applied: merged.applied, conflicts: merged.conflicts });
+  // A conflict flag lives on the import report, so the report has to be re-derived for the badge to
+  // appear on the same interaction rather than after the next scan — same reason `commitOverlay`
+  // does it for a resolution.
+  if (snapshot !== null && !scanning) await rebuild(false, true);
+}
+
 function handleCopyTree(): void {
   if (!importResult) {
     post({ type: "tree-json", json: "", files: 0 });
@@ -659,6 +826,9 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
       userSubtypes = await loadUserSubtypes();
       overlay = parseOverlay(await figma.clientStorage.getAsync(editStorageKey()));
       post({ type: "plugin-ready", fileName: figma.root.name });
+      // The connection, before the tree: the header chip's repo half and the Repo tab both have to
+      // know whether this file is connected at all before they render anything (UX §6.1).
+      post({ type: "git-config", config: await loadGitConfig() });
 
       // The overlay is durable and the import is not, so the panel can legitimately open with
       // edits and no tree (ADR-0004 §1). The cache is what stops that being the normal case.
@@ -724,6 +894,41 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
       figma.notify(describeSelection(await selectNodes(message.nodeIds)));
       return;
     }
+    // --- Phase 6 (ADR-0006) ---
+
+    if (message.type === "git-load") {
+      post({ type: "git-config", config: await loadGitConfig() });
+      return;
+    }
+    if (message.type === "git-save-settings") {
+      await handleGitSaveSettings(message.settings, message.token);
+      return;
+    }
+    if (message.type === "git-save-sync") {
+      await handleGitSaveSync(message.state);
+      return;
+    }
+    if (message.type === "git-request-token") {
+      // The credential crosses the channel here and nowhere else — ADR-0006 §1. It is read on
+      // demand rather than pushed with the config, so the iframe holds it only while an operation
+      // that needs it is actually running.
+      const token = await figma.clientStorage.getAsync(PAT_KEY);
+      post({ type: "git-token", token: typeof token === "string" && token.length > 0 ? token : null });
+      return;
+    }
+    if (message.type === "git-repo-baseline") {
+      setRepoBaseline(message.files);
+      // `driftDirty` survives if there is nothing to rebuild against yet, so the next rebuild
+      // honours it. Reporting a baseline the panel has not actually compared against would be
+      // exactly the "unknown read as none" lie ADR-0005 §8 spends a section refusing.
+      if (driftDirty && snapshot !== null && !scanning) await rebuild(false, true);
+      return;
+    }
+    if (message.type === "git-pull") {
+      await handleGitPull(message.entries);
+      return;
+    }
+
     if (message.type === "copy-scan") {
       // `stableStringify` rather than `JSON.stringify` so a captured fixture has the same key
       // ordering as everything else in the repo and re-capturing it produces a readable diff.

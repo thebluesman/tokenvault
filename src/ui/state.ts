@@ -10,8 +10,8 @@
 //     has to know the referrer count before it is clicked in order to render disabled, and a scan
 //     per `⋯` menu open is a visible stall at 1,316 tokens.
 
-import type { ImportPayload, MergeSummary, UiToPluginMessage } from "../messages";
-import type { ReportEntry, Token, TokenGroup, TokenType, TokenValue } from "../tokens/types";
+import type { ImportPayload, MergeSummary, SerializedFile, UiToPluginMessage } from "../messages";
+import type { Manifest, ReportEntry, Token, TokenGroup, TokenType, TokenValue } from "../tokens/types";
 import type { EditOverlay, EntryRef, OverlayEntry, OverlayOp, OverlayTarget } from "../tokens/overlay";
 import type { FlatToken, PathRow, SetInfo, TreeNode } from "../tokens/view";
 import type { InboundIndex, Referrer } from "../tokens/references";
@@ -173,6 +173,27 @@ function blankModel(): EditorModel {
 
 export function getModel(): EditorModel {
   return model;
+}
+
+/**
+ * The import's serialized files, exactly as they crossed `postMessage` — Phase 6's push input.
+ *
+ * Handed out as the *pristine* set, with the overlay applied downstream by `git/local.ts`, because
+ * the bytes a push writes have to be produced by one function that also produced the bytes whose
+ * blob SHA the status check compared (ADR-0006 §4). Two paths to "the file's content" is how a
+ * push and a status check end up disagreeing about whether anything changed.
+ */
+export function importedFiles(): SerializedFile[] {
+  return payload === null ? [] : payload.files;
+}
+
+export function importedManifest(): Manifest | null {
+  return payload === null ? null : payload.manifest;
+}
+
+/** Which baseline the last drift comparison actually used — ADR-0006 §7, reported not assumed. */
+export function driftBaseline(): "repo" | "scan" {
+  return payload?.driftBaseline ?? "scan";
 }
 
 export function onChange(listener: () => void): void {
@@ -684,6 +705,44 @@ export function revertEntries(refs: EntryRef[]): void {
   overlay = dropEntries(overlay, refs);
   send({ type: "revert-entries", entries: refs });
   rebuild();
+}
+
+/**
+ * Resolves a conflict the other way — UX git-sync §8.2's `[ Take the repo's ]`.
+ *
+ * Phase 4's *Take Figma's* could just drop the entry, because Figma's value was the one the tree
+ * would fall back to. A **pulled** conflict is not like that: the opposing value came from the
+ * repo, and Figma has neither side. So taking it means *recording it* — as a pulled entry, which
+ * then rides the ordinary apply flow onto the canvas like any other pending change (ADR-0006 §5).
+ *
+ * Returns false when there is nothing to take, so the caller never claims a resolution it didn't
+ * make.
+ */
+export function resolveTakeRepo(line: Line): boolean {
+  const conflict = line.conflict;
+  const target = line.target;
+  if (conflict === undefined || target === null) return false;
+  const value = conflict.conflict?.figma;
+  if (value === undefined) return false;
+
+  commit([
+    {
+      target,
+      path: line.entry.path,
+      set: line.entry.setId,
+      op: conflict.op,
+      value,
+      // The base is what Figma currently says *for the field this op edits* — the same branch
+      // `mergeOverlay` takes. Recording `$value` for a description edit would leave a base the next
+      // rescan can never match, and the conflict would come straight back.
+      base:
+        conflict.op === "set-description"
+          ? (line.entry.token.$description ?? "")
+          : line.entry.token.$value,
+      origin: "pulled",
+    },
+  ]);
+  return true;
 }
 
 export function resolveKeepMine(target: OverlayTarget, op: OverlayOp): void {
