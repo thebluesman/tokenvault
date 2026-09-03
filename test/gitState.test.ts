@@ -71,6 +71,7 @@ test("a sync state for another branch is not a base", () => {
     owner: "a",
     repo: "b",
     branch: "main",
+    tokensDir: "tokens",
     baseCommitSha: "c",
     blobShas: {},
     at: "",
@@ -82,12 +83,33 @@ test("a sync state for another branch is not a base", () => {
   assert.equal(syncStateApplies(null, settings), false);
 });
 
+test("a sync state for another tokens folder is not a base", () => {
+  // The base's blob SHAs are keyed to paths built from the old folder — comparing them against the
+  // new folder's paths would make every file misread as diverged.
+  const state: SyncState = {
+    owner: "a",
+    repo: "b",
+    branch: "main",
+    tokensDir: "tokens",
+    baseCommitSha: "c",
+    blobShas: {},
+    at: "",
+  };
+  const moved = parseSettings({ owner: "a", repo: "b", branch: "main", tokensDir: "design" });
+  assert.equal(syncStateApplies(state, moved), false);
+});
+
 test("a malformed sync state is rejected rather than half-read", () => {
   assert.equal(parseSyncState({ owner: "a" }), null);
+  assert.equal(
+    parseSyncState({ owner: "a", repo: "b", branch: "main", baseCommitSha: "c", blobShas: {} }),
+    null
+  );
   const parsed = parseSyncState({
     owner: "a",
     repo: "b",
     branch: "main",
+    tokensDir: "tokens",
     baseCommitSha: "c",
     blobShas: { "tokens/a.json": "sha", "tokens/b.json": 7 },
   }) as SyncState;

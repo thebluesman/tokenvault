@@ -78,6 +78,7 @@ export function parseSyncState(stored: unknown): SyncState | null {
   const record = stored as Partial<SyncState>;
   if (typeof record.owner !== "string" || typeof record.repo !== "string") return null;
   if (typeof record.branch !== "string" || typeof record.baseCommitSha !== "string") return null;
+  if (typeof record.tokensDir !== "string" || record.tokensDir.length === 0) return null;
 
   const blobShas: Record<string, string> = {};
   const raw = record.blobShas;
@@ -92,6 +93,7 @@ export function parseSyncState(stored: unknown): SyncState | null {
     owner: record.owner,
     repo: record.repo,
     branch: record.branch,
+    tokensDir: record.tokensDir,
     baseCommitSha: record.baseCommitSha,
     blobShas,
     at: typeof record.at === "string" ? record.at : "",
@@ -102,16 +104,20 @@ export function parseSyncState(stored: unknown): SyncState | null {
  * Whether a stored connection still describes the configured repo.
  *
  * Changing branch invalidates the sync state (§9) — *"a different branch is a different base"* —
- * and so does changing repo or owner. Rather than deleting on every settings save, the state is
- * checked for relevance on read: a user who switches branch and switches back has not lost anything
- * they had, and a user who switches away gets a base that correctly reads as absent.
+ * and so does changing repo or owner. A changed tokens folder invalidates it for the same reason:
+ * every blob SHA in `blobShas` is keyed to a repo path built from the *old* folder, so comparing it
+ * against paths built from the new one would make every file misread as diverged. Rather than
+ * deleting on every settings save, the state is checked for relevance on read: a user who switches
+ * branch and back (or folder and back) has not lost anything they had, and a user who switches away
+ * gets a base that correctly reads as absent.
  */
 export function syncStateApplies(state: SyncState | null, settings: RepoSettings | null): boolean {
   if (state === null || settings === null) return false;
   return (
     state.owner === settings.owner &&
     state.repo === settings.repo &&
-    state.branch === settings.branch
+    state.branch === settings.branch &&
+    state.tokensDir === settings.tokensDir
   );
 }
 

@@ -35,6 +35,8 @@ export interface SyncState {
   owner: string;
   repo: string;
   branch: string;
+  /** Repo-relative tokens folder this base's paths are keyed to — a folder change invalidates it too. */
+  tokensDir: string;
   /** The commit this base was established against — the parent of the next push (§8). */
   baseCommitSha: string;
   blobShas: Record<string, string>;
