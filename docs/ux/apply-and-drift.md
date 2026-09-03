@@ -319,7 +319,7 @@ Three deliberate choices:
 | Target token exists but has **no** Figma Variable (style-derived, or a type Variables can't hold) | Blocked, not silently flattened: `Points at a token that isn't a Figma Variable — nothing to alias to.` |
 | Target is **in a different collection** than the source | **[ARCH]** — Figma's cross-collection alias rules are the ADR's to state. Until it does, treat as blocked with `Can't alias across collections.` rather than guessing. |
 | Target is missing entirely (Phase 4's `dangling-reference`) | Blocked, reusing the existing dangling treatment: `Points at folio.ref.palette.red-warm.50, which isn't in any set.` |
-| Value is a math expression (`{a} * 2`) | Blocked. Phase 7 owns evaluation; Phase 5 aliases a pointer, it does not compute one. |
+| Value is a math expression (`{a} * 2`) | ~~Blocked. Phase 7 owns evaluation; Phase 5 aliases a pointer, it does not compute one.~~ **Amended 2026-09-03:** Phase 7 owns evaluation and evaluates it. An ordinary **checked** row, showing the expression with `= 32 · applied as a number` beneath it — the number that lands is on screen before the button is pressed (ADR-0007 §4, `docs/ux/references-math-themes.md` §6.3). It does not get §5.6's unchecked-flattening-fallback treatment, which exists for the different case where a pointer the user *wanted* couldn't be preserved. |
 
 #### Aliases and drift
 

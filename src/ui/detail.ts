@@ -37,7 +37,19 @@ import {
   shadowList,
   subtypeWarning,
 } from "../tokens/edit";
-import { isReference, referenceTarget } from "../tokens/references";
+import { isReference } from "../tokens/references";
+import { valueShape } from "../tokens/expr";
+import {
+  authorValue,
+  buildPicker,
+  candidatePaths,
+  cycleBlock,
+  isNonLiteral,
+  noOpSwap,
+  pointerTarget,
+  resolveLine,
+  resolvedLiteralFor,
+} from "./valueField";
 import { NUMBER_SUBTYPES, STRING_SUBTYPES } from "../tokens/subtype";
 import type { GridField, ShadowField, TypographyField } from "../tokens/edit";
 import {
@@ -51,7 +63,9 @@ import {
   getModel,
   keysOf,
   planFor,
+  onCycle,
   planRestoreDrift,
+  resolutionFor,
   resolveKeepMine,
   resolveTakeRepo,
   revert,
@@ -60,7 +74,7 @@ import {
 import { isConnected } from "./git";
 import { openApplyDialog } from "./applyDialog";
 import { openDeleteInFigma } from "./deleteFigma";
-import { button, copy, el, toast } from "./dom";
+import { button, closePopover, copy, el, isPopoverOpen, popover, toast } from "./dom";
 import { describeValue } from "../tokens/format";
 import { normalizePathKey } from "../tokens/paths";
 
@@ -420,9 +434,30 @@ function renderInSync(): HTMLElement {
 // ---------------------------------------------------------------------------
 
 function renderValueEditor(line: Line): HTMLElement {
-  const token = line.entry.token;
-  if (isReference(token.$value)) return renderReferenceChip(line);
+  // §7.3b — a token on a loop shows the block first, because the loop is the thing in the error
+  // state rather than this token. The editor still follows it: *"editing any one of them breaks
+  // it"* is only true if one of them can be edited, and this is one of them.
+  const cycle = onCycle(line) ? resolutionFor(line).cycle : undefined;
+  if (cycle !== undefined) {
+    const wrap = el("div");
+    wrap.appendChild(
+      cycleBlock(cycle, getModel().resolve, {
+        navigate: (path: string) => {
+          closeDetail();
+          navigate(path);
+        },
+      })
+    );
+    wrap.appendChild(typedEditor(line));
+    return wrap;
+  }
 
+  return typedEditor(line);
+}
+
+/** The per-type editor, once the cycle block (if any) has had its say. */
+function typedEditor(line: Line): HTMLElement {
+  const token = line.entry.token;
   switch (token.$type) {
     case "color":
       return colorEditor(line);
@@ -444,39 +479,264 @@ function renderValueEditor(line: Line): HTMLElement {
 }
 
 /**
- * A reference is rendered verbatim, badged, and read-only (§5.3).
+ * The affordances that hang under a committed non-literal value.
  *
- * There is deliberately no "break the link and type a literal" escape hatch: that is an aliasing
- * decision, and aliasing is Phase 7.
+ * `Go to target` survives from Phase 4 unchanged — it was the right affordance and it is now
+ * reachable from an *editable* field (§12). `Use the resolved value instead` is new, and it is the
+ * escape hatch Phase 4 §5.3 deliberately withheld because breaking a link was an aliasing decision:
+ * Phase 7 is where that decision gets made, and the answer is that breaking one on purpose is a
+ * legitimate thing to want as long as it is a named action rather than the accidental result of
+ * clicking a swatch (§4.1, §4.3).
  */
-function renderReferenceChip(line: Line): HTMLElement {
-  const target = referenceTarget(line.entry.token.$value) as string;
-  const wrap = el("div");
+function pointerFooter(line: Line, setField: (raw: string) => void): HTMLElement | null {
+  const token = line.entry.token;
+  const shape = valueShape(token);
+  if (shape === "literal") return null;
 
-  const chip = el("div", "ref-chip");
-  chip.appendChild(el("span", undefined, "↗"));
-  chip.appendChild(el("span", "grow", `{${target}}`));
-  wrap.appendChild(chip);
+  const wrap = el("div", "toolbar");
+  const target = pointerTarget(token.$value);
 
-  const exists = getModel().byPath.has(normalizePathKey(target));
-  wrap.appendChild(
-    el(
-      "p",
-      "empty",
-      exists
-        ? `Points at ${target}. Editing references lands in Phase 7 — for now, change the token it points at.`
-        : `Points at ${target}, which isn't in any set.`
-    )
-  );
-
-  if (exists) {
-    const go = button("Go to target");
-    go.addEventListener("click", () => {
-      closeDetail();
-      navigate(target);
-    });
-    wrap.appendChild(go);
+  if (target !== null) {
+    const exists = getModel().byPath.has(normalizePathKey(target));
+    if (exists) {
+      const go = button("Go to target");
+      go.addEventListener("click", () => {
+        closeDetail();
+        navigate(target);
+      });
+      wrap.appendChild(go);
+    }
   }
+
+  const literal = resolvedLiteralFor(line);
+  if (literal !== null) {
+    // Worded as *use the resolved value*, not *break the link* — the user is choosing what they
+    // want, not vandalising something. Left uncommitted in the field so they can see what they are
+    // about to do (§4.3).
+    const use = button("Use the resolved value instead");
+    use.addEventListener("click", () => setField(literal));
+    wrap.appendChild(use);
+  }
+
+  return wrap.childNodes.length === 0 ? null : wrap;
+}
+
+/**
+ * The one value field — §4.1.
+ *
+ * Accepts a literal, a whole-value reference, or (on a `number` token) a math expression, in the
+ * same input, with no mode switch. `{` opens the path picker at the caret. Validation fires on
+ * **commit**, not per keystroke: a half-typed path is not an error, and amber that appears on the
+ * third character trains people to ignore amber (§5).
+ */
+function unifiedField(
+  line: Line,
+  options: {
+    label?: string;
+    /** Parses and commits a literal for this `$type`. Returns an error message or `null`. */
+    commitLiteral?: (raw: string) => string | null;
+    /** Extra control beside the input — the colour swatch. */
+    trailing?: (input: HTMLInputElement, reference: boolean) => HTMLElement | null;
+    initial?: string;
+  } = {}
+): HTMLElement {
+  const token = line.entry.token;
+  const type = token.$type;
+  const wrap = el("div");
+  const row = el("div", "field");
+  row.appendChild(el("label", undefined, options.label ?? "Value"));
+
+  const initial = options.initial ?? String(token.$value);
+  const input = el("input") as HTMLInputElement;
+  input.type = "text";
+  input.value = initial;
+  input.className = "inline-edit";
+  input.style.flex = "1";
+
+  const note = el("div", "field-note hidden");
+  const extra = el("div");
+
+  const clearNotes = (): void => {
+    input.classList.remove("invalid");
+    note.classList.add("hidden");
+    note.textContent = "";
+    extra.textContent = "";
+  };
+
+  const showAmber = (message: string): void => {
+    input.classList.add("invalid");
+    note.classList.remove("hidden");
+    note.classList.add("warn");
+    note.textContent = message;
+  };
+
+  const showGrey = (message: string): void => {
+    input.classList.remove("invalid");
+    note.classList.remove("hidden");
+    note.classList.remove("warn");
+    note.textContent = message;
+  };
+
+  const live = el("div");
+  const renderLive = (): void => {
+    live.textContent = "";
+    const rendered = resolveLine(input.value, type, getModel().resolve);
+    if (rendered !== null) live.appendChild(rendered);
+  };
+
+  const setField = (raw: string): void => {
+    input.value = raw;
+    clearNotes();
+    renderLive();
+    input.focus();
+  };
+
+  const commit = (): void => {
+    const raw = input.value;
+    // An empty field that started empty is not an edit. The boolean editor's "Points at" field
+    // starts that way, and blurring past it must not fire an error about a value nobody typed.
+    if (raw.trim().length === 0 && initial.length === 0) {
+      clearNotes();
+      return;
+    }
+    if (!isNonLiteral(raw, type)) {
+      const literalCommit = options.commitLiteral;
+      if (literalCommit === undefined) {
+        showAmber(`A ${type} token needs a ${type} value.`);
+        return;
+      }
+      const error = literalCommit(raw);
+      if (error === null) clearNotes();
+      else showAmber(error);
+      return;
+    }
+
+    // §5's four rules, all before the overlay entry is written.
+    const outcome = authorValue(line, raw);
+    if (!outcome.ok) {
+      showAmber(outcome.message);
+      extra.textContent = "";
+      if (outcome.cycle !== undefined) {
+        const candidate = candidatePaths(raw);
+        extra.appendChild(
+          cycleBlock(outcome.cycle, getModel().resolve, {
+            candidateEdge:
+              candidate.length > 0
+                ? { fromPath: line.entry.path, toPath: candidate[0] }
+                : undefined,
+            navigate: (path: string) => {
+              closeDetail();
+              navigate(path);
+            },
+          })
+        );
+      }
+      // The field stays open with the value in it, so Escape reverts and any other edit is one
+      // keystroke away (§7.3a).
+      return;
+    }
+
+    const error = editValue(line, raw.trim() as never);
+    if (error !== null) {
+      showAmber(error);
+      return;
+    }
+    clearNotes();
+
+    if ("warning" in outcome && outcome.warning !== undefined) {
+      // Grey, not amber, at the moment of authoring — the user just did a legitimate thing and
+      // nothing needs them. The *row* badge is amber, because by the time you meet it in the tree
+      // you have lost the context that made it deliberate (§5.4).
+      showGrey(outcome.warning);
+    }
+
+    // §6.5, and the one place the editor steers toward a reference: only where a plain reference is
+    // provably equivalent, and it offers rather than rewrites.
+    const swap = noOpSwap(raw);
+    if (swap !== null) {
+      showGrey(
+        `Committed. ${raw.trim()} is the same as {${swap}}, and a plain reference keeps a live link in Figma.`
+      );
+      const fix = button(`Use {${swap}}`);
+      fix.addEventListener("click", () => {
+        const applied = editValue(line, `{${swap}}` as never);
+        if (applied !== null) toast(applied);
+      });
+      extra.textContent = "";
+      extra.appendChild(fix);
+    }
+  };
+
+  input.addEventListener("input", () => {
+    renderLive();
+    // The picker fires on `{` and inserts at the caret rather than replacing the field, which is
+    // the only mechanical thing expressions add to §4.2. It is reopened on every keystroke while
+    // the caret sits inside an unclosed `{`, because **the picker filters live** — it is the amber
+    // that waits for commit, not the list (§5, build notes).
+    if (openBraceBefore() !== -1) openPicker();
+    else closePopover();
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commit();
+    } else if (event.key === "Escape") {
+      // Escape closes the popover **without closing the field** (§4.2). Only a second Escape, with
+      // no popover to dismiss, reverts what was typed.
+      event.preventDefault();
+      if (isPopoverOpen()) {
+        closePopover();
+        return;
+      }
+      input.value = initial;
+      clearNotes();
+      renderLive();
+    }
+  });
+  input.addEventListener("blur", () => {
+    // A click inside the picker must not commit the half-typed path underneath it.
+    window.setTimeout(() => {
+      if (document.activeElement !== input) commit();
+    }, 0);
+  });
+
+  /** The unclosed `{` the caret sits inside, or -1. Drives both opening and closing the picker. */
+  function openBraceBefore(): number {
+    const caret = input.selectionStart ?? input.value.length;
+    const before = input.value.slice(0, caret);
+    const opened = before.lastIndexOf("{");
+    if (opened === -1) return -1;
+    return before.indexOf("}", opened) === -1 ? opened : -1;
+  }
+
+  function openPicker(): void {
+    const caret = input.selectionStart ?? input.value.length;
+    const openedAt = openBraceBefore();
+    if (openedAt === -1) return;
+    const query = input.value.slice(openedAt + 1, caret);
+    popover(input, (close) =>
+      buildPicker(line.entry, query, type === "number", type, (path) => {
+        const before = input.value.slice(0, openedAt);
+        const after = input.value.slice(caret);
+        setField(`${before}{${path}}${after}`);
+        close();
+      })
+    );
+  }
+
+  row.appendChild(input);
+  const trailing = options.trailing?.(input, isReference(token.$value));
+  if (trailing !== null && trailing !== undefined) row.appendChild(trailing);
+
+  wrap.appendChild(row);
+  wrap.appendChild(live);
+  wrap.appendChild(note);
+  wrap.appendChild(extra);
+  renderLive();
+
+  const footer = pointerFooter(line, setField);
+  if (footer !== null) wrap.appendChild(footer);
+
   return wrap;
 }
 
@@ -539,72 +799,111 @@ function committingInput(
 }
 
 function colorEditor(line: Line): HTMLElement {
-  const current = String(line.entry.token.$value);
-  const wrap = el("div");
+  const token = line.entry.token;
+  const literal = valueShape(token) === "literal" ? String(token.$value) : "";
 
-  const row = el("div", "field");
-  row.appendChild(el("label", undefined, "Hex"));
+  return unifiedField(line, {
+    label: "Hex",
+    commitLiteral: (raw) => {
+      const parsed = parseHexColor(raw);
+      if (!parsed.ok) return parsed.message;
+      return editValue(line, parsed.value);
+    },
+    trailing: (input, reference) => {
+      // The hex field is the source of truth; the native picker is a convenience that writes into
+      // it. 8-digit hex has no `<input type=color>` representation, so alpha is typed, never picked.
+      const picker = el("input") as HTMLInputElement;
+      picker.type = "color";
+      picker.className = "unit";
 
-  const text = committingInput(current, (raw) => {
-    const parsed = parseHexColor(raw);
-    if (!parsed.ok) return parsed.message;
-    return editValue(line, parsed.value);
+      if (reference) {
+        // §4.1 — while the value is a reference the swatch is **inert and shows the resolved
+        // colour**. A colour picker that silently converted a pointer into a hex value is the exact
+        // silent flattening this phase exists to prevent, so clicking it only focuses the field.
+        const resolved = resolvedLiteralFor(line);
+        picker.value = resolved !== null && resolved.length >= 7 ? resolved.slice(0, 7) : "#000000";
+        picker.disabled = true;
+        const shell = el("span");
+        shell.appendChild(picker);
+        shell.addEventListener("click", () => input.focus());
+        return shell;
+      }
+
+      picker.value = literal.length >= 7 ? literal.slice(0, 7) : "#000000";
+      picker.addEventListener("change", () => {
+        const alpha = literal.length === 9 ? literal.slice(7) : "";
+        const parsed = parseHexColor(picker.value + alpha);
+        if (!parsed.ok) return;
+        const error = editValue(line, parsed.value);
+        if (error !== null) toast(error);
+      });
+      return picker;
+    },
   });
-  text.field.style.flex = "1";
-  row.appendChild(text.field);
-
-  // The hex field is the source of truth; the native picker is a convenience that writes into it.
-  // 8-digit hex has no `<input type=color>` representation, so alpha is typed, never picked.
-  const picker = el("input") as HTMLInputElement;
-  picker.type = "color";
-  picker.value = current.length >= 7 ? current.slice(0, 7) : "#000000";
-  picker.className = "unit";
-  picker.addEventListener("change", () => {
-    const alpha = current.length === 9 ? current.slice(7) : "";
-    const parsed = parseHexColor(picker.value + alpha);
-    if (!parsed.ok) return;
-    const error = editValue(line, parsed.value);
-    if (error !== null) toast(error);
-  });
-  row.appendChild(picker);
-
-  wrap.appendChild(row);
-  return wrap;
 }
 
 function numberEditor(line: Line): HTMLElement {
   const extension = line.entry.token.$extensions?.["com.tokenvault"];
-  const field = committingInput(String(line.entry.token.$value), (raw) => {
-    const parsed = parseNumberValue(raw);
-    if (!parsed.ok) return parsed.message;
-    const error = editValue(line, parsed.value);
-    if (error !== null) return error;
-    // A warning, not a rejection: the value is committed and the note explains itself (§8).
-    return subtypeWarning(extension?.subtype, parsed.value);
+  return unifiedField(line, {
+    commitLiteral: (raw) => {
+      const parsed = parseNumberValue(raw);
+      if (!parsed.ok) return parsed.message;
+      const error = editValue(line, parsed.value);
+      if (error !== null) return error;
+      // A warning, not a rejection: the value is committed and the note explains itself (§8).
+      return subtypeWarning(extension?.subtype, parsed.value);
+    },
   });
-  return fieldRow("Value", field.field);
 }
 
+/**
+ * §4.1 — the segmented control gains a third, **non-selectable readout position** when the value is
+ * a reference.
+ *
+ * Picking `true` or `false` replaces the reference, and that is a deliberate two-tap action rather
+ * than a stray one: the readout is not a button, so the pointer cannot be lost by a mis-click on
+ * the control that shows it.
+ */
 function booleanEditor(line: Line): HTMLElement {
-  const wrap = el("div", "toolbar");
+  const token = line.entry.token;
+  const reference = valueShape(token) === "reference";
+  const wrap = el("div");
+
+  const segmented = el("div", "toolbar");
+  if (reference) {
+    const readout = el("div", "ref-chip");
+    readout.appendChild(el("span", undefined, "↗"));
+    readout.appendChild(el("span", "grow", String(token.$value)));
+    segmented.appendChild(readout);
+  }
   for (const value of [true, false]) {
-    const control = button(String(value), line.entry.token.$value === value ? "primary" : undefined);
+    const control = button(String(value), token.$value === value ? "primary" : undefined);
     control.addEventListener("click", () => {
       const error = editValue(line, value);
       if (error !== null) toast(error);
     });
-    wrap.appendChild(control);
+    segmented.appendChild(control);
   }
-  return fieldRow("Value", wrap);
+  wrap.appendChild(fieldRow("Value", segmented));
+  wrap.appendChild(
+    unifiedField(line, {
+      label: "Points at",
+      initial: reference ? String(token.$value) : "",
+      commitLiteral: () =>
+        "Type a token path in braces, like {folio.flag.on}, or pick true / false above.",
+    })
+  );
+  return wrap;
 }
 
 function stringEditor(line: Line): HTMLElement {
-  const field = committingInput(String(line.entry.token.$value), (raw) => {
-    const parsed = parseStringValue(raw);
-    if (!parsed.ok) return parsed.message;
-    return editValue(line, parsed.value);
+  return unifiedField(line, {
+    commitLiteral: (raw) => {
+      const parsed = parseStringValue(raw);
+      if (!parsed.ok) return parsed.message;
+      return editValue(line, parsed.value);
+    },
   });
-  return fieldRow("Value", field.field);
 }
 
 // ---------------------------------------------------------------------------
@@ -1015,10 +1314,11 @@ export function runDelete(lines: Line[], paths: string[], subject: string): void
 /**
  * The explanation panel — the referrer list is the whole point of it, so it is never truncated.
  *
- * Each entry navigates to that token. There is deliberately no "remove all references" button:
- * that is reference surgery, which Phase 4 cannot do, and a token deep in the alias graph may
- * simply be undeletable until Phase 7. The panel says that in as many words rather than dangling
- * an affordance that doesn't exist.
+ * Each entry navigates to that token. There is still deliberately no "remove all references"
+ * button: Phase 7 makes re-pointing *possible* but does not make it automatic, and rewriting seven
+ * tokens' values on one tap is reference surgery the user hasn't seen (UX §12). The block is now a
+ * dead end they can dig out of, which is what Phase 4 §7's "be honest that this can be a dead end"
+ * was waiting for.
  */
 export function showBlockedPanel(paths: string[], referrers: Array<{ path: string; sets: string[] }>): void {
   const model = getModel();
@@ -1063,7 +1363,7 @@ export function showBlockedPanel(paths: string[], referrers: Array<{ path: strin
     el(
       "p",
       "empty",
-      "Phase 4 can't edit a reference, so the only way to clear these is to delete the referencing tokens first — deepest first, since they may have references of their own. Repointing them lands with aliasing (Phase 7)."
+      "Re-point them at something else, or delete them first — deepest first, since they may have references of their own. There is deliberately no “remove all references” button: rewriting seven tokens' values on one tap is reference surgery you haven't seen."
     )
   );
 

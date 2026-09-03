@@ -10,7 +10,7 @@ import {
   formatDimension,
   gridFieldsFor,
   gridList,
-  isReadOnlyValue,
+  isPointerValue,
   newShadow,
   parseDimension,
   parseHexColor,
@@ -21,6 +21,7 @@ import {
   setShadowField,
   setTypographyField,
   shadowList,
+  subKeyReferenceMessage,
   subtypeWarning,
   withDescription,
   withValue,
@@ -176,10 +177,15 @@ test("editing a shadow field keeps the rest of the shadow", () => {
   assert.equal(expectOk(setShadowField(SHADOW, "color", "#FFF")).color, "#ffffff");
 });
 
-test("a shadow colour that is a reference is preserved verbatim", () => {
+// ADR-0007 §10 defers sub-key reference authoring, and `parseDimension` and a grid's `count` both
+// refuse one by name. A shadow colour used to accept any `{…}`-shaped string unchecked, writing a
+// reference nothing downstream indexes, resolves or binds.
+test("a shadow colour refuses a reference, the same way every other sub-key does", () => {
+  const result = setShadowField(SHADOW, "color", "{folio.ref.palette.black}");
+  assert.equal(result.ok, false);
   assert.equal(
-    expectOk(setShadowField(SHADOW, "color", "{folio.ref.palette.black}")).color,
-    "{folio.ref.palette.black}"
+    result.ok === false ? result.message : "",
+    subKeyReferenceMessage("{folio.ref.palette.black}")
   );
 });
 
@@ -262,6 +268,8 @@ test("an empty description removes the key rather than writing an empty string",
 });
 
 test("a reference value is read-only in Phase 4", () => {
-  assert.equal(isReadOnlyValue(TOKEN), false);
-  assert.equal(isReadOnlyValue({ ...TOKEN, $value: "{folio.ref.red.50}" }), true);
+  // Phase 7 lifted the read-only rule; what survives is the shape question the per-type editors
+  // ask — an inert swatch beside a pointer, a readout position on a boolean (UX §4.1).
+  assert.equal(isPointerValue(TOKEN), false);
+  assert.equal(isPointerValue({ ...TOKEN, $value: "{folio.ref.red.50}" }), true);
 });

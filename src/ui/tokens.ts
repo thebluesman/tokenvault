@@ -20,6 +20,9 @@ import {
   editValue,
   filters,
   getModel,
+  resolutionFor,
+  setActiveTheme,
+  switchPageTheme,
   hiddenMatches,
   pathsUnder,
   revert,
@@ -111,6 +114,20 @@ function renderFilters(): void {
 
   const chips = el("div", "chips");
 
+  // §8.1 — the theme chip goes **leftmost, in the filter row**, beside the other two lenses. Not
+  // the header state slot: a theme is not a state, nothing about it needs you, and it never blocks
+  // an operation. Not a fourth tab: with composition editing out of scope there is nothing to work
+  // on. It is leftmost because it is the widest-reaching lens — the set filter changes *what is
+  // listed*, the theme changes *what every listed value means*.
+  const themeChip = el("button", "chip") as HTMLButtonElement;
+  themeChip.textContent = `Theme: ${model.activeTheme?.name ?? "none"} ▾`;
+  themeChip.title =
+    model.activeTheme === null
+      ? "This file's shape means Tokenvault couldn't work out any themes."
+      : `Values resolve through ${model.activeTheme.name}.`;
+  themeChip.addEventListener("click", () => popover(themeChip, buildThemePopover));
+  chips.appendChild(themeChip);
+
   const setChip = el("button", filters.sets === null ? "chip" : "chip on") as HTMLButtonElement;
   setChip.textContent =
     filters.sets === null ? "All sets" : `${filters.sets.size} of ${model.sets.length} sets`;
@@ -147,6 +164,118 @@ let goToImport: () => void = () => undefined;
 
 export function setImportNavigator(fn: () => void): void {
   goToImport = fn;
+}
+
+/**
+ * The theme popover — §8.2. **A picker, not an editor.**
+ *
+ * Composition editing is out of scope (ADR-0007 §7b, Shyam's 2026-09-03 scope call), so there is no
+ * `[ New theme ]`, no rename, no delete, and no set checkboxes. The set list is read-only and
+ * showing it is the point: the one honest thing this control can do beyond picking is answer *what
+ * am I actually resolving against*, in `selectedTokenSets` order, last-wins.
+ *
+ * Two things happen in this popover and they are separated by a rule, worded differently, and only
+ * one of them is a button — because only one of them touches the file (§8.4, §11 resolution 1).
+ */
+function buildThemePopover(close: () => void): HTMLElement {
+  const model = getModel();
+  const wrap = el("div");
+
+  // §8.5, resolution 2 — the chip stays present and explains itself. An absent control reads as
+  // *unbuilt*, a disabled one reads as *broken*, and a present one that explains itself reads as
+  // *known limitation*, which is the true one. Dropping this is a design deviation, not a scope trim.
+  if (model.themes.length === 0) {
+    wrap.appendChild(el("div", "group-label", "No themes for this file"));
+    const many = model.multiModeCollections;
+    wrap.appendChild(
+      el(
+        "div",
+        "empty",
+        `Tokenvault works themes out from Figma's collections and modes. This file has ${many.length} collection${many.length === 1 ? "" : "s"} with more than one mode, so there's more than one way to combine them — and picking one for you would quietly give you the wrong values.`
+      )
+    );
+    wrap.appendChild(
+      el("div", "empty", `Values below resolve through every set, in order, last one wins: ${model.sets.map((info) => info.code).join(" · ")}`)
+    );
+    wrap.appendChild(el("div", "empty", "Building a theme by hand isn't in this version."));
+    const report = button("See the import report");
+    report.addEventListener("click", () => {
+      close();
+      goToImport();
+    });
+    wrap.appendChild(report);
+    return wrap;
+  }
+
+  for (const theme of model.themes) {
+    const item = el("button", "item") as HTMLButtonElement;
+    const active = model.activeTheme?.name === theme.name;
+    item.appendChild(el("span", undefined, active ? "✓" : " "));
+    const label = el("span", undefined, theme.name);
+    label.style.flex = "1";
+    item.appendChild(label);
+    // A grey tag, not a state badge: it marks whichever theme the canvas is currently set to, and
+    // it needs nothing from the user.
+    if (model.themeOnCanvas === theme.name) item.appendChild(el("span", "count-right", "on canvas"));
+    item.addEventListener("click", () => {
+      close();
+      // Picking a theme writes nothing anywhere — not the canvas, not the overlay, not the repo.
+      setActiveTheme(theme.name);
+    });
+    wrap.appendChild(item);
+  }
+
+  const active = model.activeTheme;
+  if (active === null) return wrap;
+
+  if (model.themes.length === 1) {
+    wrap.appendChild(
+      el("div", "empty", "This file has one set of values; Tokenvault named it " + active.name + ".")
+    );
+  }
+
+  const codes = new Map(model.sets.map((info) => [info.id, info.code] as const));
+  wrap.appendChild(el("div", "group-label", `${active.name} resolves through, in order:`));
+  wrap.appendChild(
+    el("div", "empty", active.selectedTokenSets.map((id) => codes.get(id) ?? id).join(" · "))
+  );
+
+  // The bridge between the two lenses, and a button rather than an automatic coupling because
+  // "show me every set but resolve as Dark" is a legitimate thing to want when hunting an
+  // `⚑ unresolved` (§8.2).
+  const only = button("Show only these sets");
+  only.addEventListener("click", () => {
+    filters.sets = new Set(active.selectedTokenSets);
+    close();
+    renderTokens();
+  });
+  wrap.appendChild(only);
+
+  // §8.4 — the only thing in Phase 7 that modifies the Figma document, and everything about it is
+  // designed not to be confused with picking a theme: a second, explicitly labelled tap, below a
+  // rule, worded differently. It is not an apply and never opens the apply dialog; ⌘Z is the undo.
+  wrap.appendChild(el("div", "group-label", " "));
+  const switchButton = button(`Switch this page to ${active.name}`);
+  if (themeMapsNothing(active.selectedTokenSets)) {
+    switchButton.disabled = true;
+    switchButton.title = "Nothing on this page follows these collections.";
+  }
+  switchButton.addEventListener("click", () => {
+    close();
+    switchPageTheme(active.name);
+  });
+  wrap.appendChild(switchButton);
+
+  return wrap;
+}
+
+/** Whether a theme maps to any Figma mode at all — the disabled-with-a-reason case (§8.4). */
+function themeMapsNothing(sets: string[]): boolean {
+  const model = getModel();
+  const variableSets = new Set(
+    model.sets.filter((info) => info.source === "variables").map((info) => info.id)
+  );
+  return sets.every((set) => !variableSets.has(set));
 }
 
 function buildSetPopover(close: () => void): HTMLElement {
@@ -664,6 +793,22 @@ function setCode(line: Line): HTMLElement {
 
 function appendValue(container: HTMLElement, line: Line, row: Row): void {
   const preview = previewOf(line.entry.token);
+  const resolution = resolutionFor(line);
+
+  // §7.3b — a token on a loop carries `⚑ cycle` on its value line and its preview is `—`. No
+  // number, no swatch, no stale value: a silently wrong number is strictly worse than a visible
+  // error, and the whole point of a derived value is that it wasn't typed (§7.1).
+  if (resolution.kind === "cycle") {
+    const dash = el("span", "val readonly", "—");
+    dash.title = "This token is part of a loop, so it has no value.";
+    dash.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openDetail(row.row.key, line.entry.setId);
+    });
+    container.appendChild(dash);
+    container.appendChild(el("span", "badge needs", "⚑ cycle"));
+    return;
+  }
 
   if (preview.swatch !== undefined) {
     const wrap = el("span", "swatch-wrap");
@@ -673,15 +818,26 @@ function appendValue(container: HTMLElement, line: Line, row: Row): void {
     wrap.appendChild(fill);
     container.appendChild(wrap);
   } else if (preview.reference !== undefined && line.entry.token.$type === "color") {
-    // We can't resolve a reference in Phase 4, so the swatch is an outline rather than a fill —
-    // a filled one would claim we had (§4.5).
-    container.appendChild(el("span", "swatch outlined"));
+    // Phase 7 *can* resolve a reference, so the swatch shows the colour it lands on — but keeps the
+    // outline treatment, because the `↗` beside it is what says this is a pointer and a plain fill
+    // would make a reference and a literal look identical (§4.5).
+    const wrap = el("span", "swatch-wrap");
+    wrap.appendChild(el("span", "swatch outlined"));
+    if (typeof resolution.value === "string") {
+      const fill = el("span", "swatch-fill");
+      fill.style.background = resolution.value;
+      fill.style.opacity = "0.55";
+      wrap.appendChild(fill);
+    }
+    container.appendChild(wrap);
   }
 
   // A token with no overlay target has nothing to key an edit on (ADR-0004 §2), so it reads as
   // read-only here and says why when clicked — the alternative is an input that accepts a value
   // and silently reverts it.
   const blocked = editBlockedReason(line);
+  // A pointer or a formula is no longer read-only (§12 lifts local-editor §5.3), but it does not
+  // edit *inline*: the picker, the resolve line and the four rules need the detail overlay's room.
   const readOnly = blocked !== null || preview.reference !== undefined || isComposite(line);
   const value = el(
     "span",
@@ -698,12 +854,33 @@ function appendValue(container: HTMLElement, line: Line, row: Row): void {
   container.appendChild(value);
 
   if (preview.reference !== undefined) {
+    // Dangling means *in no set at all* — the import-side `dangling-reference` (ADR-0002
+    // Amendment 1 §G). A target that exists but doesn't resolve in the active theme is
+    // `⚑ unresolved` above, which is frequently the correct state of a correct token (§5.4).
     const dangling = !getModel().byPath.has(normalizePathKey(preview.reference));
     const glyph = el("span", dangling ? "badge needs" : "glyph", dangling ? "⚠" : "↗");
     glyph.title = dangling
       ? `Points at ${preview.reference}, which isn't in any set.`
       : `Points at ${preview.reference}`;
     container.appendChild(glyph);
+  }
+
+  // §6.3 — an expression reads as the string, with the computed number muted beneath it. Primary,
+  // not the number: the tree is a view of the token *file*, and the file holds the string
+  // (ADR-0007 §2). A tree showing `32` would be showing something that exists nowhere on disk.
+  //
+  // There is deliberately **no new glyph for an expression**, and the absence is the signal. What
+  // an expression risks being mistaken for is a *link*, so the honest mark is the missing `↗`.
+  if (resolution.kind === "expression") {
+    container.appendChild(el("span", "muted", `= ${String(resolution.value)}`));
+  } else if (resolution.kind === "unresolved") {
+    const badge = el("span", "badge needs", "⚑ unresolved");
+    badge.title = `${resolution.target ?? "The target"} has no value in the active theme. Nothing is broken — this token just has no value while that theme is on.`;
+    container.appendChild(badge);
+  } else if (resolution.kind === "error") {
+    const badge = el("span", "badge needs", "⚑ expression");
+    badge.title = resolution.error?.message ?? "This expression can't be worked out.";
+    container.appendChild(badge);
   }
 
   if (line.conflict !== undefined) container.appendChild(el("span", "badge needs", "⚑ conflict"));
@@ -744,6 +921,9 @@ function shortKind(kind: string): string {
   if (kind === "drift-value") return "changed";
   if (kind === "drift-added") return "added";
   if (kind === "drift-removed") return "removed";
+  if (kind === "reference-cycle") return "cycle";
+  if (kind === "expression-error") return "expression";
+  if (kind === "unresolved-in-theme") return "unresolved";
   return kind;
 }
 

@@ -774,7 +774,49 @@
       }
       .field-note {
         margin: -3px 0 6px 90px;
+        /* Grey by default. Amber is `.warn`, and it is added only by a *refusal* — a value the user
+           just committed on purpose (rule 4, the no-op nudge) needs nothing from them, and amber
+           that appears on a correct action is how `⚑` stops meaning anything (UX §5.4, §6.5). */
+        color: var(--muted);
+      }
+      .field-note.warn {
         color: var(--warn);
+      }
+      /* The resolve line — grey, and deliberately **not a badge** (UX §6.2). Nothing about an
+         expression is amber unless it fails to parse or evaluate. */
+      .resolve-line {
+        margin: -3px 0 6px 90px;
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .resolve-line .muted,
+      .cycle-step .muted {
+        color: var(--muted);
+      }
+      /* One grey utility, used where a value line carries a second, subordinate fact — an
+         expression's computed number beside the formula it came from (UX §6.3). */
+      .muted {
+        color: var(--muted);
+      }
+      .cycle-block {
+        margin: 6px 0;
+      }
+      .cycle-steps {
+        margin: 4px 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .cycle-step {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .cycle-step button {
+        padding: 0;
+        border: 0;
+        background: none;
+        font: inherit;
+        cursor: pointer;
       }
       .subrow {
         border: 1px solid var(--border);

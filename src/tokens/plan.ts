@@ -29,7 +29,12 @@ import type { InboundIndex, Referrer } from "./references";
 import type { Token, TokenValue } from "./types";
 import { targetKey, tokenKey, valuesEqual } from "./overlay";
 import { toFigmaDescription, toFigmaRemoval, toFigmaValue } from "./toFigma";
-import { collectReferences, inboundReferrers, isReference, referenceTarget } from "./references";
+import { inboundReferrers, isReference, referenceTarget } from "./references";
+import { buildReferenceGraph, findCycles, graphEdgeKey, graphNodeKey } from "./graph";
+import type { CycleIndex } from "./graph";
+import { valueShape } from "./expr";
+import type { ResolveContext } from "./resolve";
+import { buildFlatResolveContext, resolveValue } from "./resolve";
 import { normalizePathKey } from "./paths";
 
 // ---------------------------------------------------------------------------
@@ -66,6 +71,15 @@ export interface ApplyEntry {
    * with the resolved literal muted beneath it (UX §5.6) rather than mistaking one for the other.
    */
   alias?: { path: string; resolved?: TokenValue };
+  /**
+   * Set when `after` is a math expression — ADR-0007 §4.
+   *
+   * The dialog renders the expression *and* the number it resolved to, because apply is the point
+   * where an expression flattens and *"a user cannot flatten without seeing the number that
+   * lands"*. `resolved` is absent when the expression could not be evaluated, in which case the row
+   * is a refusal and carries the reason instead.
+   */
+  expression?: { source: string; resolved?: number };
 }
 
 export interface ApplyPlan {
@@ -127,6 +141,16 @@ export interface PlanInput {
    * explicitly.
    */
   guardsKnown?: boolean;
+  /**
+   * Theme-scoped resolution, for evaluating expressions — ADR-0007 §4, §6.
+   *
+   * Absent means "resolve against the whole tree", which is what a file with no themes gets
+   * (ADR-0002 §6's undischarged deferral, UX §8.5) and what every pre-Phase-7 caller wants. Passing
+   * one narrows evaluation to the active theme's set stack, so an expression whose operand lives
+   * only in `Dark` refuses under `Light` rather than quietly borrowing a value from a set the user
+   * is not looking at.
+   */
+  resolve?: ResolveContext;
 }
 
 // ---------------------------------------------------------------------------
@@ -150,10 +174,14 @@ interface IndexedToken {
  * those two tokens into one node, unions their outgoing references, and lets a cycle belonging to
  * the loser refuse the winner's perfectly ordinary write. The set is what tells them apart, and a
  * set cannot hold two tokens at one path — it is a JSON tree — so this is unique per instance.
+ *
+ * Phase 7 moved the definition to `graph.ts` alongside the traversal (ADR-0007 §8). This is the
+ * same function under the name `plan.ts`'s callers already use.
  */
-export function cycleNodeKey(setId: string, path: string): string {
-  return `${setId}\u0000${normalizePathKey(path)}`;
-}
+export const cycleNodeKey = graphNodeKey;
+
+/** Exported so a caller can ask about one edge without re-deriving the key's shape. */
+export const cycleEdgeKey = graphEdgeKey;
 
 /**
  * `normalizePathKey(path)` → the token it names.
@@ -178,24 +206,8 @@ function buildAliasIndex(tokens: FlatToken[]): Map<string, IndexedToken> {
   return index;
 }
 
-/** What the cycle pass found — nodes for reporting, edges for refusing a specific write. */
-export interface CycleIndex {
-  /** Node keys (see `cycleNodeKey`) that sit on a cycle. */
-  nodes: Set<string>;
-  /**
-   * The `source → target` edges that *close* a cycle, keyed `sourceNode` + NUL + `targetNode`.
-   *
-   * The edge, not the node, is what a refusal is keyed on. A token can hold several references —
-   * a shadow's colour and its offset both — and only the ones that actually complete a loop are
-   * the circular ones; refusing by node would blame every pointer the token carries.
-   */
-  edges: Set<string>;
-}
-
-/** Exported so a caller can ask about one edge without re-deriving the key's shape. */
-export function cycleEdgeKey(from: string, to: string): string {
-  return `${from}\u0000${to}`;
-}
+/** What the cycle pass found — re-exported from `graph.ts`, which owns the one implementation. */
+export type { CycleIndex } from "./graph";
 
 /**
  * Every reference edge that sits on a cycle.
@@ -203,82 +215,20 @@ export function cycleEdgeKey(from: string, to: string): string {
  * Figma rejects a circular alias, but discovering that as a thrown error partway through a plan is
  * the worst possible place to find out: it lands after some entries have already been written, and
  * it reaches the user as whatever string Figma chose rather than as a named skip reason. So the
- * plan builder finds cycles up front and refuses them — which is also the "circular reference
- * detection with a clear error state" PRD §6.3 asks for, arriving early and as a side effect
- * (ADR-0005 §11, Consequences).
+ * plan builder finds cycles up front and refuses them — PRD §6.3's "circular reference detection
+ * with a clear error state", arriving early (ADR-0005 §11).
+ *
+ * **Phase 7 widens this from alias edges to alias + expression edges** (ADR-0007 §3). The
+ * traversal itself moved to `graph.ts` and is now literally the same function the editor and the
+ * build/merge pass call — a second cycle implementation that could disagree with this one about
+ * what a cycle is would be worse than no check at all.
  *
  * The graph's nodes are **token instances** and its edges run through the alias index, so a
  * reference resolves to exactly the token a write would alias — see `cycleNodeKey` for why keying
  * this by path instead lets one set's cycle refuse another set's unrelated token.
- *
- * Iterative rather than recursive: a deep alias chain in a real file is perfectly legal, and a
- * recursive walk would trade a reported cycle for a stack overflow.
  */
 export function findReferenceCycles(tokens: FlatToken[]): CycleIndex {
-  const index = buildAliasIndex(tokens);
-  const edges = new Map<string, string[]>();
-
-  for (const entry of tokens) {
-    const from = cycleNodeKey(entry.setId, entry.path);
-    const targets: string[] = [];
-    for (const reference of collectReferences(entry.token)) {
-      // A reference to a path that isn't a token in this tree is a dangling reference, not a
-      // cycle. It resolves as its own refusal (`alias-target-unknown`) and has no node here.
-      const target = index.get(normalizePathKey(reference));
-      if (target !== undefined) targets.push(target.node);
-    }
-    const existing = edges.get(from);
-    if (existing === undefined) edges.set(from, targets);
-    else existing.push(...targets);
-  }
-
-  const nodes = new Set<string>();
-  const cycleEdges = new Set<string>();
-  /** 0 unvisited, 1 on the current path, 2 finished. */
-  const state = new Map<string, number>();
-
-  for (const start of edges.keys()) {
-    if ((state.get(start) ?? 0) !== 0) continue;
-
-    const path: string[] = [];
-    const stack: Array<{ node: string; next: number }> = [{ node: start, next: 0 }];
-    state.set(start, 1);
-    path.push(start);
-
-    while (stack.length > 0) {
-      const frame = stack[stack.length - 1];
-      const targets = edges.get(frame.node) ?? [];
-
-      if (frame.next >= targets.length) {
-        state.set(frame.node, 2);
-        stack.pop();
-        path.pop();
-        continue;
-      }
-
-      const target = targets[frame.next];
-      frame.next += 1;
-      const seen = state.get(target) ?? 0;
-
-      if (seen === 1) {
-        // Back edge: everything from `target` to the top of the current path is on the cycle, and
-        // so is every edge along it — including the back edge itself, which closes the loop.
-        const from = path.lastIndexOf(target);
-        for (let i = from; i < path.length; i += 1) {
-          nodes.add(path[i]);
-          if (i + 1 < path.length) cycleEdges.add(cycleEdgeKey(path[i], path[i + 1]));
-        }
-        cycleEdges.add(cycleEdgeKey(frame.node, target));
-        continue;
-      }
-      if (seen === 2) continue;
-      state.set(target, 1);
-      path.push(target);
-      stack.push({ node: target, next: 0 });
-    }
-  }
-
-  return { nodes, edges: cycleEdges };
+  return findCycles(buildReferenceGraph(tokens, { resolution: "first" }));
 }
 
 // ---------------------------------------------------------------------------
@@ -300,6 +250,7 @@ export function buildApplyPlan(input: PlanInput, scope: PlanScope = {}): ApplyPl
 
   const aliasIndex = buildAliasIndex(input.tokens);
   const cycles = findReferenceCycles(input.tokens);
+  const resolve = input.resolve ?? buildFlatResolveContext(input.tokens);
   const order = new Map<string, number>();
   input.tokens.forEach((entry, at) => {
     const key = tokenKey(entry.token);
@@ -316,7 +267,9 @@ export function buildApplyPlan(input: PlanInput, scope: PlanScope = {}): ApplyPl
     if (key === null) continue;
     if (!inScope(key, overlayEntry.set, scope)) continue;
     covered.add(key);
-    entries.push(planEntry(overlayEntry, key, { effective, imported, aliasIndex, cycles, input }));
+    entries.push(
+      planEntry(overlayEntry, key, { effective, imported, aliasIndex, cycles, resolve, input })
+    );
   }
 
   if (scope.includeMatches === true) {
@@ -366,7 +319,37 @@ interface PlanContext {
   imported: Map<string, Token>;
   aliasIndex: Map<string, IndexedToken>;
   cycles: CycleIndex;
+  resolve: ResolveContext;
   input: PlanInput;
+}
+
+/**
+ * One expression, evaluated against the plan's resolution context.
+ *
+ * Returns a `Refusal` rather than throwing, so an expression that cannot be worked out lands as a
+ * named skipped row (`expression-error`) with the sentence the field would have shown — the same
+ * shape every other refusal in this module takes.
+ */
+function evaluateFor(raw: string, context: PlanContext): { ok: true; value: number } | Refusal {
+  const resolved = resolveValue({ $type: "number", $value: raw }, context.resolve);
+  if (resolved.kind === "expression" && typeof resolved.value === "number") {
+    return { ok: true, value: resolved.value };
+  }
+  if (resolved.kind === "error" && resolved.error !== undefined) {
+    return { ok: false, reason: "expression-error", message: resolved.error.message };
+  }
+  if (resolved.kind === "cycle") {
+    return {
+      ok: false,
+      reason: "expression-cycle",
+      message: `"${raw}" points into a circular reference, so it has no value.`,
+    };
+  }
+  return {
+    ok: false,
+    reason: "expression-error",
+    message: `"${raw}" couldn't be worked out into a number.`,
+  };
 }
 
 function planEntry(entry: OverlayEntry, key: string, context: PlanContext): ApplyEntry {
@@ -457,8 +440,17 @@ function planEntry(entry: OverlayEntry, key: string, context: PlanContext): Appl
     base.alias = { path: alias, resolved: resolvedValue(alias, context) };
   }
 
+  if (valueShape(live.token) === "expression") {
+    const evaluated = evaluateFor(live.token.$value as string, context);
+    base.expression = {
+      source: live.token.$value as string,
+      resolved: evaluated.ok ? evaluated.value : undefined,
+    };
+  }
+
   const write = toFigmaValue(live.token, {
     resolveAlias: (path) => resolveAlias(path, live.token, context),
+    evaluateExpression: (raw) => evaluateFor(raw, context),
   });
   if (!write.ok) return { ...base, reason: write.reason, message: write.message };
   return { ...base, status: "ready", write: write.write };

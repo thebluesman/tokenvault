@@ -457,3 +457,191 @@ test("an unreferenced target plans a remove op for its own provenance half", () 
   const style = buildDeletePlan([{ path: "brand", setId: "S", token: styleToken("color", "#000000") }], inbound);
   assert.equal(style.entries[0].write?.kind, "style-remove");
 });
+
+// ---------------------------------------------------------------------------
+// Expressions at apply — ADR-0007 §4, the one place Tokenvault flattens
+// ---------------------------------------------------------------------------
+
+test("an expression flattens to a number, and the row carries the number that lands", () => {
+  // Figma has no representation for arithmetic, so flattening is not a choice; the choice is
+  // whether to make it visible, and the row's `expression` field is how the dialog does that
+  // ("a user cannot flatten without seeing the number that lands").
+  const target = { variableId: "VariableID:1:1", modeId: "1:0" };
+  const plan = buildApplyPlan({
+    imported: [
+      flat("space.button", "Theme/Light", varToken("number", 16)),
+      flat("core.4", "Theme/Light", varToken("number", 16, { variableId: "VariableID:2:2" })),
+    ],
+    tokens: [
+      flat("space.button", "Theme/Light", varToken("number", "{core.4} * 2")),
+      flat("core.4", "Theme/Light", varToken("number", 16, { variableId: "VariableID:2:2" })),
+    ],
+    overlay: overlay([
+      entry({
+        target,
+        path: "space.button",
+        op: "set-value",
+        value: "{core.4} * 2" as never,
+        base: 16 as never,
+      }),
+    ]),
+  });
+
+  const row = byPath(plan, "space.button");
+  assert.equal(row.status, "ready");
+  assert.deepEqual(row.expression, { source: "{core.4} * 2", resolved: 32 });
+  assert.deepEqual(row.write, {
+    kind: "variable-value",
+    variableId: "VariableID:1:1",
+    modeId: "1:0",
+    value: 32,
+  });
+});
+
+test("an expression that cannot be evaluated is refused, never written as its string", () => {
+  const target = { variableId: "VariableID:1:1", modeId: "1:0" };
+  const plan = buildApplyPlan({
+    imported: [flat("space.button", "Theme/Light", varToken("number", 16))],
+    tokens: [flat("space.button", "Theme/Light", varToken("number", "{missing} * 2"))],
+    overlay: overlay([
+      entry({
+        target,
+        path: "space.button",
+        op: "set-value",
+        value: "{missing} * 2" as never,
+        base: 16 as never,
+      }),
+    ]),
+  });
+
+  const row = byPath(plan, "space.button");
+  assert.equal(row.status, "skipped");
+  assert.equal(row.reason, "expression-error");
+  assert.equal(row.expression?.resolved, undefined);
+});
+
+test("the cycle check is widened to expression edges — ADR-0005 §11's rule, ADR-0007 §3's scope", () => {
+  // Before Phase 7 this loop was invisible to the plan: neither edge is an alias, so
+  // `collectReferences` saw nothing and the write would have been attempted.
+  const cycles = findReferenceCycles([
+    flat("a", "S", varToken("number", "{b} * 2")),
+    flat("b", "S", varToken("number", "{a} + 1")),
+  ]);
+  assert.equal(cycles.cycles.length, 1);
+  assert.equal(cycles.nodes.has(cycleNodeKey("S", "a")), true);
+  assert.equal(cycles.edges.has(cycleEdgeKey(cycleNodeKey("S", "a"), cycleNodeKey("S", "b"))), true);
+});
+
+test("a token on an expression cycle is refused at apply, with no fallback value", () => {
+  const target = { variableId: "VariableID:1:1", modeId: "1:0" };
+  const plan = buildApplyPlan({
+    imported: [
+      flat("a", "S", varToken("number", 1)),
+      flat("b", "S", varToken("number", 2, { variableId: "VariableID:2:2" })),
+    ],
+    tokens: [
+      flat("a", "S", varToken("number", "{b} * 2")),
+      flat("b", "S", varToken("number", "{a} + 1", { variableId: "VariableID:2:2" })),
+    ],
+    overlay: overlay([
+      entry({ target, path: "a", set: "S", op: "set-value", value: "{b} * 2" as never, base: 1 as never }),
+    ]),
+  });
+
+  const row = byPath(plan, "a");
+  assert.equal(row.status, "skipped");
+  assert.equal(row.expression?.resolved, undefined);
+});
+
+// ---------------------------------------------------------------------------
+// ADR-0007 §3 — one resolution strategy per plan, not two
+// ---------------------------------------------------------------------------
+
+test("a plan's expressions resolve first-wins, the same as its alias index", () => {
+  // Two sets define `base`. ADR-0002 §5 picks the first as the collision winner, `plan.ts`'s alias
+  // index follows it, and the cycle graph is built `resolution: "first"` to match. Expression
+  // evaluation used to fall back to a last-wins context, so `{base} * 2` came out 20 while
+  // `{base}` aliased the variable holding 4 — one apply, one path, two answers, no error.
+  const first = varToken("number", 4, { variableId: "VariableID:1:1" });
+  const second = varToken("number", 10, { variableId: "VariableID:2:2" });
+  const importedDerived = varToken("number", 1, { variableId: "VariableID:3:3" });
+  const editedDerived = varToken("number", "{base} * 2", { variableId: "VariableID:3:3" });
+
+  const plan = buildApplyPlan({
+    tokens: [
+      flat("base", "First", first),
+      flat("base", "Second", second),
+      flat("derived", "First", editedDerived),
+    ],
+    imported: [
+      flat("base", "First", first),
+      flat("base", "Second", second),
+      flat("derived", "First", importedDerived),
+    ],
+    overlay: overlay([
+      entry({
+        target: { variableId: "VariableID:3:3", modeId: "1:0" },
+        path: "derived",
+        set: "First",
+        op: "set-value",
+        value: "{base} * 2",
+        base: 1,
+      }),
+    ]),
+  });
+
+  const row = byPath(plan, "derived");
+  assert.equal(row.status, "ready");
+  assert.equal(row.expression?.source, "{base} * 2");
+  assert.equal(row.expression?.resolved, 8);
+});
+
+test("a plan's alias and its expression land on the same collided token", () => {
+  // The property the strategies existing separately could break, stated directly: the variable an
+  // alias row points at is the same token the expression row's number came from.
+  const first = varToken("number", 4, { variableId: "VariableID:1:1" });
+  const second = varToken("number", 10, { variableId: "VariableID:2:2" });
+  const pointer = varToken("number", "{base}", { variableId: "VariableID:4:4" });
+  const derived = varToken("number", "{base} * 2", { variableId: "VariableID:3:3" });
+
+  const tokens = [
+    flat("base", "First", first),
+    flat("base", "Second", second),
+    flat("pointer", "First", pointer),
+    flat("derived", "First", derived),
+  ];
+  const plan = buildApplyPlan({
+    tokens,
+    imported: [
+      flat("base", "First", first),
+      flat("base", "Second", second),
+      flat("pointer", "First", varToken("number", 0, { variableId: "VariableID:4:4" })),
+      flat("derived", "First", varToken("number", 0, { variableId: "VariableID:3:3" })),
+    ],
+    overlay: overlay([
+      entry({
+        target: { variableId: "VariableID:4:4", modeId: "1:0" },
+        path: "pointer",
+        set: "First",
+        op: "set-value",
+        value: "{base}",
+        base: 0,
+      }),
+      entry({
+        target: { variableId: "VariableID:3:3", modeId: "1:0" },
+        path: "derived",
+        set: "First",
+        op: "set-value",
+        value: "{base} * 2",
+        base: 0,
+      }),
+    ]),
+  });
+
+  const aliasRow = byPath(plan, "pointer");
+  assert.equal(aliasRow.status, "ready");
+  // The alias resolves to `First.base` — the first-wins winner, value 4.
+  assert.equal(aliasRow.alias?.resolved, 4);
+  // And the expression is `4 * 2`, not `10 * 2`.
+  assert.equal(byPath(plan, "derived").expression?.resolved, 8);
+});

@@ -26,12 +26,14 @@ import type { FlatToken } from "./tokens/view";
 import type { PlannedWrite } from "./figma/apply";
 import type { Refusal } from "./tokens/toFigma";
 import {
+  applyOverlay,
   applyOverlayToFiles,
   dropEntries,
   dropEntry,
   emptyOverlay,
   indexOverlay,
   keepMine,
+  mergeEvaluator,
   mergeOverlay,
   parseOverlay,
   recordEdit,
@@ -39,6 +41,16 @@ import {
   targetKey,
 } from "./tokens/overlay";
 import { flattenImport, treeIndex } from "./tokens/view";
+import {
+  multiModeCollections,
+  themeModePlan,
+  themeOnCanvas,
+  themeSetStack,
+  themeState,
+  tokensInStack,
+} from "./tokens/themes";
+import { buildResolveContext, graphReport, themePathSet } from "./tokens/resolve";
+import { currentPageModes, switchPageToModes } from "./figma/modes";
 import { buildMergedImport } from "./tokens/merge";
 import { stableStringify } from "./tokens/serialize";
 import { detectDrift, emptyDrift } from "./tokens/drift";
@@ -76,6 +88,15 @@ const SUBTYPE_STORAGE_PREFIX = "tokenvault:user-subtypes:";
  */
 const EDIT_PREFIX = "tokenvault:edits:";
 const IMPORT_CACHE_PREFIX = "tokenvault:last-import:";
+
+/**
+ * The active theme, per file — ADR-0007 §7(a).
+ *
+ * A single string: the theme's name from `$manifest.json`'s `themes[]`. A few bytes on the same
+ * `resolveFileIdentity()` scheme as every other per-file store, so ADR-0004 §6's quota story is
+ * unchanged and the import cache is still the only large tenant.
+ */
+const ACTIVE_THEME_PREFIX = "tokenvault:active-theme:";
 
 /** Which file the import cache currently holds, so a different file's cache can be evicted. */
 const IMPORT_CACHE_OWNER_KEY = "tokenvault:last-import-owner";
@@ -180,6 +201,25 @@ let cachedNonLocal: string[] | null = null;
 let scanSequence = 0;
 let scanning = false;
 
+/**
+ * The theme the panel resolves against — ADR-0007 §7(a).
+ *
+ * Plugin state, not document state and not token data: picking a theme is a lens and writes
+ * nothing anywhere (UX §8.3). `null` before the first read, and after a rescan that lost it — in
+ * which case the fallback is reported rather than applied silently (`themeFellBackFrom`).
+ */
+let activeThemeName: string | null = null;
+
+/**
+ * A fallback that has not been reported yet — the same one-shot shape as `pendingMerge`.
+ *
+ * The stored name is rewritten as soon as the fallback happens, so the *state* is corrected
+ * immediately and the *explanation* is delivered exactly once. Reporting it on every emit would
+ * turn a one-time explanation into a recurring alarm; not reporting it at all would change every
+ * displayed value with no explanation, which ADR-0007 §7a refuses.
+ */
+let pendingThemeFallback: string | undefined;
+
 function post(message: PluginToUiMessage): void {
   figma.ui.postMessage(message);
 }
@@ -219,6 +259,10 @@ function editStorageKey(): string {
 
 function importCacheKey(): string {
   return IMPORT_CACHE_PREFIX + resolveFileIdentity();
+}
+
+function activeThemeKey(): string {
+  return ACTIVE_THEME_PREFIX + resolveFileIdentity();
 }
 
 async function loadUserSubtypes(): Promise<Record<string, SubtypeSelection>> {
@@ -362,6 +406,11 @@ function emitImport(fileName: string, refresh = false): void {
     snapshot === null ? cachedGuards : Array.from(styleGuards(snapshot.styles).entries());
   const nonLocal = snapshot === null ? cachedNonLocal : nonLocalPaths();
 
+  const state = themeState(importResult.manifest, activeThemeName);
+  const themes = state.themes;
+  const active = state.active;
+  const onCanvas = themeOnCanvas(importResult.manifest, themes, currentPageModes());
+
   post({
     type: "import-result",
     payload: {
@@ -384,9 +433,18 @@ function emitImport(fileName: string, refresh = false): void {
       // write overwrite?", and only one of them may enable Apply — §8's rule, applied a second time.
       guardsKnown: guards !== null && nonLocal !== null,
       driftBaseline: repoBaseline === null ? "scan" : "repo",
+      themes,
+      activeTheme: active === null ? null : active.name,
+      themeFellBackFrom: pendingThemeFallback ?? state.fellBackFrom,
+      // Read here rather than cached: the user can change page between two emits, and a stale
+      // `on canvas` tag beside a theme is a claim about the document that has quietly stopped
+      // being true.
+      themeOnCanvas: onCanvas,
+      multiModeCollections: multiModeCollections(importResult.manifest),
     } satisfies ImportPayload,
   });
   pendingMerge = undefined;
+  pendingThemeFallback = undefined;
 }
 
 /**
@@ -422,7 +480,27 @@ async function rebuild(fromScan: boolean, refresh = false): Promise<void> {
 
   const flat = flattenImport(treeIndex(result.files), result.manifest);
   const now = new Date().toISOString();
-  const merged = mergeOverlay(flat, overlay, now);
+
+  // The active theme decides what every reference and expression resolves to (ADR-0002 §2 via
+  // ADR-0007 §7), so it is settled *before* the merge — which needs an evaluator for §6's amended
+  // expression row — and before the report, which needs the cycle set.
+  const state = themeState(result.manifest, activeThemeName);
+  if (state.fellBackFrom !== undefined) {
+    pendingThemeFallback = state.fellBackFrom;
+    try {
+      await figma.clientStorage.setAsync(activeThemeKey(), state.active?.name ?? "");
+    } catch {
+      // The correction is in memory either way; losing the write costs it surviving a reopen.
+    }
+  }
+  if (state.active !== null) activeThemeName = state.active.name;
+  const stack = themeSetStack(result.manifest, state.active);
+  // The evaluator resolves against the **effective** tree — `flat` plus the overlay going in — not
+  // against the raw scan; `mergeEvaluator` owns that and says why. The report below builds its own
+  // context against the merge's *output* overlay, which is a different tree on purpose.
+  const merged = mergeOverlay(flat, overlay, now, {
+    evaluate: mergeEvaluator(flat, overlay, stack),
+  });
 
   // Drift is computed **before** the merge's outcome retires anything, and against the overlay as
   // it stood going in: a token carrying an edit is excluded here and reported as `edit-conflict`
@@ -454,7 +532,20 @@ async function rebuild(fromScan: boolean, refresh = false): Promise<void> {
   // Drift rides the existing report rather than a parallel channel, which is what lets it inherit
   // the `⚑` badge, the flagged filter chip and the post-scan banner's `[ Review ]` for free
   // (UX §6.2) instead of growing a second attention vocabulary in a 460px column.
-  const reported = merged.entries.concat(drift.report);
+  // The whole-graph pass — ADR-0007 §3's second checkpoint. Run over the *effective* tree, so a
+  // loop the user just authored in the overlay reports like one that arrived by scan or pull.
+  const effective = applyOverlay(flat, overlay).tokens;
+  const effectiveContext = buildResolveContext(tokensInStack(effective, stack), effective);
+  const graphEntries = graphReport(
+    effective,
+    effectiveContext,
+    state.themes.map((theme) => ({
+      name: theme.name,
+      paths: themePathSet(effective, theme.selectedTokenSets),
+    }))
+  );
+
+  const reported = merged.entries.concat(drift.report).concat(graphEntries);
   if (reported.length > 0) {
     result.report.entries = result.report.entries.concat(reported);
     result.report.counts.flagged = result.report.entries.length;
@@ -796,6 +887,61 @@ async function handleGitPull(entries: Array<Omit<OverlayEntry, "at">>): Promise<
   if (snapshot !== null && !scanning) await rebuild(false, true);
 }
 
+// ---------------------------------------------------------------------------
+// Themes — ADR-0007 §7. A lens, and one deliberate document mutation
+// ---------------------------------------------------------------------------
+
+/**
+ * Picks the theme the panel resolves against.
+ *
+ * Writes a few bytes and re-derives the report, and **touches nothing else** — not the canvas, not
+ * the overlay, not the repo (UX §8.3). The rebuild is what makes values, flags and the cycle set
+ * follow the new stack, all of which are theme-scoped by construction.
+ */
+async function handleSetActiveTheme(name: string): Promise<void> {
+  activeThemeName = name;
+  try {
+    await figma.clientStorage.setAsync(activeThemeKey(), name);
+  } catch {
+    // A few bytes that failed to persist costs the selection surviving a reopen, and nothing else.
+    // Refusing the lens change over it would be a worse trade than the one ADR-0004 §6 makes for
+    // the import cache.
+  }
+  // A cache-restored tree has no snapshot to rebuild from, but it does have a tree — and the whole
+  // point of the lens is that the panel re-resolves against it. So it re-emits either way.
+  if (snapshot !== null && !scanning) await rebuild(false, true);
+  else if (importResult !== null) emitImport(figma.root.name, true);
+}
+
+/**
+ * Puts the current page into a theme's variable modes — the only Figma write in Phase 7.
+ *
+ * Not an apply and never routed through the apply dialog: it writes no token values, so the
+ * confirmation would guard nothing, and a dialog that guards nothing is how users learn to click
+ * through the ones that do (ADR-0007 §7c).
+ *
+ * Scope is the **current page**, which is not a preference but the API's shape: `PageNode` carries
+ * `ExplicitVariableModesMixin` and `DocumentNode` does not, so there is no document-root
+ * equivalent to choose instead. See `src/figma/modes.ts`.
+ */
+async function handleSwitchPageTheme(name: string): Promise<void> {
+  if (importResult === null) return;
+  const state = themeState(importResult.manifest, name);
+  const theme = state.themes.filter((each) => each.name === name)[0] ?? null;
+  const plan = themeModePlan(importResult.manifest, theme);
+  const outcome = await switchPageToModes(plan.targets);
+  post({
+    type: "theme-switch-result",
+    theme: name,
+    switched: outcome.switched,
+    failed: outcome.failed,
+    unmapped: plan.unmapped,
+  });
+  // The `on canvas` tag is derived from the page's explicit modes, so it only becomes true after
+  // the write. Re-emitting is what moves it.
+  if (snapshot !== null && !scanning) await rebuild(false, true);
+}
+
 function handleCopyTree(): void {
   if (!importResult) {
     post({ type: "tree-json", json: "", files: 0 });
@@ -825,6 +971,8 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
     if (message.type === "ui-ready") {
       userSubtypes = await loadUserSubtypes();
       overlay = parseOverlay(await figma.clientStorage.getAsync(editStorageKey()));
+      const storedTheme = await figma.clientStorage.getAsync(activeThemeKey());
+      activeThemeName = typeof storedTheme === "string" && storedTheme.length > 0 ? storedTheme : null;
       post({ type: "plugin-ready", fileName: figma.root.name });
       // The connection, before the tree: the header chip's repo half and the Repo tab both have to
       // know whether this file is connected at all before they render anything (UX §6.1).
@@ -926,6 +1074,17 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
     }
     if (message.type === "git-pull") {
       await handleGitPull(message.entries);
+      return;
+    }
+
+    // --- Phase 7 (ADR-0007) ---
+
+    if (message.type === "set-active-theme") {
+      await handleSetActiveTheme(message.name);
+      return;
+    }
+    if (message.type === "switch-page-theme") {
+      await handleSwitchPageTheme(message.name);
       return;
     }
 

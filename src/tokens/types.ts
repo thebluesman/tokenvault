@@ -391,7 +391,33 @@ export type ReportEntryKind =
   /** A Variable or Style present now, absent from the baseline (ADR-0005 §7). */
   | "drift-added"
   /** Present in the baseline, gone from Figma now (ADR-0005 §7). */
-  | "drift-removed";
+  | "drift-removed"
+  /**
+   * This token sits on a circular reference (ADR-0007 §3).
+   *
+   * **The error state is the cycle, not the token**, so every token on the loop gets one of these
+   * and each carries the same loop in its message — blaming the token whose edit closed it is
+   * arbitrary, since any token on the cycle can be edited to break it. There is no partial
+   * evaluation and no fallback: a cycle produces an error where a value would go.
+   */
+  | "reference-cycle"
+  /**
+   * An expression that could not be worked out (ADR-0007 §5): a parse failure, an operand that
+   * doesn't resolve to a number, or a division by zero.
+   *
+   * Authoring refuses these before the overlay entry is written, so one reaching the report means
+   * it arrived by scan or by pull — the same asymmetry §5 draws for `dangling-reference`.
+   */
+  | "expression-error"
+  /**
+   * The reference target exists in the tree but not under the active theme's set stack
+   * (ADR-0007 §5, rule 4).
+   *
+   * A **warning**, and frequently the correct state of a correct token: a theme-specific token is a
+   * normal thing to want. Refusing it would make the theme feature and the reference feature
+   * mutually exclusive, so it warns, the edit is written, and the badge is theme-sensitive.
+   */
+  | "unresolved-in-theme";
 
 /**
  * Which criterion decided a collision, so the report can justify itself (Amendment 1 §F).

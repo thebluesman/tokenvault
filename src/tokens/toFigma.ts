@@ -136,6 +136,19 @@ export interface WriteOptions {
    * anything can reach it.
    */
   resolveAlias?: (path: string) => AliasResolution;
+  /**
+   * Evaluates a math expression to the number that will be written — ADR-0007 §4.
+   *
+   * Apply is the one evaluation point that **flattens**: Figma has no representation for
+   * arithmetic, so `{a} * 2` lands as `32` and stops tracking `a`. That is inherent to the Figma
+   * data model rather than a Tokenvault shortfall, and the choice is not whether to flatten but
+   * whether to make it visible — which the apply preview does, by showing the expression and the
+   * number it resolved to before the button is pressed.
+   *
+   * Absent means the caller cannot evaluate, and every expression-valued token refuses rather than
+   * being written as the string it holds.
+   */
+  evaluateExpression?: (raw: string) => { ok: true; value: number } | Refusal;
 }
 
 // ---------------------------------------------------------------------------
@@ -249,14 +262,36 @@ function variableWrite(token: Token, target: VariableTarget, options: WriteOptio
   }
 
   // A value that merely *contains* braces is not a reference (`references.ts` anchors the pattern
-  // deliberately), and Phase 7's math (`{a} * 2`) has no Figma representation at all.
+  // deliberately). On a `number` token it is a math expression, which Figma cannot hold as such and
+  // which therefore evaluates to a concrete number here — the one place Tokenvault flattens, and
+  // the one the preview is obliged to show (ADR-0007 §4).
   // Read off the token rather than the narrowed local: `isReference` is a `value is string` guard,
   // so TypeScript has already subtracted `string` from `value` in this branch.
   const raw = token.$value;
+  if (typeof raw === "string" && token.$type === "number") {
+    const evaluateExpr = options.evaluateExpression;
+    if (evaluateExpr === undefined) {
+      return refuse(
+        "expression-unresolvable",
+        `"${raw}" is a math expression, and this apply has no way to work out what it comes to.`
+      );
+    }
+    const evaluated = evaluateExpr(raw);
+    if (!evaluated.ok) return evaluated;
+    return {
+      ok: true,
+      write: {
+        kind: "variable-value",
+        variableId: target.variableId,
+        modeId: target.modeId,
+        value: evaluated.value,
+      },
+    };
+  }
   if (typeof raw === "string" && raw.indexOf("{") !== -1 && token.$type !== "string") {
     return refuse(
       "expression-value",
-      `"${raw}" isn't a plain value or a reference. Math expressions land with Phase 7.`
+      `"${raw}" isn't a plain value or a reference, and a ${token.$type} token can't hold an expression.`
     );
   }
 

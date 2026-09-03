@@ -28,6 +28,19 @@ export interface DiffRowData {
    * a pointer for a colour.
    */
   alias?: { path: string; resolved?: TokenValue };
+  /**
+   * A math expression, with the number it flattens to — ADR-0007 §4, UX §6.3.
+   *
+   * Apply is the one evaluation point that flattens, so the number that lands is on screen **before
+   * the button is pressed**: *"a user cannot flatten without seeing the number that lands"*. The row
+   * is checked by default like any other — an expression is not a degraded apply and does not get
+   * §5.6's unchecked-flattening-fallback treatment, which exists for the different case where a
+   * pointer the user wanted *couldn't* be preserved.
+   *
+   * This is Phase 5's row with a third line, not a new row kind. If Phase 7 introduces a second
+   * diff row, something went wrong.
+   */
+  expression?: { source: string; resolved?: number };
   state: "ready" | "blocked" | "added" | "removed";
   /** Why a blocked row is blocked. Never hidden until after the write.  */
   why?: string;
@@ -59,6 +72,19 @@ export function diffLine(data: DiffRowData): HTMLElement {
       resolved.appendChild(document.createTextNode("resolves to "));
       appendValue(resolved, data.alias.resolved, false);
       wrap.appendChild(resolved);
+    }
+    return wrap;
+  }
+
+  if (data.expression !== undefined) {
+    const formula = el("span", "to", data.expression.source);
+    formula.title = data.expression.source;
+    line.appendChild(formula);
+    wrap.appendChild(line);
+    if (data.expression.resolved !== undefined) {
+      wrap.appendChild(
+        el("div", "resolved", `= ${String(data.expression.resolved)} · applied as a number`)
+      );
     }
     return wrap;
   }
