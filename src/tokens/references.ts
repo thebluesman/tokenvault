@@ -39,8 +39,7 @@ export function referenceTarget(value: unknown): string | null {
  * depend on it, and UX §7 names it explicitly as something the delete check must see.
  */
 export function collectReferences(token: Token): string[] {
-  const found: string[] = [];
-  collectFromValue(token.$value, found);
+  const found = collectValueReferences(token.$value);
 
   const bound = token.$extensions?.["com.tokenvault"]?.figma?.boundVariables;
   if (bound) {
@@ -51,6 +50,20 @@ export function collectReferences(token: Token): string[] {
     }
   }
 
+  return found;
+}
+
+/**
+ * Every path a `$value` points at, walking composite sub-values — and *only* `$value`.
+ *
+ * The half of `collectReferences` that is about the value the user authored, split out because the
+ * Phase 8 export needs exactly that half: an unresolvable `boundVariables` entry is stale
+ * provenance, not a value that would land wrong in the emitted CSS. One walker, two callers, so
+ * the export and the delete check can never disagree about what counts as a reference.
+ */
+export function collectValueReferences(value: TokenValue | undefined): string[] {
+  const found: string[] = [];
+  collectFromValue(value, found);
   return found;
 }
 

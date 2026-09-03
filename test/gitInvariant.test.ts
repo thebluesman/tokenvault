@@ -33,13 +33,23 @@ function sources(dir: string): Array<{ name: string; text: string }> {
     .map((name) => ({ name, text: code(readFileSync(join(dir, name), "utf8")) }));
 }
 
+/**
+ * Every source file **the plugin ships**.
+ *
+ * `src/export/` is excluded: it is repo-side Node code that never runs inside Figma, never sees a
+ * credential, and whose CLI exists precisely to print (issue #17). Including it would turn the
+ * no-logging rule — which is about a PAT reaching a console — into a rule about a build tool
+ * reporting its own progress. The exclusion is bounded by the test below, which asserts the export
+ * never reaches for a credential, the network, or the Figma global in the first place.
+ */
 function everySource(): Array<{ path: string; text: string }> {
   const out: Array<{ path: string; text: string }> = [];
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const full = join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.name.endsWith(".ts")) {
+      if (entry.isDirectory()) {
+        if (entry.name !== "export") walk(full);
+      } else if (entry.name.endsWith(".ts")) {
         out.push({ path: full.slice(ROOT.length + 1), text: code(readFileSync(full, "utf8")) });
       }
     }
@@ -69,6 +79,24 @@ test("the PAT is never logged", () => {
   // request header, and a URL can carry a token.
   for (const { path, text } of everySource()) {
     assert.equal(/console\.(log|warn|error|debug)/.test(text), false, `${path} must not log`);
+  }
+});
+
+test("the export never reaches for a credential, the network, or Figma", () => {
+  // The bound on `everySource`'s exclusion above. `src/export/` reads files off disk and writes
+  // files to disk; the moment it wants a PAT or a `fetch`, it stops being outside the credential
+  // rules and this test is where that gets noticed.
+  const EXPORT = join(ROOT, "src/export");
+  for (const { name, text } of sources(EXPORT)) {
+    // Not `/token/` — "token" is this project's domain noun and appears on every other line. The
+    // credential's own vocabulary is what must be absent.
+    assert.equal(
+      /Authorization|clientStorage|\bPAT\b|personal access token/i.test(text),
+      false,
+      `src/export/${name} is credential-free`
+    );
+    assert.equal(/\bfetch\s*\(/.test(text), false, `src/export/${name} must not call the network`);
+    assert.equal(/\bfigma\./.test(text), false, `src/export/${name} must not touch the figma global`);
   }
 });
 
