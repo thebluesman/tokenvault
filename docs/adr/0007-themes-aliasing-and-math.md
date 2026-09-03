@@ -178,6 +178,7 @@ Named so they are visibly out of scope rather than accidentally missing.
 - **Units in expressions** — §1. Blocked on ADR-0002 §3's decision that units are a Phase 8 transform concern.
 - **Sub-key reference authoring on composite tokens** — setting a typography token's `fontSize` to `{a}` from the editor. Composites already *carry* such references from import via `boundVariables`, and §5's rules would extend to them cleanly, but the editing surface is a separate UX design. Its own ticket.
 - **Token creation and path rename** — still ADR-0004's open questions. Phase 7 does build the graph rename needs (renaming a path must rewrite every referrer, which is `buildInboundIndex` plus a rewrite pass), so rename is *unblocked* by this phase without being *decided* by it — it still needs an overlay op ADR-0004 §2 does not define.
+- **Theme composition editing** — create/rename/delete a theme, edit its `selectedTokenSets`. Deferred out of Phase 7 by Shyam, 2026-09-03. Designed in §7b and left there unbuilt; it is the one deferral here that leaves a *named* prior deferral (ADR-0002 §6) outstanding.
 - **Applying one token across every mode** — §7.
 - **Multi-file / library themes** — a theme drawing sets from another Figma file. PRD §4 non-goals.
 
@@ -213,13 +214,12 @@ Named so they are visibly out of scope rather than accidentally missing.
 
 ## Open questions (not decided here)
 
-All five are **Shyam's**, and the first four are product or scope calls rather than technical ones (operating principle 2). None blocks starting on §1–§6.
+Three of the original five were resolved on 2026-09-03 and are folded into the sections above: expression-vs-reference UX steering is `@ux-designer`'s (§4), a theme-dangling reference warns rather than refuses (§5 rule 4), and theme composition editing is out of Phase 7 (§7b). **Two remain open**, neither blocking a start on §1–§6.
 
-1. **Should the editor steer users away from an expression where a plain reference would do?** `{a}` keeps a live Figma link and `{a} * 2` does not (§4). The technical fact is settled; whether the UI warns, nudges, or stays silent is `@ux-designer`'s surface and Shyam's call.
-2. **Warn or refuse for a reference that dangles in some themes but not others?** §5 rule 4 decides *warn* (`unresolved-in-theme`), on the grounds that theme-specific tokens are normal. Confirm or overturn.
-3. **Is theme composition editing in Phase 7's scope, or is read-only theme selection enough?** §7 lands (a) and (c) either way; (b) is the largest single lever on the phase's size. The argument for including it is that ADR-0002 §6 deferred the composition question to this phase by name, and a file with two multi-mode collections is unusable without it. The argument against is that it is a new store, a new surface and a new merge path for a case Shyam's own files may not hit.
-4. **What does live theme switching target** — the current page, the document root, or the current selection? Different mental models, all one API call, and the right answer depends on how Shyam actually reviews a theme. Product call.
-5. **Does Phase 8's export evaluate expressions in the plugin, or hand them to Style Dictionary?** Genuinely a Phase 8 question and named here only so it is not rediscovered. §2's decision to store the string keeps both options open.
+1. **What does live theme switching target** — the current page, the document root, or the current selection? (§7c.) Different mental models, all one API call, and the right answer depends on how Shyam actually reviews a theme. **For Phase 7's implementation** to settle with Shyam before the switching surface ships; it does not gate §1–§6, and `@ux-designer` will need an answer when the Phase 7 UX doc is written.
+2. **Does Phase 8's export evaluate expressions in the plugin, or hand them to Style Dictionary?** Style Dictionary understands `{a}` references but not arithmetic. **For Phase 8**, named here only so it is not rediscovered. §2's decision to store the string rather than the number is what keeps both options open.
+
+Also parked, not open: **when ADR-0002 §6's `theme-composition` / `ambiguous` gap stops being acceptable** (§7b). Not a question to answer now — it becomes live the first time a real file has two multi-mode collections. Whoever picks it up amends this ADR.
 
 **API facts to verify during implementation, not decisions**, in the manner of ADR-0005's:
 
