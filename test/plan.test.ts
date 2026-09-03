@@ -552,3 +552,96 @@ test("a token on an expression cycle is refused at apply, with no fallback value
   assert.equal(row.status, "skipped");
   assert.equal(row.expression?.resolved, undefined);
 });
+
+// ---------------------------------------------------------------------------
+// ADR-0007 §3 — one resolution strategy per plan, not two
+// ---------------------------------------------------------------------------
+
+test("a plan's expressions resolve first-wins, the same as its alias index", () => {
+  // Two sets define `base`. ADR-0002 §5 picks the first as the collision winner, `plan.ts`'s alias
+  // index follows it, and the cycle graph is built `resolution: "first"` to match. Expression
+  // evaluation used to fall back to a last-wins context, so `{base} * 2` came out 20 while
+  // `{base}` aliased the variable holding 4 — one apply, one path, two answers, no error.
+  const first = varToken("number", 4, { variableId: "VariableID:1:1" });
+  const second = varToken("number", 10, { variableId: "VariableID:2:2" });
+  const importedDerived = varToken("number", 1, { variableId: "VariableID:3:3" });
+  const editedDerived = varToken("number", "{base} * 2", { variableId: "VariableID:3:3" });
+
+  const plan = buildApplyPlan({
+    tokens: [
+      flat("base", "First", first),
+      flat("base", "Second", second),
+      flat("derived", "First", editedDerived),
+    ],
+    imported: [
+      flat("base", "First", first),
+      flat("base", "Second", second),
+      flat("derived", "First", importedDerived),
+    ],
+    overlay: overlay([
+      entry({
+        target: { variableId: "VariableID:3:3", modeId: "1:0" },
+        path: "derived",
+        set: "First",
+        op: "set-value",
+        value: "{base} * 2",
+        base: 1,
+      }),
+    ]),
+  });
+
+  const row = byPath(plan, "derived");
+  assert.equal(row.status, "ready");
+  assert.equal(row.expression?.source, "{base} * 2");
+  assert.equal(row.expression?.resolved, 8);
+});
+
+test("a plan's alias and its expression land on the same collided token", () => {
+  // The property the strategies existing separately could break, stated directly: the variable an
+  // alias row points at is the same token the expression row's number came from.
+  const first = varToken("number", 4, { variableId: "VariableID:1:1" });
+  const second = varToken("number", 10, { variableId: "VariableID:2:2" });
+  const pointer = varToken("number", "{base}", { variableId: "VariableID:4:4" });
+  const derived = varToken("number", "{base} * 2", { variableId: "VariableID:3:3" });
+
+  const tokens = [
+    flat("base", "First", first),
+    flat("base", "Second", second),
+    flat("pointer", "First", pointer),
+    flat("derived", "First", derived),
+  ];
+  const plan = buildApplyPlan({
+    tokens,
+    imported: [
+      flat("base", "First", first),
+      flat("base", "Second", second),
+      flat("pointer", "First", varToken("number", 0, { variableId: "VariableID:4:4" })),
+      flat("derived", "First", varToken("number", 0, { variableId: "VariableID:3:3" })),
+    ],
+    overlay: overlay([
+      entry({
+        target: { variableId: "VariableID:4:4", modeId: "1:0" },
+        path: "pointer",
+        set: "First",
+        op: "set-value",
+        value: "{base}",
+        base: 0,
+      }),
+      entry({
+        target: { variableId: "VariableID:3:3", modeId: "1:0" },
+        path: "derived",
+        set: "First",
+        op: "set-value",
+        value: "{base} * 2",
+        base: 0,
+      }),
+    ]),
+  });
+
+  const aliasRow = byPath(plan, "pointer");
+  assert.equal(aliasRow.status, "ready");
+  // The alias resolves to `First.base` — the first-wins winner, value 4.
+  assert.equal(aliasRow.alias?.resolved, 4);
+  // And the expression is `4 * 2`, not `10 * 2`.
+  assert.equal(byPath(plan, "derived").expression?.resolved, 8);
+});

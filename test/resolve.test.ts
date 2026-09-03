@@ -312,3 +312,67 @@ test("an expression on a non-number token is refused, not committed as a string"
   assert.equal(outcome.ok, false);
   assert.equal((outcome as { reason: string }).reason, "expression-on-non-number");
 });
+
+// ---------------------------------------------------------------------------
+// Collided paths — ADR-0002 §5's winner, ADR-0007 §3's per-caller resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * The two tokens at one normalised path, plus one expression and one reference over it.
+ *
+ * `First` is the collision winner (ADR-0002 §5 picks the first), so first-wins resolution has to
+ * come out 4 → 8 and last-wins 10 → 20. The gap between the two answers is the bug: an apply that
+ * used one strategy for its alias index and the other for its expressions would write both.
+ */
+function collided(): FlatToken[] {
+  return [
+    num("base", "First", 4),
+    num("base", "Second", 10),
+    num("derived", "First", "{base} * 2"),
+  ];
+}
+
+test("a whole-tree context resolves a collided path first-wins, like plan.ts's alias index", () => {
+  // `buildFlatResolveContext` is what `buildApplyPlan` falls back to when no theme-scoped context is
+  // supplied, and it sits beside an alias index and a cycle graph that are both first-wins. Built
+  // last-wins, one apply could resolve `{base}` to `First.base` for a reference and to `Second.base`
+  // for an expression — the same path, two values, no error anywhere.
+  const tokens = collided();
+  assert.equal(resolveToken(find(tokens, "derived"), buildFlatResolveContext(tokens)).value, 8);
+});
+
+test("a theme-stack context still resolves a collided path last-wins", () => {
+  // The other half of the same rule: last-wins is `selectedTokenSets` order (ADR-0002 §1) and stays
+  // correct for the editor and the build. The fix is that the strategy is the caller's to choose,
+  // not that one of them is wrong.
+  const tokens = collided();
+  assert.equal(resolveToken(find(tokens, "derived"), buildResolveContext(tokens, tokens)).value, 20);
+});
+
+test("first-wins holds for a whole-value reference too, not just an expression", () => {
+  const tokens = [num("base", "First", 4), num("base", "Second", 10), num("alias", "First", "{base}")];
+  const resolved = resolveToken(find(tokens, "alias"), buildFlatResolveContext(tokens));
+  assert.equal(resolved.value, 4);
+});
+
+test("rule 2 checks an out-of-stack path against every type the tree gives it", () => {
+  // `everywhere` keeps one token per path and which one is iteration order. A path defined as a
+  // `color` in one set and a `number` in another has no single answer out of the active stack, and
+  // picking one silently would refuse a good edit on scan order alone.
+  const all = [
+    color("token", "Colors", "#c33a2e"),
+    num("token", "Sizes", 4),
+    num("size", "Active", 8),
+  ];
+  const context = buildResolveContext([find(all, "size", "Active")], all);
+  const outcome = checkAuthoredValue({ entry: find(all, "size", "Active"), raw: "{token}", context });
+  assert.equal(outcome.ok, true);
+});
+
+test("rule 2 still refuses an out-of-stack path when no set defines it compatibly", () => {
+  const all = [color("token", "Colors", "#c33a2e"), num("size", "Active", 8)];
+  const context = buildResolveContext([find(all, "size", "Active")], all);
+  const outcome = checkAuthoredValue({ entry: find(all, "size", "Active"), raw: "{token}", context });
+  assert.equal(outcome.ok, false);
+  assert.equal((outcome as { reason: string }).reason, "reference-type-mismatch");
+});

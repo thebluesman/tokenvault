@@ -21,6 +21,7 @@ import {
   localEntries,
   indexOverlay,
   keepMine,
+  mergeEvaluator,
   mergeOverlay,
   parseOverlay,
   recordEdit,
@@ -716,4 +717,73 @@ test("a plain reference entry still merges by string comparison, unchanged", () 
   );
   assert.equal(merged.retired, 1);
   assert.equal(merged.overlay.entries.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// `mergeEvaluator` — the merge's expression comparison is over the effective tree
+// ---------------------------------------------------------------------------
+
+/** `core.4`, the operand — a separate variable with its own overlay entry. */
+function operandLine(value: unknown): FlatToken {
+  return flat("core.4", "Theme/Light", {
+    $type: "number",
+    $value: value as Token["$value"],
+    $extensions: {
+      "com.tokenvault": {
+        figma: { variableId: "VariableID:9:9", modeId: "1:0", collectionId: "VariableCollectionId:1:1" },
+      },
+    },
+  });
+}
+
+function operandEdit(value: unknown, base: unknown): OverlayEntry {
+  return {
+    target: { variableId: "VariableID:9:9", modeId: "1:0" },
+    path: "core.4",
+    set: "Theme/Light",
+    op: "set-value",
+    at: NOW,
+    value: value as never,
+    base: base as never,
+  };
+}
+
+test("the merge evaluates an expression against the effective tree, not the raw scan", () => {
+  // `space.button` holds `{core.4} * 2` and `core.4` carries its own pending edit from 4 to 16.
+  // The number an apply would write is 32, because `plan.ts` evaluates against the effective tree.
+  // Evaluated against the raw scan instead, the merge would compute 8 and be reasoning about a
+  // value that exists nowhere — settling or reporting the entry on the wrong number.
+  const flatTokens = [numberLine(32), operandLine(4)];
+  const pending = overlayOf(expressionEdit("{core.4} * 2", 16), operandEdit(16, 4));
+  assert.equal(mergeEvaluator(flatTokens, pending, ["Theme/Light"])("{core.4} * 2"), 32);
+});
+
+test("that difference decides whether an applied expression reads as a conflict", () => {
+  // The user-visible half. Figma holds 32 because the apply that wrote it flattened `{core.4} * 2`
+  // against `core.4`'s pending 16. Against the effective tree the merge sees Figma has caught up
+  // and says nothing; against the raw scan it computes 8, matches neither 32 nor the base, and
+  // reports an `edit-conflict` about a divergence that never happened.
+  const flatTokens = [numberLine(32), operandLine(4)];
+  const pending = overlayOf(expressionEdit("{core.4} * 2", 16), operandEdit(16, 4));
+
+  const effective = mergeOverlay(flatTokens, pending, NOW, {
+    evaluate: mergeEvaluator(flatTokens, pending, ["Theme/Light"]),
+  });
+  assert.equal(effective.conflicts, 0);
+  assert.equal(
+    effective.entries.filter((entry) => entry.kind === "edit-conflict").length,
+    0
+  );
+
+  const preOverlay = mergeOverlay(flatTokens, pending, NOW, { evaluate: () => 8 });
+  assert.equal(preOverlay.conflicts, 1);
+});
+
+test("the evaluator is theme-scoped — an operand outside the stack has no value", () => {
+  // Same rule as everywhere else (ADR-0002 §2): a set the active theme does not select is not a
+  // place to borrow a number from. `null` back means "cannot evaluate", which `mergeOverlay` reads
+  // as keep-the-entry rather than as disagreement.
+  const flatTokens = [numberLine(32), flat("core.4", "Theme/Dark", operandLine(4).token)];
+  const pending = overlayOf(expressionEdit("{core.4} * 2", 16));
+  assert.equal(mergeEvaluator(flatTokens, pending, ["Theme/Light"])("{core.4} * 2"), null);
 });

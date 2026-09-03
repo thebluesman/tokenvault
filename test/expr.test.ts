@@ -9,6 +9,7 @@ import {
   evaluateExpression,
   expressionReferences,
   isExpressionValue,
+  looksLikeExpression,
   noOpReferenceIn,
   parseExpression,
   referencesInExpression,
@@ -217,4 +218,51 @@ test("a real expression is never nudged — the steering is one case, not a stan
 
 test("a plain reference is never nudged toward itself", () => {
   assert.equal(noOpReferenceIn("{a}"), null);
+});
+
+// ---------------------------------------------------------------------------
+// `%` is an operator, not an identifier character
+// ---------------------------------------------------------------------------
+
+test("`%` glued to an identifier is still an unsupported operator", () => {
+  // The identifier character class used to include `%`, so `{a}%b` lexed `%b` as one word and came
+  // back as "expressions can't call functions" — a sentence about a mistake the user did not make.
+  assert.equal(error("{a}%b", { a: 1 }), "unsupported-operator");
+  assert.equal(error("{a}%{b}", { a: 1, b: 2 }), "unsupported-operator");
+  assert.equal(error("%", {}), "unsupported-operator");
+});
+
+// ---------------------------------------------------------------------------
+// `looksLikeExpression` — one grammar, not a regex beside it
+// ---------------------------------------------------------------------------
+
+test("a plain number is never an expression, however it lexes", () => {
+  // `-5` tokenizes as a negation of `5`. Storing it as a formula rather than as the number it
+  // plainly is would be a quiet data change (§2 — the string is the value).
+  assert.equal(looksLikeExpression("16"), false);
+  assert.equal(looksLikeExpression("-5"), false);
+  assert.equal(looksLikeExpression(" 0.5 "), false);
+  assert.equal(looksLikeExpression(""), false);
+});
+
+test("anything carrying a reference, an operator or a bracket is an expression", () => {
+  assert.equal(looksLikeExpression("{a}"), true);
+  assert.equal(looksLikeExpression("{a} * 2"), true);
+  assert.equal(looksLikeExpression("4 + 4"), true);
+  assert.equal(looksLikeExpression("(4)"), true);
+  assert.equal(looksLikeExpression("-{a}"), true);
+});
+
+test("a mistyped number is not an expression, so it gets the number parser's message", () => {
+  // The distinction the old regex existed to draw, and the reason this cannot simply be "does it
+  // parse": `sixteen` deserves "that isn't a number", not "expressions can't call functions".
+  assert.equal(looksLikeExpression("sixteen"), false);
+  assert.equal(looksLikeExpression("4px"), false);
+  assert.equal(looksLikeExpression("50%"), false);
+});
+
+test("a refusal only an expression attempt can produce still routes to the parser", () => {
+  assert.equal(looksLikeExpression("round(2)"), true, "a function call");
+  assert.equal(looksLikeExpression("{a"), true, "an unclosed reference");
+  assert.equal(looksLikeExpression("{a} px"), true, "a refusal after real expression syntax");
 });
