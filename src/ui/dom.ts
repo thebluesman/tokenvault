@@ -116,6 +116,11 @@ function onOutside(event: MouseEvent): void {
   if (openPopover !== null && !openPopover.contains(event.target as Node)) closePopover();
 }
 
+/** Whether a popover currently owns the screen — Escape closes it before it reverts a field. */
+export function isPopoverOpen(): boolean {
+  return openPopover !== null;
+}
+
 export function closePopover(): void {
   if (openPopover === null) return;
   openPopover.remove();

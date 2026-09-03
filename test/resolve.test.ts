@@ -8,6 +8,7 @@ import {
   buildFlatResolveContext,
   buildResolveContext,
   checkAuthoredValue,
+  graphReport,
   referencePathsOf,
   resolveToken,
   themePathSet,
@@ -236,4 +237,68 @@ test("the paths a candidate points at cover both shapes", () => {
   assert.deepEqual(referencePathsOf("({a} + {b}) / 2"), ["a", "b"]);
   assert.deepEqual(referencePathsOf("8"), []);
   assert.deepEqual(referencePathsOf("{a} * "), []);
+});
+
+// ---------------------------------------------------------------------------
+// The build/merge report — ADR-0007 §3's second checkpoint, §5's three kinds
+// ---------------------------------------------------------------------------
+
+test("every token on a loop gets an entry, and each carries the whole loop", () => {
+  // The error state is the cycle, not the token: any one of them can be edited to break it, so
+  // singling one out sends the user to what may be the least appropriate place to fix it.
+  const tokens = [num("a", "S", "{b}"), num("b", "S", "{c}"), num("c", "S", "{a}")];
+  const entries = graphReport(tokens, buildFlatResolveContext(tokens));
+  const cycles = entries.filter((entry) => entry.kind === "reference-cycle");
+  assert.equal(cycles.length, 3);
+  for (const entry of cycles) assert.match(entry.message, /a → b → c → a/);
+});
+
+test("a self-reference reports as a cycle with its own reason", () => {
+  const tokens = [num("a", "S", "{a}")];
+  const entries = graphReport(tokens, buildFlatResolveContext(tokens));
+  assert.equal(entries[0].kind, "reference-cycle");
+  assert.equal(entries[0].reason, "self-reference");
+});
+
+test("an expression that can't be worked out reports as expression-error", () => {
+  const tokens = [num("a", "S", "{b} / 0"), num("b", "S", 4)];
+  const entries = graphReport(tokens, buildFlatResolveContext(tokens));
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].kind, "expression-error");
+  assert.equal(entries[0].reason, "divide-by-zero");
+});
+
+test("a target missing from another theme is a warning, not an error", () => {
+  // Frequently the correct state of a correct token — the copy says so in as many words.
+  const tokens = [num("accent", "Base", "{brand}"), num("brand", "Brand", 4)];
+  const context = buildFlatResolveContext(tokens);
+  const entries = graphReport(tokens, context, [
+    { name: "Light", paths: themePathSet(tokens, ["Base"]) },
+    { name: "Brand", paths: themePathSet(tokens, ["Base", "Brand"]) },
+  ]);
+  const warnings = entries.filter((entry) => entry.kind === "unresolved-in-theme");
+  assert.equal(warnings.length, 1);
+  assert.deepEqual(warnings[0].omitted, ["Light"]);
+  assert.match(warnings[0].message, /Nothing is broken/);
+});
+
+test("the active theme's own gap reports separately, with no value invented", () => {
+  const all = [num("accent", "Base", "{brand}"), num("brand", "Brand", 4)];
+  const active = buildResolveContext([all[0]], all);
+  const entries = graphReport([all[0]], active);
+  assert.equal(entries[0].kind, "unresolved-in-theme");
+  assert.equal(entries[0].reason, "active-theme");
+});
+
+test("a clean tree reports nothing at all", () => {
+  const tokens = [num("a", "S", "{b} * 2"), num("b", "S", 4)];
+  assert.deepEqual(graphReport(tokens, buildFlatResolveContext(tokens)), []);
+});
+
+test("report kinds are additive — the three are all ReportEntry, version 1 untouched", () => {
+  const tokens = [num("a", "S", "{a}")];
+  const entries = graphReport(tokens, buildFlatResolveContext(tokens));
+  assert.equal(typeof entries[0].message, "string");
+  assert.equal(typeof entries[0].path, "string");
+  assert.equal(typeof entries[0].set, "string");
 });

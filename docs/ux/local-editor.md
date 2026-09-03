@@ -232,6 +232,10 @@ Tokens Studio puts everything in a modal. We diverge for scalars because the dom
 
 ### 5.3 Editing a reference value
 
+> **Amended 2026-09-03 — lifted by Phase 7, exactly as this section said it would be.** The value field is no longer disabled. `docs/ux/references-math-themes.md` §4 is the replacement in full: the same field, editable, accepting a literal, a whole-value reference or a math expression, with the path picker on `{` and four authoring rules on commit. `Go to target` survives unchanged — it was the right affordance, and it is now reachable from an editable field. The escape hatch this section withheld exists too, as the named action `Use the resolved value instead` (§4.3), because breaking a link on purpose is a legitimate thing to want as long as it is not the accidental result of clicking a swatch.
+>
+> What follows is Phase 4's behaviour, kept as the record of what shipped then.
+
 When `$value` is `{…}`, the value field is **disabled**, styled as a reference chip, with:
 
 > Points at `folio.ref.palette.red-warm.50`. Editing references lands in Phase 7 — for now, change the token it points at.
@@ -319,7 +323,9 @@ A single tap-through, with an **Undo** in the toast for 10 seconds. No typed con
 > `folio.color.bg.surface` — Light, Dark
 > `folio.color.text.danger` — Light
 >
-> Phase 4 can't edit a reference, so the only way to clear these is to delete the referencing tokens first — deepest first, since they may have references of their own. Repointing them lands with aliasing (Phase 7).
+> Re-point them at something else, or delete them first — deepest first, since they may have references of their own.
+>
+> *(Amended 2026-09-03: Phase 7 can edit a reference, so this is no longer a dead end. **Delete stays blocked** — Phase 7 makes re-pointing possible, not automatic, and there is still deliberately no "remove all references" button, because rewriting seven tokens' values on one tap is reference surgery the user hasn't seen. See `docs/ux/references-math-themes.md` §12.)*
 >
 > `[ Close ]`
 

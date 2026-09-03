@@ -74,7 +74,7 @@ import {
 import { isConnected } from "./git";
 import { openApplyDialog } from "./applyDialog";
 import { openDeleteInFigma } from "./deleteFigma";
-import { button, closePopover, copy, el, popover, toast } from "./dom";
+import { button, closePopover, copy, el, isPopoverOpen, popover, toast } from "./dom";
 import { describeValue } from "../tokens/format";
 import { normalizePathKey } from "../tokens/paths";
 
@@ -434,27 +434,30 @@ function renderInSync(): HTMLElement {
 // ---------------------------------------------------------------------------
 
 function renderValueEditor(line: Line): HTMLElement {
-  const token = line.entry.token;
-
-  // §7.3b — a token on a loop renders the block, and no value at all. There is deliberately no
-  // editor beneath it: the field would show a value the token does not have.
-  if (onCycle(line)) {
+  // §7.3b — a token on a loop shows the block first, because the loop is the thing in the error
+  // state rather than this token. The editor still follows it: *"editing any one of them breaks
+  // it"* is only true if one of them can be edited, and this is one of them.
+  const cycle = onCycle(line) ? resolutionFor(line).cycle : undefined;
+  if (cycle !== undefined) {
     const wrap = el("div");
-    const cycle = resolutionFor(line).cycle;
-    if (cycle !== undefined) {
-      wrap.appendChild(
-        cycleBlock(cycle, getModel().resolve, {
-          navigate: (path: string) => {
-            closeDetail();
-            navigate(path);
-          },
-        })
-      );
-    }
-    wrap.appendChild(unifiedField(line));
+    wrap.appendChild(
+      cycleBlock(cycle, getModel().resolve, {
+        navigate: (path: string) => {
+          closeDetail();
+          navigate(path);
+        },
+      })
+    );
+    wrap.appendChild(typedEditor(line));
     return wrap;
   }
 
+  return typedEditor(line);
+}
+
+/** The per-type editor, once the cycle block (if any) has had its say. */
+function typedEditor(line: Line): HTMLElement {
+  const token = line.entry.token;
   switch (token.$type) {
     case "color":
       return colorEditor(line);
@@ -590,6 +593,12 @@ function unifiedField(
 
   const commit = (): void => {
     const raw = input.value;
+    // An empty field that started empty is not an edit. The boolean editor's "Points at" field
+    // starts that way, and blurring past it must not fire an error about a value nobody typed.
+    if (raw.trim().length === 0 && initial.length === 0) {
+      clearNotes();
+      return;
+    }
     if (!isNonLiteral(raw, type)) {
       const literalCommit = options.commitLiteral;
       if (literalCommit === undefined) {
@@ -661,17 +670,24 @@ function unifiedField(
   input.addEventListener("input", () => {
     renderLive();
     // The picker fires on `{` and inserts at the caret rather than replacing the field, which is
-    // the only mechanical thing expressions add to §4.2.
-    if (input.value.slice(0, input.selectionStart ?? 0).endsWith("{")) openPicker();
+    // the only mechanical thing expressions add to §4.2. It is reopened on every keystroke while
+    // the caret sits inside an unclosed `{`, because **the picker filters live** — it is the amber
+    // that waits for commit, not the list (§5, build notes).
+    if (openBraceBefore() !== -1) openPicker();
+    else closePopover();
   });
   input.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
       commit();
     } else if (event.key === "Escape") {
-      // Escape closes the popover without closing the field (§4.2), and otherwise reverts.
+      // Escape closes the popover **without closing the field** (§4.2). Only a second Escape, with
+      // no popover to dismiss, reverts what was typed.
       event.preventDefault();
-      closePopover();
+      if (isPopoverOpen()) {
+        closePopover();
+        return;
+      }
       input.value = initial;
       clearNotes();
       renderLive();
@@ -684,9 +700,18 @@ function unifiedField(
     }, 0);
   });
 
+  /** The unclosed `{` the caret sits inside, or -1. Drives both opening and closing the picker. */
+  function openBraceBefore(): number {
+    const caret = input.selectionStart ?? input.value.length;
+    const before = input.value.slice(0, caret);
+    const opened = before.lastIndexOf("{");
+    if (opened === -1) return -1;
+    return before.indexOf("}", opened) === -1 ? opened : -1;
+  }
+
   function openPicker(): void {
     const caret = input.selectionStart ?? input.value.length;
-    const openedAt = input.value.lastIndexOf("{", Math.max(0, caret - 1));
+    const openedAt = openBraceBefore();
     if (openedAt === -1) return;
     const query = input.value.slice(openedAt + 1, caret);
     popover(input, (close) =>

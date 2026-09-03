@@ -290,6 +290,9 @@ function appendGroup(
     item.appendChild(name);
     if (row.swatch !== undefined) item.appendChild(swatch(row.swatch, false));
     item.appendChild(el("span", "count-right", row.preview));
+    // `mousedown` is suppressed so the field never loses focus to the picker: a blur would run the
+    // field's commit against the half-typed path the user is in the middle of replacing.
+    item.addEventListener("mousedown", (event) => event.preventDefault());
     if (choose !== undefined) item.addEventListener("click", () => choose(row.path));
     wrap.appendChild(item);
   }
