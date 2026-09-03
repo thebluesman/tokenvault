@@ -247,6 +247,7 @@ function readyRow(entry: ApplyEntry, checked: Set<string>, recount: () => void):
       before: entry.before,
       after: entry.after,
       alias: entry.alias,
+      expression: entry.expression,
       state: "ready",
     },
     { checkbox: box }

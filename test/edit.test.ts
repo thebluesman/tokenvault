@@ -10,7 +10,7 @@ import {
   formatDimension,
   gridFieldsFor,
   gridList,
-  isReadOnlyValue,
+  isPointerValue,
   newShadow,
   parseDimension,
   parseHexColor,
@@ -262,6 +262,8 @@ test("an empty description removes the key rather than writing an empty string",
 });
 
 test("a reference value is read-only in Phase 4", () => {
-  assert.equal(isReadOnlyValue(TOKEN), false);
-  assert.equal(isReadOnlyValue({ ...TOKEN, $value: "{folio.ref.red.50}" }), true);
+  // Phase 7 lifted the read-only rule; what survives is the shape question the per-type editors
+  // ask — an inert swatch beside a pointer, a readout position on a boolean (UX §4.1).
+  assert.equal(isPointerValue(TOKEN), false);
+  assert.equal(isPointerValue({ ...TOKEN, $value: "{folio.ref.red.50}" }), true);
 });

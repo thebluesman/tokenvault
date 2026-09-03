@@ -92,7 +92,22 @@ export function subtypeWarning(subtype: Subtype | undefined, value: number): str
 // Dimensions
 // ---------------------------------------------------------------------------
 
+/**
+ * A sub-key of a composite that was handed a reference — UX §12.
+ *
+ * Sub-key reference authoring is ADR-0007 §10's deferral, and a typography editor's `fontSize`
+ * field that rejects `{folio.typography.font-size.70}` while the row above it *displays*
+ * `fontSize → {…}` from `boundVariables` is going to read as broken. So the rejection says which it
+ * is, rather than reporting "that isn't a number" about a perfectly well-formed path.
+ */
+export function subKeyReferenceMessage(input: string): string | null {
+  if (!isReference(input.trim())) return null;
+  return "Pointing one field of a composite token at another token isn't in this version. The `→ {…}` line above comes from Figma and still works.";
+}
+
 export function parseDimension(input: string, unit: DimensionValue["unit"]): ParseResult<DimensionValue> {
+  const deferred = subKeyReferenceMessage(input);
+  if (deferred !== null) return fail(deferred);
   const parsed = parseNumberValue(input);
   if (!parsed.ok) return parsed;
   return ok({ unit, value: parsed.value });
@@ -271,6 +286,8 @@ export function setGridField(grid: GridValue, field: GridField, raw: string): Pa
     return ok(next);
   }
   if (field === "count") {
+    const deferred = subKeyReferenceMessage(raw);
+    if (deferred !== null) return fail(deferred);
     const parsed = parseNumberValue(raw);
     if (!parsed.ok) return parsed;
     next.count = parsed.value;
@@ -331,7 +348,14 @@ export function withDescription(token: Token, description: string): Token {
   return next;
 }
 
-/** True when this token's value cannot be edited in Phase 4 — it is a reference (UX §5.3). */
-export function isReadOnlyValue(token: Token): boolean {
+/**
+ * True when this token's whole value is a pointer rather than a literal.
+ *
+ * **No longer a read-only test.** Phase 4 used it to refuse editing a reference outright
+ * (`local-editor.md` §5.3); Phase 7 lifts that, exactly as that section said it would, so what is
+ * left is the shape question the per-type editors still need — a colour whose value is a pointer
+ * gets an inert swatch, a boolean gets a readout position (UX §4.1).
+ */
+export function isPointerValue(token: Token): boolean {
   return isReference(token.$value);
 }

@@ -38,6 +38,7 @@ import { button, el, toast } from "./dom";
 import { describeValue } from "../tokens/format";
 import { branchName, isConnected } from "./git";
 import { originOf } from "../tokens/overlay";
+import { valueShape } from "../tokens/expr";
 
 const panelEl = document.getElementById("panel") as HTMLElement;
 
@@ -187,6 +188,33 @@ function renderLocal(body: HTMLElement, entries: OverlayEntry[]): void {
   actions.appendChild(undoAll);
   body.appendChild(actions);
 
+  // §6.6 — an expression's overlay entry **survives an apply** rather than retiring (ADR-0007 §6),
+  // because Figma stores `32` and the entry holds `{…spacing.4} * 2`. That surfaces as a
+  // permanently non-empty Local count, which is exactly the shape of a bug, so it is explained
+  // once, above the section, and only when such an entry exists.
+  const expressions = entries.filter(isExpressionEntry);
+  if (expressions.length > 0) {
+    body.appendChild(
+      el(
+        "p",
+        "empty",
+        "Expressions stay listed after applying — Figma can only store the number, not the formula."
+      )
+    );
+    if (!isConnected()) {
+      // A real reason to connect a repo, worth the extra line: this is ADR-0006 §2's demotion
+      // applied to expressions, which makes the sticky entry a disconnected-file condition rather
+      // than a permanent feature of the product.
+      body.appendChild(
+        el(
+          "p",
+          "empty",
+          "Once this file is connected to a repo, expressions live in the committed JSON and stop counting as uncommitted work."
+        )
+      );
+    }
+  }
+
   for (const entry of entries) {
     const row = el("div", "row");
     const name = el("div", "name", entry.path);
@@ -203,12 +231,28 @@ function renderLocal(body: HTMLElement, entries: OverlayEntry[]): void {
     // grey rather than a badge, because a pulled change **needs nothing from you** beyond the
     // apply you were going to do anyway."* (UX git-sync §8.2.)
     if (originOf(entry) === "pulled") row.appendChild(el("span", "empty", "from repo"));
+    // A grey tag in place of the usual retirement expectation. `Revert` still works and still means
+    // what it always meant.
+    if (isExpressionEntry(entry)) row.appendChild(el("span", "empty", "expression"));
 
     const revertOne = button("Revert");
     revertOne.addEventListener("click", () => revert([entry.target], entry.op));
     row.appendChild(revertOne);
     body.appendChild(row);
   }
+}
+
+/**
+ * Whether this entry holds a math expression — §6.6's grey tag and its explanatory line.
+ *
+ * Asked of the *line* rather than the entry alone, because `valueShape` is type-aware and only the
+ * tree knows the target's `$type`. An entry whose token has gone is not claimed to be one.
+ */
+function isExpressionEntry(entry: OverlayEntry): boolean {
+  if (entry.op !== "set-value" || typeof entry.value !== "string") return false;
+  const line = lineForTarget(entry.target);
+  if (line === undefined) return false;
+  return valueShape({ $type: line.entry.token.$type, $value: entry.value }) === "expression";
 }
 
 // ---------------------------------------------------------------------------

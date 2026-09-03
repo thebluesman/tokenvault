@@ -12,6 +12,7 @@ import type { DriftEntry } from "./tokens/drift";
 import type { Refusal } from "./tokens/toFigma";
 import type { ConsumerCount, PlannedWrite, WriteOutcome } from "./figma/apply";
 import type { RepoSettings, SyncState } from "./git/types";
+import type { EffectiveTheme } from "./tokens/themes";
 
 /** One generated file, already serialized deterministically, ready to display or copy. */
 export interface SerializedFile {
@@ -106,6 +107,30 @@ export interface ImportPayload {
    * (§3 never persists the pulled tree). The labels follow this field, never a feature flag (UX §14).
    */
   driftBaseline: "repo" | "scan";
+
+  // --- Phase 7 (ADR-0007) ---
+
+  /**
+   * The themes derived from Figma's collections and modes — read-only (ADR-0007 §7a, §7b).
+   *
+   * Empty for a file with two or more multi-mode collections: ADR-0002 §6's `theme-composition` /
+   * `ambiguous` deferral is **not** discharged by Phase 7, so such a file genuinely has no themes.
+   * That is a real state with real copy (UX §8.5), not a reason to hide the control.
+   */
+  themes: EffectiveTheme[];
+  /** The theme resolution runs against; `null` only when there are none. */
+  activeTheme: string | null;
+  /**
+   * Set when the stored theme was gone and we fell back to the first.
+   *
+   * Never silent: resolving against a stack the user did not choose would change every displayed
+   * value with no explanation (ADR-0007 §7a).
+   */
+  themeFellBackFrom?: string;
+  /** Whichever theme the current page's explicit modes match, when any — UX §8.2's grey tag. */
+  themeOnCanvas: string | null;
+  /** Collections with more than one mode, so UX §8.5 can name the cause back to the user. */
+  multiModeCollections: string[];
 }
 
 /** The connection, as the UI is allowed to know it — never including the PAT (ADR-0006 §1). */
@@ -213,7 +238,28 @@ export type UiToPluginMessage =
    */
   | { type: "git-repo-baseline"; files: SerializedFile[] | null }
   /** Land a pull as overlay entries — ADR-0006 §5. Never a Figma write. */
-  | { type: "git-pull"; entries: Array<Omit<OverlayEntry, "at">> };
+  | { type: "git-pull"; entries: Array<Omit<OverlayEntry, "at">> }
+
+  // --- Phase 7 (ADR-0007) ---
+
+  /**
+   * Pick the theme the panel resolves against — ADR-0007 §7(a).
+   *
+   * **A lens, not a write.** It stores a few bytes in `clientStorage` and re-derives the report;
+   * it touches no token value, no overlay entry, and nothing in the Figma document. Switching the
+   * canvas is a separate, explicitly labelled action (UX §11 resolution 1, and the two must not be
+   * merged).
+   */
+  | { type: "set-active-theme"; name: string }
+  /**
+   * Put the current page into a theme's variable modes — ADR-0007 §7(c).
+   *
+   * The only message in Phase 7 that mutates the Figma document, and it is deliberately not an
+   * apply: it writes no token values, so it does not go through `ApplyPlan`, does not open the
+   * apply dialog, and gets no plugin-side undo. ⌘Z is the undo, and the write is bracketed with
+   * `commitUndo` so it is its own step.
+   */
+  | { type: "switch-page-theme"; name: string };
 
 export type PluginToUiMessage =
   | { type: "plugin-ready"; fileName: string }
@@ -246,4 +292,22 @@ export type PluginToUiMessage =
   /** The PAT, for one operation. Never rendered, never logged, never cached (ADR-0006 §1). */
   | { type: "git-token"; token: string | null }
   /** What landing a pull did to the overlay — the count the toast reports (UX §8.1). */
-  | { type: "git-pull-result"; applied: number; conflicts: number };
+  | { type: "git-pull-result"; applied: number; conflicts: number }
+
+  // --- Phase 7 (ADR-0007) ---
+
+  /**
+   * What a canvas theme switch actually managed — UX §8.4.
+   *
+   * Partial mapping is reported, never silent: every collection the theme could map is switched and
+   * every set it could not is named. A single unmappable set never refuses the whole switch, or a
+   * hand-composed theme from a pulled manifest would be permanently unswitchable.
+   */
+  | {
+      type: "theme-switch-result";
+      theme: string;
+      switched: string[];
+      failed: Array<{ collectionName: string; message: string }>;
+      /** Sets with no Figma mode. Style-backed sets are excluded upstream and never appear here. */
+      unmapped: string[];
+    };

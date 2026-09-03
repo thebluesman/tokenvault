@@ -12,13 +12,14 @@
 // below that could plausibly return a fallback returns a `Resolution` with no `value` instead. If
 // a default ever appears in this file, it is the bug §7.1 was written to prevent.
 
-import type { Token, TokenValue } from "./types";
+import type { ReportEntry, Token, TokenValue } from "./types";
 import type { FlatToken } from "./view";
 import type { Cycle, ReferenceGraph } from "./graph";
 import type { ExprError } from "./expr";
 import {
   buildReferenceGraph,
   cycleFromCandidate,
+  cycleSummary,
   findCycles,
   graphNodeKey,
   outgoingPaths,
@@ -472,4 +473,96 @@ export function outgoingUnknown(entry: FlatToken, context: ResolveContext): stri
   return outgoingPaths(entry.token).filter(
     (path) => context.everywhere.get(normalizePathKey(path)) === undefined
   );
+}
+
+// ---------------------------------------------------------------------------
+// The build/merge report — ADR-0007 §3's second checkpoint, §5's three kinds
+// ---------------------------------------------------------------------------
+
+/**
+ * Whole-graph pass, after every scan, pull or theme change.
+ *
+ * Three additive kinds, so `ImportReport.version` stays `1` (the precedent ADR-0003 §6 and
+ * ADR-0004 §5 both set), and all three render through the existing `⚑ flagged` chip and row
+ * badges. No new UI concept.
+ *
+ * **Every token on a loop gets its own entry, all carrying the same loop**, because the error state
+ * is the cycle rather than the token: any one of them can be edited to break it, and singling out
+ * one would send the user to what may be the least appropriate place to fix it.
+ */
+export function graphReport(
+  tokens: FlatToken[],
+  context: ResolveContext,
+  themeStacks: Array<{ name: string; paths: Set<string> }> = []
+): ReportEntry[] {
+  const entries: ReportEntry[] = [];
+  const reportedCycleNodes = new Set<string>();
+
+  for (const cycle of context.cycles.cycles) {
+    const summary = cycleSummary(context.graph, cycle);
+    for (const key of cycle.nodes) {
+      const node = context.graph.nodes.get(key);
+      if (node === undefined || reportedCycleNodes.has(key)) continue;
+      reportedCycleNodes.add(key);
+      entries.push({
+        kind: "reference-cycle",
+        reason: cycle.nodes.length === 1 ? "self-reference" : "circular-reference",
+        message: `These tokens point in a loop: ${summary}. Nothing in the loop has a value, because each one is waiting on the next. Editing any one of them breaks it.`,
+        path: node.path,
+        set: node.setId,
+      });
+    }
+  }
+
+  for (const entry of tokens) {
+    const node = graphNodeKey(entry.setId, entry.path);
+    if (context.cycles.nodes.has(node)) continue;
+
+    const resolved = resolveValue(entry.token, context);
+
+    if (resolved.kind === "error") {
+      entries.push({
+        kind: "expression-error",
+        reason: resolved.error?.reason ?? "expression-error",
+        message: `"${String(entry.token.$value)}" can't be worked out: ${resolved.error?.message ?? "no reason recorded"}`,
+        path: entry.path,
+        set: entry.setId,
+      });
+      continue;
+    }
+
+    if (resolved.kind === "unresolved") {
+      // The active theme's own gap. Named separately from the per-theme sweep below so the message
+      // can say "here, now" rather than listing themes the user isn't looking at.
+      entries.push({
+        kind: "unresolved-in-theme",
+        reason: "active-theme",
+        message: `Points at ${resolved.target ?? "a token"}, which has no value in the active theme. Nothing is broken — this token just has no value while that theme is on.`,
+        path: entry.path,
+        set: entry.setId,
+        omitted: resolved.target === undefined ? undefined : [resolved.target],
+      });
+      continue;
+    }
+
+    if (themeStacks.length === 0) continue;
+    const paths = outgoingPaths(entry.token);
+    if (paths.length === 0) continue;
+
+    const missing = themeStacks
+      .filter((theme) => paths.some((path) => !theme.paths.has(normalizePathKey(path))))
+      .map((theme) => theme.name);
+    if (missing.length === 0) continue;
+
+    entries.push({
+      kind: "unresolved-in-theme",
+      reason: "other-themes",
+      message: `${paths.join(", ")} ${paths.length === 1 ? "isn't" : "aren't"} in ${listThemes(missing)}, so this token has no value there. Nothing is broken.`,
+      path: entry.path,
+      set: entry.setId,
+      omitted: missing,
+    });
+  }
+
+  return entries;
 }

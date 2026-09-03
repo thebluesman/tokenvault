@@ -35,6 +35,17 @@ import {
 import { buildPathRows, buildTree, describeSets, flattenImport } from "../tokens/view";
 import { buildInboundIndex, inboundReferrers } from "../tokens/references";
 import { buildApplyPlan } from "../tokens/plan";
+import type { EffectiveTheme } from "../tokens/themes";
+import { tokensInStack } from "../tokens/themes";
+import type { Cycle } from "../tokens/graph";
+import { graphNodeKey } from "../tokens/graph";
+import type { ResolveContext, Resolution } from "../tokens/resolve";
+import {
+  buildResolveContext,
+  emptyResolveContext,
+  resolveToken,
+  themePathSet,
+} from "../tokens/resolve";
 import { normalizePathKey } from "../tokens/paths";
 import { stableStringify } from "../tokens/serialize";
 
@@ -127,6 +138,29 @@ export interface EditorModel {
    * as an all-clear — see `openApplyDialog`, which is the single funnel that enforces it.
    */
   guardsKnown: boolean;
+
+  // --- Phase 7 (ADR-0007) ---
+
+  /** The themes import derived from Figma's collections and modes. Read-only (§7b). */
+  themes: EffectiveTheme[];
+  /** `null` only when the file has no themes at all — UX §8.5's `Theme: none`. */
+  activeTheme: EffectiveTheme | null;
+  /** Which theme the current page's explicit modes match, when any — UX §8.2's grey tag. */
+  themeOnCanvas: string | null;
+  /** Collections with more than one mode, so §8.5 can name the cause back to the user. */
+  multiModeCollections: string[];
+  /**
+   * Theme-scoped resolution, rebuilt whenever the tree or the theme changes.
+   *
+   * Everything in the render path asks this rather than recomputing: the value line's number, the
+   * cycle badge, the picker's three groups and the editor's four rules all come out of one context,
+   * so they cannot disagree about what the active theme resolves to.
+   */
+  resolve: ResolveContext;
+  /** Every theme's resolvable path set, for rule 4's "which themes does this dangle in". */
+  themeStacks: Array<{ name: string; paths: Set<string> }>;
+  /** Distinct loops, not tokens on loops — the header chip's count (UX §9). */
+  cycles: Cycle[];
 }
 
 let payload: ImportPayload | null = null;
@@ -168,6 +202,13 @@ function blankModel(): EditorModel {
     styleGuards: new Map(),
     nonLocalPaths: new Set(),
     guardsKnown: false,
+    themes: [],
+    activeTheme: null,
+    themeOnCanvas: null,
+    multiModeCollections: [],
+    resolve: emptyResolveContext(),
+    themeStacks: [],
+    cycles: [],
   };
 }
 
@@ -268,6 +309,16 @@ function rebuild(storageError?: string): void {
   const applied = applyOverlay(pristine, overlay);
   const rows = buildPathRows(applied.tokens, sets);
 
+  // One context for the whole render pass. The tree it resolves against is the **effective** one —
+  // overlay applied — because a loop the user just authored has to render as a loop immediately,
+  // not after the next scan.
+  const activeName = payload.activeTheme;
+  const active =
+    activeName === null ? null : (payload.themes.filter((theme) => theme.name === activeName)[0] ?? null);
+  const stack =
+    active === null ? payload.manifest.tokenSetOrder.slice() : active.selectedTokenSets.slice();
+  const resolveContext = buildResolveContext(tokensInStack(applied.tokens, stack), applied.tokens);
+
   const flags = new Map<string, ReportEntry[]>();
   for (const entry of payload.entries) {
     if (entry.path === undefined) continue;
@@ -361,6 +412,16 @@ function rebuild(storageError?: string): void {
     styleGuards: new Map(payload.styleGuards),
     nonLocalPaths: new Set(payload.nonLocalPaths),
     guardsKnown: payload.guardsKnown,
+    themes: payload.themes,
+    activeTheme: active,
+    themeOnCanvas: payload.themeOnCanvas,
+    multiModeCollections: payload.multiModeCollections,
+    resolve: resolveContext,
+    themeStacks: payload.themes.map((theme) => ({
+      name: theme.name,
+      paths: themePathSet(applied.tokens, theme.selectedTokenSets),
+    })),
+    cycles: resolveContext.cycles.cycles,
   };
   notify();
 }
@@ -385,6 +446,7 @@ export function planFor(scope: PlanScope = {}): ApplyPlan {
       styleGuards: model.styleGuards,
       nonLocalPaths: model.nonLocalPaths,
       guardsKnown: model.guardsKnown,
+      resolve: model.resolve,
     },
     scope
   );
@@ -803,4 +865,34 @@ export function deleteBlockers(paths: string[]): DeleteBlock {
 export function pathsUnder(prefix: string): Row[] {
   const needle = `${normalizePathKey(prefix)}.`;
   return model.rows.filter((row) => row.row.key.startsWith(needle));
+}
+
+// ---------------------------------------------------------------------------
+// Themes and resolution — ADR-0007 §4, §7
+// ---------------------------------------------------------------------------
+
+/** What one value line comes out as under the active theme. The render path's single question. */
+export function resolutionFor(line: Line): Resolution {
+  return resolveToken(line.entry, model.resolve);
+}
+
+/** True when this line sits on a loop — the `⚑ cycle` badge and the `—` value preview. */
+export function onCycle(line: Line): boolean {
+  return model.resolve.cycles.nodes.has(graphNodeKey(line.entry.setId, line.entry.path));
+}
+
+/**
+ * Picks the theme the panel resolves against.
+ *
+ * Optimistic like every other UI mutation, but with one difference that matters: this is a **lens**
+ * and writes nothing to the document (UX §8.3, §11 resolution 1). The plugin's reply re-derives the
+ * report — flags are theme-scoped too — which is why the local model is not patched here.
+ */
+export function setActiveTheme(name: string): void {
+  send({ type: "set-active-theme", name });
+}
+
+/** The canvas switch — a second, explicit action, and the only one that touches the document. */
+export function switchPageTheme(name: string): void {
+  send({ type: "switch-page-theme", name });
 }

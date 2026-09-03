@@ -7,7 +7,7 @@
 // Nothing here writes to Figma. Editing a token changes the local tree only; applying tokens back
 // to Variables and Styles is Phase 5, and committing them is Phase 6.
 
-import type { PluginToUiMessage, UiToPluginMessage } from "../messages";
+import type { ImportPayload, PluginToUiMessage, UiToPluginMessage } from "../messages";
 import { copy, el, toast } from "./dom";
 import { closeDetail, isDetailOpen, renderDetail, setNavigator } from "./detail";
 import { initImportView, setImportPayload, setImportScanning, showImportError } from "./importView";
@@ -89,6 +89,7 @@ function showTab(next: Tab): void {
  * | Figma changes only  | `3 changed`                                       |
  * | Both                | `7 local · 3 changed`                             |
  * | Any conflicts       | `2 conflicts` — amber, wins the slot outright     |
+ * | Any cycles          | `2 cycles` — amber, outranks even conflicts (§9)  |
  *
  * Conflicts win because they are the only state where the panel is showing a value two sources
  * disagree about; everything else is merely pending.
@@ -106,11 +107,23 @@ function renderStateSlot(): void {
   const conflicts = conflictedLines().length;
   const drifted = driftedLines().length;
   const local = model.overlay.entries.filter((entry) => entry.conflict === undefined).length;
+  const cycles = model.cycles.length;
 
   let label: string;
   let tone: "" | "on" | "warn" | "ok";
 
-  if (conflicts > 0) {
+  if (cycles > 0) {
+    // Rank 2 — above conflicts (UX §9, resolution 4). A cycle is the only left-half state that
+    // **refuses an operation outright**: every token on a loop is blocked at apply, so a user about
+    // to press Apply needs to know before they press it. That is the same argument that put
+    // `diverged` first, applied to the Figma side; conflicts, by contrast, have a live value and
+    // merely need a decision.
+    //
+    // The count is **loops, not tokens on loops**. Counting the nine tokens across two loops would
+    // make a small problem look like a large one.
+    label = `${cycles} cycle${cycles === 1 ? "" : "s"}`;
+    tone = "warn";
+  } else if (conflicts > 0) {
     label = `${conflicts} conflict${conflicts === 1 ? "" : "s"}`;
     tone = "warn";
   } else if (local === 0 && drifted === 0) {
@@ -262,6 +275,41 @@ scanButton.addEventListener("click", () => {
   send({ type: "scan" });
 });
 
+/** The theme currently reported by the plugin, so a change can be told from a re-emit. */
+let lastReportedTheme: string | null | undefined;
+
+/**
+ * §8.3 — the two consequences of a theme change that would otherwise read as bugs, in one toast.
+ *
+ * Values change, which is the feature. And **flag counts change**, because `⚑ unresolved` appears
+ * and disappears with the theme and so can `⚑ cycle` — the graph is theme-scoped too (§7.4). A
+ * `⚑ N flagged` count moving when you switch a lens looks alarming; the second sentence is what
+ * makes it read as arithmetic instead, and it is **omitted entirely when the count is zero**,
+ * because a toast that says "and nothing is wrong" every time is one people dismiss unread.
+ */
+function reportThemeChange(payload: ImportPayload): void {
+  if (payload.themeFellBackFrom !== undefined) {
+    // Silently resolving against a stack the user did not choose would change every displayed value
+    // with no explanation (ADR-0007 §7a).
+    toast(
+      `${payload.themeFellBackFrom} isn't in this file any more. Showing ${payload.activeTheme ?? "nothing"} instead.`
+    );
+    lastReportedTheme = payload.activeTheme;
+    return;
+  }
+
+  const changed = lastReportedTheme !== undefined && lastReportedTheme !== payload.activeTheme;
+  lastReportedTheme = payload.activeTheme;
+  if (!changed || payload.activeTheme === null) return;
+
+  const unresolved = payload.entries.filter((entry: { kind: string }) => entry.kind === "unresolved-in-theme").length;
+  toast(
+    unresolved === 0
+      ? `Resolving against ${payload.activeTheme}.`
+      : `Resolving against ${payload.activeTheme}. ${unresolved} token${unresolved === 1 ? "" : "s"} ${unresolved === 1 ? "has" : "have"} no value in this theme.`
+  );
+}
+
 window.onmessage = (event: MessageEvent) => {
   const message = event.data.pluginMessage as PluginToUiMessage | undefined;
   if (!message) return;
@@ -309,7 +357,25 @@ window.onmessage = (event: MessageEvent) => {
       // not the banner (UX §5.5).
       toast(`${merge.applied} local edit${merge.applied === 1 ? "" : "s"} reapplied.`);
     }
+    reportThemeChange(message.payload);
     if (tab === "tokens") renderTokens();
+    return;
+  }
+
+  if (message.type === "theme-switch-result") {
+    // Partial mapping is reported, never silent (ADR-0007 §7c). Style-backed sets are excluded
+    // upstream and never appear here — Figma Styles have no modes, so naming them every time is how
+    // you teach someone to stop reading the toast.
+    //
+    // **No `[ Undo ]`.** The rule holds without an exemption: the panel can undo what it did to the
+    // tokens; only Figma can undo what was done to the file (UX §8.4).
+    const unmapped = message.unmapped.concat(message.failed.map((each) => each.collectionName));
+    const head = `Switched this page to ${message.theme}.`;
+    toast(
+      unmapped.length === 0
+        ? head
+        : `${head} ${unmapped.length} set${unmapped.length === 1 ? "" : "s"} ${unmapped.length === 1 ? "has" : "have"} no Figma mode: ${unmapped.join(", ")}.`
+    );
     return;
   }
 
