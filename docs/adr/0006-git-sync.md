@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Date**: 2026-09-02
-**Accepted**: 2026-09-02 — Shyam resolved every open question that was his to make; the one item still open is an API fact to verify during implementation, not a decision. See [Open questions](#open-questions-not-decided-here).
+**Accepted**: 2026-09-02 — Shyam resolved every open question that was his to make; the one item still open is an API fact to verify during implementation, not a decision. See [Open questions](#open-questions-not-decided-here). Phase 6 built and merged against this ADR 2026-09-03 (PR #14, `8efe321`), unamended.
 **Owner**: @tech-lead
 
 > Shyam resolved this ADR's six open questions on 2026-09-02, before acceptance. They are folded into the decision sections below and marked *(resolved 2026-09-02)*: divergence is per-file, whole-file pick-a-side and only the diverged file blocks (§6); first connect asks once whether to adopt the repo (§6); push and pull are manual, with no auto-pull (§5); the diff/commit view is its own surface (§8); Tokenvault is a sync client, not a git client (§9); and a bulk *Take Figma's* gets its own confirmation (§7).
@@ -72,7 +72,7 @@ One new key, unrelated to any file, holding the connection:
 |---|---|---|
 | `tokenvault:github` | `{ owner, repo, branch, tokensDir, patLastFour }` — the settings panel's contents, minus the PAT | < 1 KB |
 | `tokenvault:github-pat` | the PAT, alone, so it can be cleared without disturbing settings | < 1 KB |
-| `tokenvault:sync:<file-id>` | `{ owner, repo, branch, baseCommitSha, blobShas: Record<path, sha>, at }` | ~1 KB at 12 files |
+| `tokenvault:sync:<file-id>` | `{ owner, repo, branch, tokensDir, baseCommitSha, blobShas: Record<path, sha>, at }` | ~1 KB at 12 files |
 
 `tokenvault:github` and the PAT are **not** file-scoped: a credential and a repo are the user's, not the Figma file's. Sync state **is** file-scoped, on ADR-0004 §1's existing `resolveStorageKey()` scheme, because two Figma files can legitimately sync to two repos.
 
@@ -197,7 +197,7 @@ Commit message: a generated one-liner plus a body listing the changed sets and c
 Shyam's call, and it settles §9 permanently rather than for Phase 6 only: **one branch, push and pull, and a link out to GitHub for anything deeper.** No in-plugin branch creation, no PR flow, no merge, no history browser. Where a user needs one of those, the plugin opens the repo, the branch, or the commit in GitHub and lets GitHub be the git client. That keeps the surface honest about what it is, and keeps review state — which sits next to the team semantics PRD §4 excludes for v1 — out of the plugin entirely.
 
 
-The settings panel offers a branch picker populated from `GET /repos/{owner}/{repo}/branches`, and every sync operation targets the configured branch. Changing branch invalidates `tokenvault:sync:<file-id>` — a different branch is a different base — and the next status check re-establishes it.
+The settings panel offers a branch picker populated from `GET /repos/{owner}/{repo}/branches`, and every sync operation targets the configured branch. Changing branch invalidates `tokenvault:sync:<file-id>` — a different branch is a different base — and the next status check re-establishes it. **Correction, post-merge (2026-09-03, `cb086ee`):** the same is true of `tokensDir` — every `blobShas` entry is a repo path built from it, so a folder change invalidates the base for exactly the reason a branch change does, and `tokensDir` was added to the equality check accordingly. The first build shipped without it, which made a folder rename misread every file as diverged; caught by post-merge review, not by design.
 
 **No branch creation, no PR flow, no merge.** PRD §6.4 asks for "sync against a specific branch, not just `main`", which this satisfies exactly. Growing a PR flow means modelling review state, and review state is uncomfortably close to the team semantics PRD §4 rules out for v1.
 

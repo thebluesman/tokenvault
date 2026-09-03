@@ -1,6 +1,6 @@
 # UX: Git sync (Phase 6)
 
-**Status:** Settled — ready to build. All six questions in §13 are closed by Shyam's decisions of 2026-09-02; nothing in this doc is open. Not yet shipped, so not yet *Implemented*.
+**Status:** Implemented — Phase 6 shipped 2026-09-03 (PR #14) and was validated live in Figma. All six questions in §13 are closed. One implementation-only correction, caught by post-merge review rather than a design gap: the sync base needs invalidating on a tokens-folder change, not just a branch/repo/owner change (ADR-0006 §9) — `cb086ee`. Still the live spec: amend it when the design changes.
 **Owner:** `@ux-designer`
 **Covers:** PRD §6.4 (git sync, PAT auth, branch selection, pre-commit diff), §6.7 (plugin panel — sync status indicator, settings panel), build plan §9 Phase 6.
 **Builds on:** `docs/ux/local-editor.md` (Phase 4) and `docs/ux/apply-and-drift.md` (Phase 5) — same panel, same 460 × 640 px, same vocabulary. Read both first; this doc extends them and does not restate them.

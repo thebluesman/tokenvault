@@ -6,7 +6,7 @@ Built incrementally with Claude Code, running entirely on free infrastructure. Z
 
 ## Status
 
-**Phase 4 (in-plugin local editor) in progress.** Phase 1's scaffold, Phase 2's Variables import and Phase 3's Styles import are done. See [`docs/prd.md` §9](docs/prd.md#9-build-plan-phased-for-claude-code-sessions) for the phased build plan and [`CLAUDE.md`](CLAUDE.md) for current phase status.
+**Phase 6 (Git sync) landed 2026-09-03.** Phases 1–6 — scaffold, Variables import, Styles import, the local editor, applying to Figma with drift detection, and git sync over a PAT — are done. See [`docs/prd.md` §9](docs/prd.md#9-build-plan-phased-for-claude-code-sessions) for the phased build plan and [`CLAUDE.md`](CLAUDE.md) for current phase status.
 
 ### Running the plugin locally
 
@@ -30,8 +30,8 @@ Every local variable collection and every mode becomes the DTCG token tree defin
 Number variables whose Figma `VariableScope` says nothing useful are tagged `spacing` with
 `subtypeSource: "default"` and listed for confirmation; duration and easing are never
 auto-detectable and only ever arrive as an explicit user tag (PRD §6.1). User tags are held in
-Figma's `clientStorage` until Phase 6 gives the plugin a real working copy to read them back
-from.
+Figma's `clientStorage`; Phase 6 gives the plugin a real working copy in a connected repo, but
+tags still live in the overlay regardless of connection state.
 
 Every local paint, text, effect and grid style becomes four synthetic, mode-free token sets under
 `tokens/styles/`, per [ADR-0003](docs/adr/0003-styles-token-schema.md) — paint → `color`, text →
@@ -47,8 +47,9 @@ token (gradients, image fills, stacked paints, blur-only effects) are flagged, n
 composites that imported with something missing (an `AUTO` line height, a blur beside a shadow)
 are flagged as `partial-token`.
 
-Nothing is written to git yet — that's Phase 6. To get the generated tree onto disk, use
-**Copy whole tree as JSON** and:
+Nothing here writes to git — Phase 2/3's scan is a read-only import. Once a repo is connected
+(see [Git sync](#git-sync) below), pushing is how the tree reaches disk in the repo. Without a
+connection, or to get a one-off copy, use **Copy whole tree as JSON** and:
 
 ```
 pbpaste > /tmp/tree.json
@@ -75,8 +76,9 @@ regenerating so no stale set is left behind.
 
 ### The local editor
 
-The **Tokens** tab browses the imported tree and edits it in place — no writes to Figma (Phase 5),
-no commits (Phase 6). It follows [`docs/ux/local-editor.md`](docs/ux/local-editor.md) and
+The **Tokens** tab browses the imported tree and edits it in place — edits stay local until they're
+either applied to Figma (below) or pushed to a connected repo (below). It follows
+[`docs/ux/local-editor.md`](docs/ux/local-editor.md) and
 [ADR-0004](docs/adr/0004-local-edit-persistence.md).
 
 Browsing is **one merged tree across every set**, keyed by dotted path rather than by token: the
@@ -105,8 +107,40 @@ moved the local edit wins and is flagged `edit-conflict`; where the target is go
 
 The header chip reads **Local edits · N**, not "unsaved changes": `clientStorage` is per-device and
 unsynced, so the edits are durable on this machine, invisible on another, and not committed
-anywhere. "Copy whole tree as JSON" applies the overlay and remains the only durable exit until
-Phase 6.
+anywhere until applied or pushed (below).
+
+### Applying to Figma, and drift
+
+The **Repo** tab's status chip and the panel's header both surface **drift** — a flag on any token
+whose Figma value has moved since the last scan or the last pull. **Apply** writes the edited
+overlay back onto Figma Variables/Styles: it previews every target before writing, refuses a
+target that's also changed in Figma rather than guessing which side wins, and a
+token-to-token reference applies as a native Figma variable alias, never a flattened value. Deleting
+a Figma variable or style is its own separate, destructive-styled confirmation — never bundled into
+an apply. There is no plugin-side undo for a Figma write; Figma's own ⌘Z is the only way back. It
+follows [`docs/ux/apply-and-drift.md`](docs/ux/apply-and-drift.md) and
+[ADR-0005](docs/adr/0005-figma-apply-and-drift.md).
+
+### Git sync
+
+The **Repo** tab connects the file to a GitHub repo — owner/repo, branch, tokens folder, and a
+fine-grained Personal Access Token with `Contents: read and write` on that repo, entered in
+**Settings**. Once connected:
+
+- **Push** opens a diff-and-commit review screen, listing exactly which files and rows change,
+  with an editable commit message.
+- **Pull** fetches the repo's version of selected files and lands it as **pending overlay
+  entries** — never a direct Figma write. Getting a pulled value onto the canvas goes through the
+  same apply flow as a local edit.
+- **Divergence** — a file changed on both sides since the last sync — is refused, per file, until
+  you pick a side (*Keep mine* / *Take the repo's*); nothing auto-merges.
+- Connecting rebaselines drift to compare Figma against the repo's last-pulled value instead of the
+  last scan.
+
+Auth is PAT-only in v1 — no OAuth relay. The PAT crosses from the plugin sandbox to the iframe for
+one request and is never stored on the iframe side; `fetch` only exists in the iframe, and
+`clientStorage` only in the sandbox. It follows
+[`docs/ux/git-sync.md`](docs/ux/git-sync.md) and [ADR-0006](docs/adr/0006-git-sync.md).
 
 ### Layout
 
@@ -118,10 +152,14 @@ Phase 6.
 | `src/tokens/overlay.ts` | The local edit overlay (ADR-0004): entry shape, apply, and the rescan three-way merge. |
 | `src/tokens/edit.ts` | Per-type value parsing and validation. Pure; shared by the controller and the iframe. |
 | `src/tokens/references.ts` | Reference recognition and the inbound-reference index that blocks a delete. |
+| `src/tokens/plan.ts`, `src/tokens/preview.ts` | Builds and previews an `ApplyPlan` — the shared plan shape both a Figma apply and a git pull diff against (ADR-0005). |
+| `src/tokens/drift.ts` | Drift detection: compares the tree against a baseline, disconnected (last scan) or connected (last-pulled repo tree, ADR-0006 §7). |
 | `src/figma/scan.ts` | The only module that calls the Figma Variables API; flattens it to a plain snapshot. |
 | `src/figma/scanStyles.ts` | The only module that calls the Figma Styles API; same boundary, four style kinds. |
-| `src/ui/` | The plugin iframe — `importView.ts` (Import tab), `tokens.ts` + `detail.ts` (Tokens tab), `state.ts` (view model). |
-| `test/` | Unit tests over `src/tokens/`, run with `node --test` via esbuild (no test framework dependency). |
+| `src/figma/apply.ts` | The only module that writes to Figma Variables/Styles — executes an `ApplyPlan` (ADR-0005). |
+| `src/git/` | Pure git-sync logic (ADR-0006) — `state.ts` (settings/sync-state shapes and validity), `api.ts` (GitHub REST client), `diff.ts`/`filediff.ts` (status and per-row diff), `commit.ts`/`pull.ts` (push and pull plan builders), `blob.ts` (git blob SHA), `paths.ts` (repo-path ↔ token-path mapping). No `fetch` or `figma` global. |
+| `src/ui/` | The plugin iframe — `importView.ts` (Import tab), `tokens.ts` + `detail.ts` (Tokens tab), `applyDialog.ts` + `deleteFigma.ts` (apply/delete flows), `repo.ts` + `git.ts` (Repo tab and sync orchestration — the one place `fetch` is called), `settings.ts` (connection settings), `state.ts` (view model). |
+| `test/` | Unit tests over `src/tokens/` and `src/git/`, run with `node --test` via esbuild (no test framework dependency). |
 
 ## Why
 
