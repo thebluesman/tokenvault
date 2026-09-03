@@ -122,7 +122,7 @@ So: **an expression entry is sticky and re-applies on every rebuild.** That is t
 
 ### 7. Themes: an active theme is the necessary part, and it is plugin state
 
-Three things go by "themes" in PRD §6.2. Phase 7 needs them in this order, and only the first is unavoidable.
+Three things go by "themes" in PRD §6.2. Only the first is unavoidable, and after Shyam's 2026-09-03 scope call **Phase 7 builds (a) and (c) — read-only selection and switching — and not (b)**.
 
 **(a) An active theme — lands, and everything else depends on it.** A single string, the theme's name from `$manifest.json`'s `themes[]`, stored per file at `tokenvault:active-theme:<file-id>` using ADR-0004 §1's existing `resolveStorageKey()` scheme. A few bytes; the 5MB budget is untouched. It selects the set stack that §4's resolution and §5's validation run against, in `selectedTokenSets` order, last-wins (ADR-0002 §1 — already decided, Phase 7 only implements the resolver).
 
