@@ -50,28 +50,68 @@ export interface ResolveContext {
   stack: Map<string, FlatToken>;
   /** `normalizePathKey(path)` → some token at that path, anywhere in the tree. */
   everywhere: Map<string, FlatToken>;
+  /**
+   * `normalizePathKey(path)` → **every** `$type` any set gives that path.
+   *
+   * `everywhere` keeps one token per path, and which one is iteration order — fine for *"does this
+   * path exist at all"* (rule 1) and for a display fallback, and not fine for a type check. Two sets
+   * may define `space.4` as a `number` and as a `dimension`, and letting whichever set was scanned
+   * first decide the type for every check against that path is a silent, theme-independent wrong
+   * answer. Rule 2 asks this set instead, so an out-of-stack target is refused only when *no* set
+   * defines it compatibly.
+   */
+  everywhereTypes: Map<string, Set<string>>;
+}
+
+export interface ResolveOptions {
+  /**
+   * Which token a path resolves to, when several sets define it — ADR-0007 §3.
+   *
+   * `"last"` is the theme stack's rule (`selectedTokenSets` order, ADR-0002 §1) and is what the
+   * editor and the build want after `stackTokens` has been filtered to the active theme's sets.
+   * `"first"` matches the collision winner (ADR-0002 §5) and `plan.ts`'s alias index, and is what a
+   * whole-tree, theme-agnostic context must use — see `buildFlatResolveContext`.
+   */
+  resolution?: "first" | "last";
 }
 
 export function buildResolveContext(
   stackTokens: FlatToken[],
-  allTokens: FlatToken[]
+  allTokens: FlatToken[],
+  options: ResolveOptions = {}
 ): ResolveContext {
-  const graph = buildReferenceGraph(stackTokens, { resolution: "last" });
+  const resolution = options.resolution ?? "last";
+  const graph = buildReferenceGraph(stackTokens, { resolution });
   const stack = new Map<string, FlatToken>();
-  for (const entry of stackTokens) stack.set(normalizePathKey(entry.path), entry);
+  for (const entry of stackTokens) {
+    const key = normalizePathKey(entry.path);
+    if (resolution === "last" || !stack.has(key)) stack.set(key, entry);
+  }
 
   const everywhere = new Map<string, FlatToken>();
+  const everywhereTypes = new Map<string, Set<string>>();
   for (const entry of allTokens) {
     const key = normalizePathKey(entry.path);
     if (!everywhere.has(key)) everywhere.set(key, entry);
+    const types = everywhereTypes.get(key);
+    if (types === undefined) everywhereTypes.set(key, new Set([entry.token.$type]));
+    else types.add(entry.token.$type);
   }
 
-  return { graph, cycles: findCycles(graph), stack, everywhere };
+  return { graph, cycles: findCycles(graph), stack, everywhere, everywhereTypes };
 }
 
-/** For the paths that never have a theme — a context over the whole tree, no stack filtering. */
+/**
+ * For the paths that never have a theme — a context over the whole tree, no stack filtering.
+ *
+ * **First-wins, deliberately.** This is the context `plan.ts` falls back to when no theme-scoped one
+ * is supplied, and it sits beside an alias index and a cycle graph that are both first-wins (ADR-0002
+ * §5's collision winner, restated by ADR-0007 §3). A last-wins context here would let a reference and
+ * an expression touching the same collided path resolve to two different tokens inside one apply —
+ * the same value, written two ways, from one plan.
+ */
 export function buildFlatResolveContext(tokens: FlatToken[]): ResolveContext {
-  return buildResolveContext(tokens, tokens);
+  return buildResolveContext(tokens, tokens, { resolution: "first" });
 }
 
 export function emptyResolveContext(): ResolveContext {
@@ -80,6 +120,7 @@ export function emptyResolveContext(): ResolveContext {
     cycles: emptyCycleIndex(),
     stack: new Map(),
     everywhere: new Map(),
+    everywhereTypes: new Map(),
   };
 }
 
@@ -413,13 +454,34 @@ function checkReference(value: string, input: AuthorInput): AuthorOutcome {
   // Rule 2. Compared against the token the *active theme* resolves to where there is one, and
   // against the tree otherwise — a path that exists only outside the stack still has a `$type`, and
   // pointing a colour at a number is wrong in every theme.
-  const typed = context.stack.get(key) ?? anywhere;
-  if (typed.token.$type !== entry.token.$type) {
-    return {
-      ok: false,
-      reason: "reference-type-mismatch",
-      message: `${target} is a ${typed.token.$type}. This token is a ${entry.token.$type}, so it can't point there.`,
-    };
+  //
+  // Out of the stack, the comparison is against **every** `$type` the tree gives that path, not
+  // against whichever set happened to be scanned first: a path defined as a `number` in one set and
+  // a `dimension` in another has no single answer here, and picking one silently would refuse a
+  // perfectly good edit (or wave through a bad one) on iteration order. Refusing only when no set
+  // defines it compatibly matches rule 4's posture — the theme decides, and where the theme has not
+  // decided we do not invent an answer.
+  const inStack = context.stack.get(key);
+  if (inStack !== undefined) {
+    if (inStack.token.$type !== entry.token.$type) {
+      return {
+        ok: false,
+        reason: "reference-type-mismatch",
+        message: `${target} is a ${inStack.token.$type}. This token is a ${entry.token.$type}, so it can't point there.`,
+      };
+    }
+  } else {
+    const types = context.everywhereTypes.get(key) ?? new Set([anywhere.token.$type]);
+    if (!types.has(entry.token.$type)) {
+      return {
+        ok: false,
+        reason: "reference-type-mismatch",
+        message:
+          types.size === 1
+            ? `${target} is a ${anywhere.token.$type}. This token is a ${entry.token.$type}, so it can't point there.`
+            : `${target} is a ${listTypes(Array.from(types))} depending on the set. None of them is a ${entry.token.$type}, so this token can't point there.`,
+      };
+    }
   }
 
   // Rule 4.
@@ -449,6 +511,13 @@ function missingThemesFor(paths: string[], input: AuthorInput): string[] {
     }
   }
   return missing;
+}
+
+/** `a number or a dimension` — the same shape as `listThemes`, for a path with more than one type. */
+function listTypes(types: string[]): string {
+  const sorted = types.slice().sort();
+  if (sorted.length === 1) return sorted[0];
+  return `${sorted.slice(0, -1).join(", ")} or a ${sorted[sorted.length - 1]}`;
 }
 
 function listThemes(names: string[]): string {

@@ -19,6 +19,8 @@ import type { ReportEntry, Token, TokenFileOutput, TokenGroup, TokenValue } from
 import type { FlatToken } from "./view";
 import { isToken } from "./paths";
 import { valueShape } from "./expr";
+import { buildResolveContext, resolveValue } from "./resolve";
+import { tokensInStack } from "./themes";
 import { stableStringify } from "./serialize";
 
 /** Variables key on `variableId` **and** `modeId`; styles key on `styleId` (ADR-0004 §2). */
@@ -431,6 +433,35 @@ export interface MergeOptions {
    * string exists while a file is disconnected.
    */
   evaluate?: (expression: string) => number | null;
+}
+
+/**
+ * The evaluator `mergeOverlay`'s expression row needs — ADR-0004 §4's addendum, ADR-0007 §6.
+ *
+ * **Over the effective tree**, which is the whole point of it living here rather than being
+ * assembled at the call site. The comparison the merge makes is *"has Figma caught up with what
+ * this expression comes to?"*, and the number it has to be about is the one an apply would write.
+ * Apply evaluates against the effective tree (`plan.ts` takes `input.tokens`, overlay applied), so a
+ * merge evaluating against the raw scan is answering a different question with the same shape: an
+ * entry holding `{b} * 2` where `b` carries its own pending edit would be judged against `b`'s stale
+ * scanned value, settling or reporting the entry on a number that exists nowhere.
+ *
+ * The overlay passed here is the one going *into* the merge — the same input `mergeOverlay` reads,
+ * so there is no ordering question about which overlay "the effective tree" means.
+ */
+export function mergeEvaluator(
+  flat: FlatToken[],
+  overlay: EditOverlay,
+  stack: string[]
+): (expression: string) => number | null {
+  const effective = applyOverlay(flat, overlay).tokens;
+  const context = buildResolveContext(tokensInStack(effective, stack), effective);
+  return (expression) => {
+    const resolved = resolveValue({ $type: "number", $value: expression }, context);
+    return resolved.kind === "expression" && typeof resolved.value === "number"
+      ? resolved.value
+      : null;
+  };
 }
 
 export function mergeOverlay(

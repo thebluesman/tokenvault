@@ -21,6 +21,7 @@ import {
   setShadowField,
   setTypographyField,
   shadowList,
+  subKeyReferenceMessage,
   subtypeWarning,
   withDescription,
   withValue,
@@ -176,10 +177,15 @@ test("editing a shadow field keeps the rest of the shadow", () => {
   assert.equal(expectOk(setShadowField(SHADOW, "color", "#FFF")).color, "#ffffff");
 });
 
-test("a shadow colour that is a reference is preserved verbatim", () => {
+// ADR-0007 §10 defers sub-key reference authoring, and `parseDimension` and a grid's `count` both
+// refuse one by name. A shadow colour used to accept any `{…}`-shaped string unchecked, writing a
+// reference nothing downstream indexes, resolves or binds.
+test("a shadow colour refuses a reference, the same way every other sub-key does", () => {
+  const result = setShadowField(SHADOW, "color", "{folio.ref.palette.black}");
+  assert.equal(result.ok, false);
   assert.equal(
-    expectOk(setShadowField(SHADOW, "color", "{folio.ref.palette.black}")).color,
-    "{folio.ref.palette.black}"
+    result.ok === false ? result.message : "",
+    subKeyReferenceMessage("{folio.ref.palette.black}")
   );
 });
 

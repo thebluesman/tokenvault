@@ -33,6 +33,7 @@ import {
   emptyOverlay,
   indexOverlay,
   keepMine,
+  mergeEvaluator,
   mergeOverlay,
   parseOverlay,
   recordEdit,
@@ -48,7 +49,7 @@ import {
   themeState,
   tokensInStack,
 } from "./tokens/themes";
-import { buildResolveContext, graphReport, resolveValue, themePathSet } from "./tokens/resolve";
+import { buildResolveContext, graphReport, themePathSet } from "./tokens/resolve";
 import { currentPageModes, switchPageToModes } from "./figma/modes";
 import { buildMergedImport } from "./tokens/merge";
 import { stableStringify } from "./tokens/serialize";
@@ -494,15 +495,11 @@ async function rebuild(fromScan: boolean, refresh = false): Promise<void> {
   }
   if (state.active !== null) activeThemeName = state.active.name;
   const stack = themeSetStack(result.manifest, state.active);
-  const resolveContext = buildResolveContext(tokensInStack(flat, stack), flat);
-
+  // The evaluator resolves against the **effective** tree — `flat` plus the overlay going in — not
+  // against the raw scan; `mergeEvaluator` owns that and says why. The report below builds its own
+  // context against the merge's *output* overlay, which is a different tree on purpose.
   const merged = mergeOverlay(flat, overlay, now, {
-    evaluate: (expression) => {
-      const resolved = resolveValue({ $type: "number", $value: expression }, resolveContext);
-      return resolved.kind === "expression" && typeof resolved.value === "number"
-        ? resolved.value
-        : null;
-    },
+    evaluate: mergeEvaluator(flat, overlay, stack),
   });
 
   // Drift is computed **before** the merge's outcome retires anything, and against the overlay as

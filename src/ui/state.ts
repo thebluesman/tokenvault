@@ -504,6 +504,10 @@ export function planRestoreDrift(keys: string[]): ApplyPlan {
       styleGuards: model.styleGuards,
       nonLocalPaths: model.nonLocalPaths,
       guardsKnown: model.guardsKnown,
+      // The same theme-scoped context `planFor` passes. Omitting it fell back to the whole-tree,
+      // theme-agnostic one, so a restore could evaluate an expression against a set the active
+      // theme does not include — a different number from the one every other apply path computes.
+      resolve: model.resolve,
     },
     { keys: wanted }
   );

@@ -22,7 +22,7 @@ import type { AuthorOutcome, ResolveContext } from "../tokens/resolve";
 import type { Line } from "./state";
 import { checkAuthoredValue, resolveValue, referencePathsOf } from "../tokens/resolve";
 import { cycleFromCandidate, describeCycle, graphNodeKey } from "../tokens/graph";
-import { noOpReferenceIn, valueShape } from "../tokens/expr";
+import { looksLikeExpression, noOpReferenceIn, valueShape } from "../tokens/expr";
 import { isReference, referenceTarget } from "../tokens/references";
 import { normalizePathKey } from "../tokens/paths";
 import { getModel } from "./state";
@@ -200,8 +200,13 @@ export function pickerGroups(
   const groups: PickerGroups = { usable: [], wrongType: [], wouldLoop: [] };
   const seen = new Set<string>();
 
-  for (const [key, target] of context.everywhere) {
+  for (const [key, anywhere] of context.everywhere) {
     if (seen.has(key)) continue;
+    // The active theme's answer where it has one. `everywhere` keeps one token per path and which
+    // one is iteration order, so a path two sets define with different `$type`s would otherwise be
+    // grouped and previewed as whichever set was scanned first — independent of what the theme the
+    // user is looking at actually resolves it to (ADR-0007 §3).
+    const target = context.stack.get(key) ?? anywhere;
     // Substring over the full dotted path, case-insensitive — Phase 4 §4.6's rule, not a second
     // one. Paths this structured make fuzzy matching noise.
     if (needle.length > 0 && target.path.toLowerCase().indexOf(needle) === -1) continue;
@@ -223,7 +228,13 @@ export function pickerGroups(
       groups.wouldLoop.push(row);
       continue;
     }
-    const compatible = wantNumber ? target.token.$type === "number" : target.token.$type === wantType;
+    // Mirrors `checkAuthoredValue`'s rule 2 exactly, including its out-of-stack branch, so the
+    // picker never offers a path the field would then refuse and never greys out one it would take.
+    const types =
+      context.stack.has(key)
+        ? new Set([target.token.$type])
+        : context.everywhereTypes.get(key) ?? new Set([target.token.$type]);
+    const compatible = types.has(wantNumber ? "number" : wantType);
     if (compatible) groups.usable.push(row);
     else groups.wrongType.push(row);
 
@@ -321,14 +332,13 @@ export function authorValue(line: Line, raw: string): AuthorOutcome {
 
 /** True when the raw text is a pointer or a formula rather than a literal for the type's own parser. */
 export function isNonLiteral(raw: string, type: string): boolean {
-  const trimmed: string = raw.trim();
   // `isReference` is a `value is string` guard, so it has to be asked without narrowing the local.
   if (isReference(raw.trim())) return true;
   if (type !== "number") return false;
-  // A `number` field only routes to the parser when the text is *reaching* for an expression —
-  // braces, an operator, or parentheses. `sixteen` is a mistyped number and deserves "that isn't a
-  // number", not "expressions can't call functions".
-  return /[{}+*/()]/.test(trimmed) || /\d\s*-|^-\s*\D|\S\s+-\s+\S/.test(trimmed);
+  // Asked of the grammar itself rather than of a regex here. A hand-rolled heuristic beside
+  // `expr.ts` is a second classifier that can disagree with the parser it routes to, which is what
+  // ADR-0007 §1 and UX §4.1 both refuse — one grammar, one definition of what an expression is.
+  return looksLikeExpression(raw);
 }
 
 /**

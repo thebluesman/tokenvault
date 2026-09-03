@@ -222,10 +222,13 @@ export function setShadowField(
     return ok(next);
   }
   if (field === "color") {
-    if (isReference(raw)) {
-      next.color = raw;
-      return ok(next);
-    }
+    // A composite's sub-key takes a literal, never a pointer — ADR-0007 §10 defers sub-key reference
+    // authoring, and `parseDimension` and `setGridField`'s `count` already refuse one by name. This
+    // field used to *accept* any `{…}`-shaped string unchecked, which wrote a reference the graph
+    // does not index, the resolver does not follow and `toFigma` cannot bind. Same refusal, same
+    // sentence, so the whole shadow editor answers the question one way.
+    const deferred = subKeyReferenceMessage(raw);
+    if (deferred !== null) return fail(deferred);
     const parsed = parseHexColor(raw);
     if (!parsed.ok) return parsed;
     next.color = parsed.value;

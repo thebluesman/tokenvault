@@ -80,6 +80,40 @@ export function isExpressionValue(token: Pick<Token, "$type" | "$value">): boole
   return valueShape(token) === "expression";
 }
 
+/**
+ * Was this text *reaching for* the expression grammar?
+ *
+ * The value field needs this to route what the user typed into a `number` row: to the type's own
+ * literal parser, or to this module. It is a real question — `sixteen` is a mistyped number and
+ * deserves *"that isn't a number"*, not *"expressions can't call functions"* — and the honest place
+ * to answer it is the tokenizer, which is the grammar. It used to be answered by a regex in
+ * `ui/valueField.ts`, which is exactly the second, hand-maintained classifier ADR-0007 §1 and the
+ * UX doc argue against: a grammar change would silently stop matching it.
+ *
+ * The rule, in the lexer's own terms:
+ *
+ *   - a plain numeric literal is never an expression, however it lexes. `-5` tokenizes as a negation
+ *     of `5`, and storing it as a formula rather than as the number it plainly is would be a quiet
+ *     data change (§2 — the string is the value);
+ *   - anything carrying a reference, an operator or a bracket is;
+ *   - so is a refusal that only an expression attempt can produce (`round(`, `{a`, `%`), and a
+ *     refusal that arrives *after* the lexer has already accepted expression syntax (`{a} px`);
+ *   - a bare word, a unit-suffixed number and a lone malformed number are not.
+ */
+export function looksLikeExpression(input: string): boolean {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) return false;
+  if (Number.isFinite(Number(trimmed))) return false;
+
+  const lexed = tokenize(trimmed);
+  if (!lexed.ok) {
+    return lexed.reaching === true || (lexed.toks ?? []).length > 0;
+  }
+  const toks = lexed.value;
+  if (toks.length !== 1) return true;
+  return toks[0].kind !== "number";
+}
+
 // ---------------------------------------------------------------------------
 // Tokenizer
 // ---------------------------------------------------------------------------
@@ -92,7 +126,31 @@ type Tok =
   | { kind: "rparen" };
 
 const DIGIT = /[0-9]/;
-const IDENT = /[A-Za-z_%]/;
+/**
+ * What an identifier is made of.
+ *
+ * **`%` is not in it, deliberately.** It was, and `a%b` then lexed as one identifier and came back
+ * as *"expressions can't call functions"* — a sentence about a mistake the user did not make. `%` is
+ * an operator this grammar does not have, so it is tokenized as one and refused as one.
+ */
+const IDENT = /[A-Za-z_]/;
+
+/**
+ * What the lexer found, including on failure.
+ *
+ * A refusal carries the tokens it *did* consume and whether the refusal is one only an expression
+ * attempt can produce. Both are for `looksLikeExpression`, which has to answer *"was this text
+ * reaching for the expression grammar?"* — a question the grammar itself is the only honest source
+ * for, and one the caller must not answer with a second regex (ADR-0007 §1).
+ */
+interface LexFailure {
+  ok: false;
+  error: ExprError;
+  toks?: Tok[];
+  reaching?: boolean;
+}
+
+type LexResult = { ok: true; value: Tok[] } | LexFailure;
 
 /**
  * Lexes an expression string.
@@ -102,9 +160,16 @@ const IDENT = /[A-Za-z_%]/;
  * function call (`round(`). Both are legal-looking and both have a specific, non-obvious reason for
  * being refused, so neither is allowed to fall through to a generic "unexpected character".
  */
-function tokenize(input: string): ExprResult<Tok[]> {
+function tokenize(input: string): LexResult {
   const out: Tok[] = [];
   let at = 0;
+
+  const fail = (reason: string, message: string, reaching?: boolean): LexFailure => ({
+    ok: false,
+    error: { reason, message },
+    toks: out,
+    reaching,
+  });
 
   while (at < input.length) {
     const char = input[at];
@@ -134,14 +199,14 @@ function tokenize(input: string): ExprResult<Tok[]> {
     if (char === "{") {
       const close = input.indexOf("}", at);
       if (close === -1) {
-        return fail("unclosed-reference", "Unfinished reference — this `{` has no closing `}`.");
+        return fail("unclosed-reference", "Unfinished reference — this `{` has no closing `}`.", true);
       }
       const path = input.slice(at + 1, close).trim();
       if (path.length === 0) {
-        return fail("empty-reference", "Empty reference — `{}` doesn't name a token.");
+        return fail("empty-reference", "Empty reference — `{}` doesn't name a token.", true);
       }
       if (path.indexOf("{") !== -1) {
-        return fail("bad-reference", "References can't be nested.");
+        return fail("bad-reference", "References can't be nested.", true);
       }
       out.push({ kind: "reference", path });
       at = close + 1;
@@ -186,24 +251,21 @@ function tokenize(input: string): ExprResult<Tok[]> {
     if (IDENT.test(char)) {
       let end = at;
       while (end < input.length && (IDENT.test(input[end]) || DIGIT.test(input[end]))) end += 1;
-      const word = input.slice(at, end);
-      if (word === "%") {
-        return fail(
-          "unsupported-operator",
-          "`%` isn't something expressions can do. They handle `+`, `-`, `*`, `/`, brackets, and nothing else."
-        );
-      }
       // `round(`, `lighten(` — a function call. Named as such rather than as a stray word, because
-      // that is the thing the user was actually reaching for (ADR-0007 §10).
+      // that is the thing the user was actually reaching for (ADR-0007 §10). A bare word gets the
+      // same sentence but is not, on its own, evidence the user meant an expression at all — see
+      // `looksLikeExpression`.
       return fail(
         "function-in-expression",
-        "Expressions can't call functions. `round`, `min`, `clamp` and colour functions aren't in this version."
+        "Expressions can't call functions. `round`, `min`, `clamp` and colour functions aren't in this version.",
+        input[end] === "("
       );
     }
 
     return fail(
       "unsupported-operator",
-      `\`${char}\` isn't something expressions can do. They handle \`+\`, \`-\`, \`*\`, \`/\`, brackets, and nothing else.`
+      `\`${char}\` isn't something expressions can do. They handle \`+\`, \`-\`, \`*\`, \`/\`, brackets, and nothing else.`,
+      true
     );
   }
 
