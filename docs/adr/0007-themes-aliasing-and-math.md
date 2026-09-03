@@ -67,7 +67,11 @@ Rejected: `{"$value": 8, "$extensions": {"com.tokenvault": {"expression": "{core
 
 ### 3. One reference graph, built once, checked at three points
 
-The graph is `path → paths it points at`, over both reference and expression edges, resolved through the active theme's set stack (§6). `references.ts`'s `collectReferences` already walks composite values and `boundVariables` to produce exactly this edge list; the new code is the forward index and a depth-first walk with three-colour marking that returns the closing cycle as a path, not a boolean.
+The graph is `token instance → the token instances it points at`, over both reference and expression edges. `references.ts`'s `collectReferences` already walks composite values and `boundVariables` to produce exactly this edge list; the new code is the forward index and a depth-first walk with three-colour marking that returns the closing cycle as a path, not a boolean.
+
+**A node is a token instance — `(setId, path)` — not a dotted path** *(clarified 2026-09-03)*. Two sets can define the same normalised path; that is a `cross-set` collision, which ADR-0002 §5 settles by picking a winner rather than by making the loser disappear. Keying nodes by path alone would merge those tokens into one node, union their outgoing edges, and let a cycle belonging to the loser refuse an ordinary edit on the winner — the exact failure `plan.ts` already guarded against in Phase 5. Instance-keyed identity is what Phase 7 built and what Shyam confirmed on 2026-09-03; the original wording above described the *edge direction*, not node identity, and read as path-keyed by accident.
+
+**What varies by context is edge-target resolution, not identity.** *Which* instance a `{path}` edge lands on is a theme question (ADR-0002 §2), so the caller supplies the scope and the tie-break: the active theme's set stack in `selectedTokenSets` order, last-wins (§7a), for the editor and the build; the whole tree, first-wins to match the collision winner (ADR-0002 §5), for `plan.ts`. The traversal is identical either way, which is the property that makes "one implementation" true.
 
 It is checked in three places, and it is **the same function in all three** — a second cycle implementation that could disagree with the first about what a cycle is would be worse than no check:
 
