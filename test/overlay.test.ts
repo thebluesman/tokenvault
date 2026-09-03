@@ -635,3 +635,85 @@ test("stored entries that could never match a token again are dropped on load", 
   });
   assert.equal(parsed.entries.length, 1);
 });
+
+// ---------------------------------------------------------------------------
+// Expression entries in the merge — ADR-0007 §6, the one row Phase 7 amends
+// ---------------------------------------------------------------------------
+
+/** A `number`-typed target, so `valueShape` sees a string value as an expression. */
+function numberLine(value: unknown): FlatToken {
+  return flat("space.button", "Theme/Light", {
+    $type: "number",
+    $value: value as Token["$value"],
+    $extensions: {
+      "com.tokenvault": {
+        figma: { variableId: "VariableID:1:4", modeId: "1:0", collectionId: "VariableCollectionId:1:1" },
+      },
+    },
+  });
+}
+
+function expressionEdit(expression: string, base: unknown): OverlayEntry {
+  return {
+    target: { variableId: "VariableID:1:4", modeId: "1:0" },
+    path: "space.button",
+    set: "Theme/Light",
+    op: "set-value",
+    at: NOW,
+    value: expression as never,
+    base: base as never,
+  };
+}
+
+test("an expression entry survives an apply instead of reporting a spurious conflict", () => {
+  // Before Phase 7 this fell straight through to "differs from both `base` and `value`" and
+  // reported an `edit-conflict` after *every single apply* (ADR-0007 §6). The comparison is now
+  // made against `evaluate(entry.value)`.
+  const merged = mergeOverlay([numberLine(32)], overlayOf(expressionEdit("{core.4} * 2", 16)), NOW, {
+    evaluate: () => 32,
+  });
+  assert.equal(merged.conflicts, 0);
+  assert.equal(merged.entries.length, 0, "Figma catching up to an expression reports nothing");
+});
+
+test("an expression entry is sticky — it is kept, never retired", () => {
+  // Retiring it would silently downgrade the token to the flat number the expression produced, and
+  // the overlay is the only place that string exists while a file is disconnected.
+  const merged = mergeOverlay([numberLine(32)], overlayOf(expressionEdit("{core.4} * 2", 16)), NOW, {
+    evaluate: () => 32,
+  });
+  assert.equal(merged.retired, 0);
+  assert.equal(merged.applied, 1);
+  assert.equal(merged.overlay.entries.length, 1);
+  assert.equal(merged.overlay.entries[0].value, "{core.4} * 2");
+});
+
+test("an expression entry is kept unevaluated rather than guessed at", () => {
+  // No evaluator means we cannot compare. An entry the merge cannot evaluate is not evidence that
+  // Figma disagrees with it.
+  const merged = mergeOverlay([numberLine(32)], overlayOf(expressionEdit("{core.4} * 2", 16)), NOW);
+  assert.equal(merged.overlay.entries.length, 1);
+  assert.equal(merged.conflicts, 0);
+  assert.equal(merged.retired, 0);
+});
+
+test("Figma holding neither the base nor the expression's result is still a real conflict", () => {
+  const merged = mergeOverlay([numberLine(999)], overlayOf(expressionEdit("{core.4} * 2", 16)), NOW, {
+    evaluate: () => 32,
+  });
+  assert.equal(merged.conflicts, 1);
+  assert.equal(merged.entries[0].kind, "edit-conflict");
+});
+
+test("a plain reference entry still merges by string comparison, unchanged", () => {
+  // Import renders a Figma alias as `{path}`, so ADR-0004 §4's table compares two strings in the
+  // same rendering and needs no amendment. Only the *expression* row changed.
+  const caught = flat(LIGHT.path, LIGHT.setId, variableToken("VariableID:1:4", "1:0", "{folio.ref.red.50}"));
+  const merged = mergeOverlay(
+    [caught],
+    overlayOf(valueEdit("{folio.ref.red.50}", "#c33a2e")),
+    NOW
+  );
+  assert.equal(merged.retired, 1);
+  assert.equal(merged.overlay.entries.length, 0);
+});

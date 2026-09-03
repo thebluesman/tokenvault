@@ -87,7 +87,9 @@ test("each scalar type writes into its Variable and mode", () => {
 });
 
 test("a mistyped value refuses instead of being coerced", () => {
-  assert.equal(refusal(toFigmaValue(varToken("number", "16"))).reason, "bad-number");
+  // Not `varToken("number", "16")` any more: a string on a `number` token is Phase 7's expression
+  // shape (ADR-0007 §1), and `"16"` is a perfectly valid one-term expression. The coercion guard
+  // that matters is on the *evaluated* result, and it lives in `expr.ts`.
   assert.equal(refusal(toFigmaValue(varToken("boolean", "true"))).reason, "bad-boolean");
   assert.equal(refusal(toFigmaValue(varToken("color", "rebeccapurple"))).reason, "bad-color");
   assert.equal(refusal(toFigmaValue(varToken("number", Number.NaN))).reason, "bad-number");
@@ -98,9 +100,38 @@ test("a token with no Figma provenance refuses rather than guessing a target", (
   assert.equal(refusal(toFigmaValue(orphan as never)).reason, "no-provenance");
 });
 
-test("a math expression refuses — Phase 7 owns evaluation, and it has no Figma representation", () => {
+test("a math expression refuses when the caller cannot evaluate it", () => {
+  // Absent `evaluateExpression` means this apply has no resolver, and the honest answer is a named
+  // refusal rather than writing the string. Phase 5's producer never had one; Phase 7's does.
   const refused = refusal(toFigmaValue(varToken("number", "{spacing.100} * 2" as never)));
-  assert.equal(refused.reason, "expression-value");
+  assert.equal(refused.reason, "expression-unresolvable");
+});
+
+test("a math expression flattens to the number the evaluator returns — ADR-0007 §4", () => {
+  const result = ok(
+    toFigmaValue(varToken("number", "{spacing.100} * 2" as never), {
+      evaluateExpression: () => ({ ok: true, value: 32 }),
+    })
+  );
+  assert.deepEqual(result.write, {
+    kind: "variable-value",
+    variableId: "VariableID:1:1",
+    modeId: "1:0",
+    value: 32,
+  });
+});
+
+test("an expression the evaluator refuses is refused, never written as its string", () => {
+  const refused = refusal(
+    toFigmaValue(varToken("number", "{a} / 0" as never), {
+      evaluateExpression: () => ({
+        ok: false,
+        reason: "expression-error",
+        message: "Dividing by zero gives no value.",
+      }),
+    })
+  );
+  assert.equal(refused.reason, "expression-error");
 });
 
 // ---------------------------------------------------------------------------

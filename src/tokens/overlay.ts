@@ -18,6 +18,7 @@
 import type { ReportEntry, Token, TokenFileOutput, TokenGroup, TokenValue } from "./types";
 import type { FlatToken } from "./view";
 import { isToken } from "./paths";
+import { valueShape } from "./expr";
 import { stableStringify } from "./serialize";
 
 /** Variables key on `variableId` **and** `modeId`; styles key on `styleId` (ADR-0004 §2). */
@@ -420,7 +421,24 @@ export interface MergeOutcome {
  * the only side that cannot be recovered: discarding an edit is undoable by rescanning, and
  * clobbering one is undoable by nothing.
  */
-export function mergeOverlay(flat: FlatToken[], overlay: EditOverlay, now: string): MergeOutcome {
+export interface MergeOptions {
+  /**
+   * Evaluates an expression entry's value to the number Figma would hold — ADR-0007 §6.
+   *
+   * Absent means "we cannot evaluate", and an expression entry is then kept unconditionally rather
+   * than compared. Keeping is the safe direction: retiring one would silently downgrade the token
+   * to the flat number the expression happened to produce, and the overlay is the only place that
+   * string exists while a file is disconnected.
+   */
+  evaluate?: (expression: string) => number | null;
+}
+
+export function mergeOverlay(
+  flat: FlatToken[],
+  overlay: EditOverlay,
+  now: string,
+  options: MergeOptions = {}
+): MergeOutcome {
   const fresh = new Map<string, FlatToken>();
   for (const entry of flat) {
     const key = tokenKey(entry.token);
@@ -475,6 +493,42 @@ export function mergeOverlay(flat: FlatToken[], overlay: EditOverlay, now: strin
 
     const current: TokenValue | undefined =
       entry.op === "set-description" ? target.token.$description : target.token.$value;
+
+    // ADR-0007 §6 — the one row of §4's table Phase 7 amends, and it is amended in the open rather
+    // than discovered.
+    //
+    // After an apply the entry holds `"{a} * 2"` and Figma holds `8`. Those are never equal, so the
+    // "Figma caught up, retire silently" row never fires and the entry falls through to "differs
+    // from both `base` and `value`" — reporting a spurious `edit-conflict` after every single
+    // apply. So the comparison is made against `evaluate(entry.value)` instead, and the outcome is
+    // **keep the entry, report nothing**.
+    //
+    // Keeping it is the point, not a concession. An expression is authored data Figma cannot store,
+    // so retiring the entry would silently downgrade the token to the flat number the expression
+    // happened to produce. The consequence — an expression entry is sticky and re-applies on every
+    // rebuild — is correct behaviour, and UX §6.6 puts a line above the Local list so it does not
+    // read as a stuck state.
+    if (
+      entry.op === "set-value" &&
+      typeof entry.value === "string" &&
+      valueShape({ $type: target.token.$type, $value: entry.value }) === "expression"
+    ) {
+      const computed = options.evaluate?.(entry.value) ?? null;
+      if (computed !== null && valuesEqual(current, computed)) {
+        kept.push(withConflict(refreshed, dropSide(entry.conflict, "figma")));
+        applied += 1;
+        continue;
+      }
+      if (computed === null) {
+        // Nothing to compare against. Kept unconditionally rather than guessed at — an entry the
+        // merge cannot evaluate is not evidence that Figma disagrees with it.
+        kept.push(refreshed);
+        applied += 1;
+        continue;
+      }
+      // Falls through: Figma holds neither the base nor what the expression comes to, which is a
+      // genuine divergence and reports as one like any other.
+    }
 
     if (valuesEqual(current, entry.value)) {
       // Figma caught up. The entry is a no-op and quietly stops existing.

@@ -457,3 +457,98 @@ test("an unreferenced target plans a remove op for its own provenance half", () 
   const style = buildDeletePlan([{ path: "brand", setId: "S", token: styleToken("color", "#000000") }], inbound);
   assert.equal(style.entries[0].write?.kind, "style-remove");
 });
+
+// ---------------------------------------------------------------------------
+// Expressions at apply — ADR-0007 §4, the one place Tokenvault flattens
+// ---------------------------------------------------------------------------
+
+test("an expression flattens to a number, and the row carries the number that lands", () => {
+  // Figma has no representation for arithmetic, so flattening is not a choice; the choice is
+  // whether to make it visible, and the row's `expression` field is how the dialog does that
+  // ("a user cannot flatten without seeing the number that lands").
+  const target = { variableId: "VariableID:1:1", modeId: "1:0" };
+  const plan = buildApplyPlan({
+    imported: [
+      flat("space.button", "Theme/Light", varToken("number", 16)),
+      flat("core.4", "Theme/Light", varToken("number", 16, { variableId: "VariableID:2:2" })),
+    ],
+    tokens: [
+      flat("space.button", "Theme/Light", varToken("number", "{core.4} * 2")),
+      flat("core.4", "Theme/Light", varToken("number", 16, { variableId: "VariableID:2:2" })),
+    ],
+    overlay: overlay([
+      entry({
+        target,
+        path: "space.button",
+        op: "set-value",
+        value: "{core.4} * 2" as never,
+        base: 16 as never,
+      }),
+    ]),
+  });
+
+  const row = byPath(plan, "space.button");
+  assert.equal(row.status, "ready");
+  assert.deepEqual(row.expression, { source: "{core.4} * 2", resolved: 32 });
+  assert.deepEqual(row.write, {
+    kind: "variable-value",
+    variableId: "VariableID:1:1",
+    modeId: "1:0",
+    value: 32,
+  });
+});
+
+test("an expression that cannot be evaluated is refused, never written as its string", () => {
+  const target = { variableId: "VariableID:1:1", modeId: "1:0" };
+  const plan = buildApplyPlan({
+    imported: [flat("space.button", "Theme/Light", varToken("number", 16))],
+    tokens: [flat("space.button", "Theme/Light", varToken("number", "{missing} * 2"))],
+    overlay: overlay([
+      entry({
+        target,
+        path: "space.button",
+        op: "set-value",
+        value: "{missing} * 2" as never,
+        base: 16 as never,
+      }),
+    ]),
+  });
+
+  const row = byPath(plan, "space.button");
+  assert.equal(row.status, "skipped");
+  assert.equal(row.reason, "expression-error");
+  assert.equal(row.expression?.resolved, undefined);
+});
+
+test("the cycle check is widened to expression edges — ADR-0005 §11's rule, ADR-0007 §3's scope", () => {
+  // Before Phase 7 this loop was invisible to the plan: neither edge is an alias, so
+  // `collectReferences` saw nothing and the write would have been attempted.
+  const cycles = findReferenceCycles([
+    flat("a", "S", varToken("number", "{b} * 2")),
+    flat("b", "S", varToken("number", "{a} + 1")),
+  ]);
+  assert.equal(cycles.cycles.length, 1);
+  assert.equal(cycles.nodes.has(cycleNodeKey("S", "a")), true);
+  assert.equal(cycles.edges.has(cycleEdgeKey(cycleNodeKey("S", "a"), cycleNodeKey("S", "b"))), true);
+});
+
+test("a token on an expression cycle is refused at apply, with no fallback value", () => {
+  const target = { variableId: "VariableID:1:1", modeId: "1:0" };
+  const plan = buildApplyPlan({
+    imported: [
+      flat("a", "S", varToken("number", 1)),
+      flat("b", "S", varToken("number", 2, { variableId: "VariableID:2:2" })),
+    ],
+    tokens: [
+      flat("a", "S", varToken("number", "{b} * 2")),
+      flat("b", "S", varToken("number", "{a} + 1", { variableId: "VariableID:2:2" })),
+    ],
+    overlay: overlay([
+      entry({ target, path: "a", set: "S", op: "set-value", value: "{b} * 2" as never, base: 1 as never }),
+    ]),
+  });
+
+  const row = byPath(plan, "a");
+  assert.equal(row.status, "skipped");
+  assert.equal(row.expression?.resolved, undefined);
+});
