@@ -80,6 +80,8 @@ For each overlay entry, against the freshly built tree:
 | Value equals the entry's `value` | Figma caught up to the edit. Retire the entry silently — it is now a no-op. |
 | Value differs from both `base` and `value` | **Genuine conflict.** Apply the edit, report `edit-conflict`. |
 
+> **Addendum, 2026-09-03 (ADR-0007 §6).** Expression-valued entries need one extra comparison. After an apply, an entry holding `"{a} * 2"` sits against a Figma value of `8` — never string-equal, so the "Figma caught up" row cannot fire and the entry falls through to *genuine conflict*, reporting a spurious `edit-conflict` after every apply. For an entry whose `value` is a math expression (ADR-0007 §1), the third row's comparison is made against `evaluate(entry.value)`, and the outcome is **keep the entry and report nothing** rather than retire it: an expression is authored data Figma cannot store, so retiring it would silently downgrade the token to the flat number it produced. Expression entries are therefore sticky and re-apply on every rebuild. Everything else in this table is unchanged. See `docs/adr/0007-themes-aliasing-and-math.md` §6.
+
 A `delete` tombstone whose target is still in Figma is not a conflict — re-deriving the token is precisely what the tombstone exists to suppress. A tombstone whose target is gone from Figma retires silently; it got what it wanted.
 
 **On a genuine conflict the local edit wins, and every one is reported.** Not because local is more correct, but because it is the only side that cannot be recovered: discarding an edit is undoable by rescanning, and clobbering one is undoable by nothing. The non-destructive default keeps the irreplaceable side.
