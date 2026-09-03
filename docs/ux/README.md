@@ -10,6 +10,7 @@ fixtures in `test/fixtures/`, not against a hypothetical schema.
 | [`local-editor.md`](local-editor.md) | 4 — Local editor | Implemented |
 | [`apply-and-drift.md`](apply-and-drift.md) | 5 — Figma application + drift | Implemented, except §5.4 (bind); §6.4 amended by Phase 6 |
 | [`git-sync.md`](git-sync.md) | 6 — Git sync, diff, settings | Settled — ready to build |
+| [`references-math-themes.md`](references-math-themes.md) | 7 — Reference authoring, math, theme selection | Provisional — §11 has four questions for Shyam |
 
 **Status vocabulary.** *Provisional* — written ahead of the build, open questions still in the doc.
 *Settled* — every open question closed and the design is ready to build, but nothing has shipped yet,
@@ -31,4 +32,15 @@ Phase 5's §6.4 (the drift comparison block) now has two forms. The disconnected
 is still correct; the connected one is written in `git-sync.md` §10, which rebaselines drift onto the
 repo once a file is synced. Phase 5 predicted that amendment in the section itself.
 
-Not yet written: theming, aliasing and math (Phase 7), and the export pipeline (Phase 8).
+Phase 7 answers the one UX question ADR-0007 handed the designer — whether the editor steers users from a
+math expression toward a plain reference, given that an expression loses its live link in Figma. The answer
+is **yes, in exactly one case**: where the expression is arithmetically a no-op over a single reference
+(`{a} * 1`), the editor commits it and offers a one-tap swap. Everywhere else there is no warning at all,
+because a warning on every correct use of a feature is how `⚑` stops meaning anything.
+`references-math-themes.md` §6.5 argues it.
+
+Phase 7 also amends `local-editor.md` §5.3 (reference values were read-only — the field becomes editable)
+and §7's delete-blocking copy, and makes `apply-and-drift.md` §5.6's expression row reachable for the first
+time. `references-math-themes.md` §12 lists all four amendments; make them when Phase 7 ships, not before.
+
+Not yet written: the export pipeline (Phase 8).
