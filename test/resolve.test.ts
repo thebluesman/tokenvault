@@ -302,3 +302,13 @@ test("report kinds are additive — the three are all ReportEntry, version 1 unt
   assert.equal(typeof entries[0].path, "string");
   assert.equal(typeof entries[0].set, "string");
 });
+
+test("an expression on a non-number token is refused, not committed as a string", () => {
+  // An expression works out to a number (ADR-0007 §1), so it can only ever be a `number` token's
+  // value. Committing it would leave `toFigma` to refuse at the write boundary instead, which is
+  // days later and in the wrong place.
+  const tokens = [color("swatch", "S", "#c33a2e"), num("size", "S", 4)];
+  const outcome = author(tokens, "swatch", "{size} * 2");
+  assert.equal(outcome.ok, false);
+  assert.equal((outcome as { reason: string }).reason, "expression-on-non-number");
+});

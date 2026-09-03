@@ -304,8 +304,18 @@ export function checkAuthoredValue(input: AuthorInput): AuthorOutcome {
     return checkReference(trimmed, input);
   }
 
-  // An expression, or a literal — and on a non-`number` token an unparenthesised string is a
-  // literal, which this function is not asked about (the per-type editors own those).
+  // An expression evaluates to a number, so it can only ever be a `number` token's value
+  // (ADR-0007 §1). The per-type editors route literals away before they reach here, so a
+  // non-`number` token arriving with a formula is refused rather than committed as a string that
+  // `toFigma` would then have to refuse at the write boundary instead.
+  if (entry.token.$type !== "number") {
+    return {
+      ok: false,
+      reason: "expression-on-non-number",
+      message: `Expressions work out to a number, so a ${entry.token.$type} token can't hold one. Point it at a token with {…}, or type a ${entry.token.$type} value.`,
+    };
+  }
+
   const parsed = parseExpression(trimmed);
   if (!parsed.ok) {
     return { ok: false, reason: parsed.error.reason, message: parsed.error.message };
