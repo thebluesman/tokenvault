@@ -21,6 +21,7 @@ import { entryRefs, localEntries } from "../tokens/overlay";
 import {
   conflictedLines,
   dismissDrift,
+  driftBaseline,
   driftedLines,
   getModel,
   keysOf,
@@ -68,6 +69,9 @@ export function closeChanges(): void {
   if (!open) return;
   open = false;
   selected = new Set();
+  // The confirm strip is about a selection; clearing one without the other leaves a strip offering
+  // to act on nothing, with its button live, the next time the list opens.
+  confirming = null;
   panelEl.classList.add("hidden");
   panelEl.textContent = "";
 }
@@ -75,6 +79,7 @@ export function closeChanges(): void {
 export function openChanges(startAt?: Section): void {
   open = true;
   selected = new Set();
+  confirming = null;
   const model = getModel();
   // Land on the section that has something in it, rather than on an empty "Local" tab that makes
   // the user hunt for the count they just tapped.
@@ -139,6 +144,7 @@ function addTab(into: HTMLElement, id: Section, label: string): void {
   tab.addEventListener("click", () => {
     section = id;
     selected = new Set();
+    confirming = null;
     renderChanges();
   });
   into.appendChild(tab);
@@ -283,11 +289,21 @@ function renderChanged(body: HTMLElement, lines: Line[]): void {
  * stays Phase 5's *Put Figma back*. Both are live code paths — a file can be disconnected at any
  * time — and the labels follow the connection, never a feature flag (UX §14).
  */
+/** Whether drift on this file is a comparison against the repo — the wording's one condition. */
+function repoDrift(): boolean {
+  return driftBaseline() === "repo" && isConnected();
+}
+
 function renderBulkBar(): void {
   const bar = document.getElementById("drift-bulk");
   if (bar === null) return;
   bar.textContent = "";
-  const connected = isConnected();
+  // The same test the single-token detail block uses (detail.ts): *connected* here has to mean
+  // "drift is actually being compared against the repo", not merely "settings exist". A file
+  // connected by publishing Figma's tree never fetches a repo baseline, so drift is still measured
+  // against the last scan — and the bulk bar promising the repo's value would disagree with the
+  // very row it sits under.
+  const connected = repoDrift();
 
   // §10.4, the phase's one new component. **It replaces the bulk button in the footer, in place:**
   // nothing dims, nothing overlays, the rows the user is being asked about stay visible and
@@ -383,7 +399,7 @@ function acceptFigma(): void {
   const count = selected.size;
   dismissDrift(Array.from(selected));
   selected = new Set();
-  if (isConnected()) {
+  if (repoDrift()) {
     toast(`Accepted ${count} change${count === 1 ? "" : "s"} from Figma — ${count} change${count === 1 ? "" : "s"} to push.`);
   } else {
     toast(`Accepted ${count} change${count === 1 ? "" : "s"} from Figma.`);
@@ -395,7 +411,7 @@ function acceptFigma(): void {
 function takeRepo(): void {
   openApplyDialog({
     plan: planRestoreDrift(Array.from(selected)),
-    title: isConnected() ? "Take the repo's" : "Put Figma back",
+    title: repoDrift() ? "Take the repo's" : "Put Figma back",
     nothingToDo: "Nothing to put back.",
     onNothingToDo: toast,
   });

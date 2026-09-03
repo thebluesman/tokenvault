@@ -112,7 +112,14 @@ export class GitError extends Error {
 
 /** Whatever the last response said about the hour's budget — surfaced, never inferred (§10). */
 export interface RateLimit {
-  remaining: number;
+  /**
+   * `null` when GitHub sent the header but it wasn't a number.
+   *
+   * *Unknown* is not *plenty*: a `NaN` passed through as a value reads as "plenty left" to every
+   * comparison it meets, which is precisely how a budget warning goes missing at the moment it is
+   * needed. The panel says it doesn't know instead.
+   */
+  remaining: number | null;
   limit: number;
   reset: number;
 }

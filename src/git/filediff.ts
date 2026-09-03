@@ -11,6 +11,7 @@
 import type { Manifest, Token, TokenGroup, TokenValue } from "../tokens/types";
 import { isToken } from "../tokens/paths";
 import { compareKeys } from "../tokens/serialize";
+import { valuesEqual } from "../tokens/overlay";
 
 export type FileRowState = "changed" | "added" | "removed";
 
@@ -79,7 +80,10 @@ export function diffTrees(before: TokenGroup | null, after: TokenGroup | null): 
     }
     if (a === undefined || b === undefined) continue;
 
-    if (JSON.stringify(a.$value) !== JSON.stringify(b.$value)) {
+    // `valuesEqual` rather than `JSON.stringify`: repo blobs are written by `stableStringify` with
+    // sorted keys, so a plain stringify compare reports structurally-identical objects (grid and
+    // typography `$value`s especially) as changed purely because their keys are ordered differently.
+    if (!valuesEqual(a.$value, b.$value)) {
       rows.push({ path, state: "changed", before: a.$value, after: b.$value });
     }
     // A description-only change is a real change to the file and therefore a real change to the

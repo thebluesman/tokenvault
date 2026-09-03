@@ -50,6 +50,15 @@ export interface OverlayConflict {
    * (UX §8.2). Guessing wrong there is the difference between blaming a colleague and blaming a bot.
    */
   origin?: "figma" | "repo";
+  /**
+   * A conflict from the *other* side that was already outstanding when this one was recorded.
+   *
+   * A token can genuinely conflict with both Figma and the repo — a rescan flags a drifted target,
+   * then a pull lands on the same edit. Overwriting one with the other loses the value the user was
+   * choosing against, so the earlier side is kept here. At most one level deep: there are only two
+   * sides, and a second conflict from the same side is a refresh of that side, not a third opinion.
+   */
+  previous?: OverlayConflict;
 }
 
 /**
@@ -165,6 +174,31 @@ export function tokenKey(token: Token): string | null {
 export function valuesEqual(a: TokenValue | undefined, b: TokenValue | undefined): boolean {
   if (a === undefined || b === undefined) return a === b;
   return stableStringify(a) === stableStringify(b);
+}
+
+/**
+ * A newly discovered conflict, without throwing away one the entry already carried.
+ *
+ * A conflict from the same side is a refresh of that side and replaces it; one from the other side
+ * is a second, independent fact about the same token — Figma moved *and* the repo moved — and is
+ * kept on `previous` so neither opposing value is lost before the user has answered.
+ */
+export function mergeConflict(
+  next: OverlayConflict,
+  prior: OverlayConflict | undefined
+): OverlayConflict {
+  if (prior === undefined) return next;
+  const sameSide = (prior.origin ?? "figma") === (next.origin ?? "figma");
+  const carried = sameSide ? prior.previous : stripPrevious(prior);
+  return carried === undefined ? next : { ...next, previous: carried };
+}
+
+/** One level deep, always: two sides means at most one conflict each. */
+function stripPrevious(conflict: OverlayConflict): OverlayConflict {
+  const out: OverlayConflict = { at: conflict.at };
+  if ("figma" in conflict) out.figma = conflict.figma;
+  if (conflict.origin !== undefined) out.origin = conflict.origin;
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -408,7 +442,7 @@ export function mergeOverlay(flat: FlatToken[], overlay: EditOverlay, now: strin
       continue;
     }
 
-    refreshed.conflict = { figma: current, at: now };
+    refreshed.conflict = mergeConflict({ figma: current, at: now }, entry.conflict);
     kept.push(refreshed);
     applied += 1;
     conflicts += 1;

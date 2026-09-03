@@ -28,7 +28,7 @@ import {
   revealPath,
   setImportNavigator,
 } from "./tokens";
-import { checkStatus, getGit, handleGitMessage, onGitChange, recomputeStatus } from "./git";
+import { getGit, handleGitMessage, onGitChange, recomputeStatus } from "./git";
 import {
   connectionBroken,
   openSettings,
@@ -147,7 +147,10 @@ function renderStateSlot(): void {
   const right = repoHalf();
   if (right !== null) {
     // Precedence when it doesn't all fit (§6.1): diverged › conflicts › repo counts › Figma counts.
-    chip.classList.add(right.tone === "warn" ? "warn" : right.tone === "on" ? "on" : "");
+    // The Figma half's own warn tone (an unresolved conflict) still has to win over a clean repo
+    // status — a connected file with conflicts is not a file with nothing to warn about.
+    if (right.tone === "warn" || tone === "warn") chip.classList.add("warn");
+    else if (right.tone === "on" || tone === "on") chip.classList.add("on");
     const button = el("button", undefined, right.label);
     button.title = "What does the repo think?";
     button.addEventListener("click", () => showTab("repo"));
@@ -276,9 +279,8 @@ window.onmessage = (event: MessageEvent) => {
 
   if (message.type === "plugin-ready") {
     fileNameEl.textContent = message.fileName;
-    // *"A status check runs on panel open"* (UX §14). It transfers no content and costs one
-    // request, which is what makes it affordable to answer on demand rather than remember.
-    void checkStatus();
+    // *"A status check runs on panel open"* (UX §14) — fired from the `git-config` handler rather
+    // than here, because the settings and the token it needs arrive in that later message.
     return;
   }
 

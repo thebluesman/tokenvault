@@ -94,6 +94,13 @@ export function createClient(options: ClientOptions): GitClient {
     }
   }
 
+  /** A header that isn't a number is not a zero and not a large number — it is an absent answer. */
+  function numberOrNull(raw: string | null): number | null {
+    if (raw === null || raw.trim().length === 0) return null;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+  }
+
   function readRateLimit(response: Response): void {
     // ADR-0006's one open question was whether these headers survive the plugin's CORS posture.
     // They are read defensively for that reason: absent headers leave `limit` null and the panel
@@ -103,9 +110,9 @@ export function createClient(options: ClientOptions): GitClient {
     const reset = response.headers.get("x-ratelimit-reset");
     if (remaining === null) return;
     limit = {
-      remaining: Number(remaining),
-      limit: total === null ? 5000 : Number(total),
-      reset: reset === null ? 0 : Number(reset),
+      remaining: numberOrNull(remaining),
+      limit: numberOrNull(total) ?? 5000,
+      reset: numberOrNull(reset) ?? 0,
     };
   }
 

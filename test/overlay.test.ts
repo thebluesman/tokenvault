@@ -219,6 +219,28 @@ test("Figma caught up to the edit — the entry retires silently", () => {
   assert.equal(merged.entries.length, 0);
 });
 
+test("a rescan conflict keeps an outstanding repo conflict alongside it", () => {
+  // A token can conflict with both sides at once: a pull landed on the edit, and then Figma moved
+  // too. Overwriting one flag with the other loses the value the user is choosing against, so the
+  // earlier side is carried on `previous` — one level deep, because there are only two sides.
+  const moved = flat(LIGHT.path, LIGHT.setId, variableToken("VariableID:1:4", "1:0", "#b4342a"));
+  const pulled = overlayOf({
+    ...valueEdit("#000000", "#c33a2e"),
+    conflict: { figma: "#123456" as Token["$value"], at: NOW, origin: "repo" as const },
+  });
+
+  const merged = mergeOverlay([moved], pulled, NOW);
+  const conflict = merged.overlay.entries[0].conflict;
+  assert.equal(conflict?.figma, "#b4342a");
+  assert.equal(conflict?.previous?.origin, "repo");
+  assert.equal(conflict?.previous?.figma, "#123456");
+
+  // A second rescan is the same side again — it refreshes rather than stacking another level.
+  const again = mergeOverlay([moved], merged.overlay, NOW);
+  assert.equal(again.overlay.entries[0].conflict?.previous?.origin, "repo");
+  assert.equal(again.overlay.entries[0].conflict?.previous?.previous, undefined);
+});
+
 test("both sides moved — the local edit wins and is reported as edit-conflict", () => {
   const moved = flat(LIGHT.path, LIGHT.setId, variableToken("VariableID:1:4", "1:0", "#b4342a"));
   const merged = mergeOverlay([moved], overlayOf(valueEdit("#000000", "#c33a2e")), NOW);

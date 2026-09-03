@@ -732,7 +732,13 @@ export function resolveTakeRepo(line: Line): boolean {
       set: line.entry.setId,
       op: conflict.op,
       value,
-      base: line.entry.token.$value,
+      // The base is what Figma currently says *for the field this op edits* — the same branch
+      // `mergeOverlay` takes. Recording `$value` for a description edit would leave a base the next
+      // rescan can never match, and the conflict would come straight back.
+      base:
+        conflict.op === "set-description"
+          ? (line.entry.token.$description ?? "")
+          : line.entry.token.$value,
       origin: "pulled",
     },
   ]);

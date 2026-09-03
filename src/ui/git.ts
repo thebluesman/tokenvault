@@ -60,6 +60,14 @@ export interface GitView {
   rateLimit: RateLimit | null;
   /** The last pull's report — §8.4's unmatched list, shown once and not turned into a badge. */
   lastPull: PullResult | null;
+  /**
+   * What the sandbox actually did with that pull's entries, from `git-pull-result`.
+   *
+   * `lastPull.entries` is a prediction made before `applyPull` ran; an entry that landed on a local
+   * edit becomes a conflict rather than a pending change, and only the sandbox knows how many did.
+   * `null` until the reply lands, so the report never reports numbers it hasn't been told.
+   */
+  lastPullMerge: { applied: number; conflicts: number } | null;
   /** Repo files that aren't valid token JSON. Named, and excluded from every operation (UX §11). */
   unreadable: string[];
   /** True when GitHub truncated the recursive tree listing — a repo too big to answer in one call. */
@@ -78,12 +86,20 @@ let view: GitView = {
   failure: null,
   rateLimit: null,
   lastPull: null,
+  lastPullMerge: null,
   unreadable: [],
   truncated: false,
 };
 
 /** The fetched tree, in memory for this session only. §3: the pulled tree is never persisted. */
 let remoteTree: RemoteTree | null = null;
+
+/**
+ * Bumped whenever the connection this file has changes identity — disconnect, or a move to another
+ * repo or branch. An in-flight operation started under an older generation is about a connection
+ * that no longer exists, and must not write its result back.
+ */
+let connectionGeneration = 0;
 
 let listeners: Array<() => void> = [];
 
@@ -127,6 +143,9 @@ export function tokensDir(): string {
 
 let tokenWaiters: Array<(token: string | null) => void> = [];
 
+/** One status check per panel open, fired from the first `git-config` that can support one. */
+let openChecked = false;
+
 /** Routed here from `main.ts`'s pump. Returns true when the message was a git one. */
 export function handleGitMessage(message: {
   type: string;
@@ -138,6 +157,14 @@ export function handleGitMessage(message: {
   if (message.type === "git-config" && message.config !== undefined) {
     const config = message.config;
     update({ settings: config.settings, sync: config.sync, hasToken: config.hasToken });
+    // *"A status check runs on panel open"* (UX §14) — and this is the earliest moment it can. The
+    // sandbox sends `plugin-ready` before it has read `clientStorage`, so a check fired there always
+    // found `settings === null` and returned without doing anything. Once, per panel open: later
+    // `git-config` messages are settings saves, which run their own check.
+    if (!openChecked && config.settings !== null && config.hasToken) {
+      openChecked = true;
+      void checkStatus();
+    }
     return true;
   }
   if (message.type === "git-token") {
@@ -146,7 +173,13 @@ export function handleGitMessage(message: {
     for (const resolve of waiters) resolve(message.token ?? null);
     return true;
   }
-  if (message.type === "git-pull-result") return true;
+  if (message.type === "git-pull-result") {
+    // The pull's own report was a prediction; this is what the merge actually did with it (§8.2).
+    update({
+      lastPullMerge: { applied: message.applied ?? 0, conflicts: message.conflicts ?? 0 },
+    });
+    return true;
+  }
   return false;
 }
 
@@ -187,9 +220,16 @@ async function withToken<T>(
     return null;
   }
 
+  // Claimed **before** the first `await`, not after it. Every gated button is disabled off
+  // `view.busy`, so setting it only once the token reply came back left a window in which two
+  // operations could be started and race over this module's `remoteTree` and `view.sync`.
+  if (view.busy !== null) return null;
+  update({ busy, failure: null });
+
   const token = await requestToken();
   if (token === null) {
     update({
+      busy: null,
       failure: {
         kind: "not-configured",
         message: "Add a GitHub access token in settings before syncing.",
@@ -198,7 +238,6 @@ async function withToken<T>(
     return null;
   }
 
-  update({ busy, failure: null });
   try {
     const client = createClient({ owner: settings.owner, repo: settings.repo, token });
     const result = await run(client);
@@ -253,6 +292,7 @@ export function recomputeStatus(): void {
       local: localFiles(),
       remote: remoteTokenFiles(remoteTree),
       base: view.sync.blobShas,
+      tokensDir: tokensDir(),
     }),
   });
 }
@@ -266,6 +306,9 @@ export function recomputeStatus(): void {
  */
 export async function checkStatus(): Promise<void> {
   if (view.settings === null || !view.hasToken) return;
+  // An operation already in flight ends with its own status check, so a second one started while it
+  // runs would be refused by `withToken` and then clear the status it never actually re-checked.
+  if (view.busy !== null) return;
   update({ checking: true });
 
   const tree = await withToken("Checking…", (client) => client.getTree(branchName()));
@@ -279,6 +322,7 @@ export async function checkStatus(): Promise<void> {
     local: localFiles(),
     remote: remoteTokenFiles(tree),
     base: view.sync?.blobShas ?? {},
+    tokensDir: tokensDir(),
   });
 
   update({
@@ -416,6 +460,10 @@ async function fetchRepoTrees(paths: string[]): Promise<Map<string, TokenGroup> 
 export async function refreshRepoBaseline(): Promise<void> {
   const tree = remoteTree;
   if (tree === null || view.settings === null) return;
+  // The fetch below is several round trips long, and a disconnect (or a move to another
+  // repo/branch) can land in the middle of it. The generation this refresh started in is what
+  // decides whether its result is still about the connection the user currently has.
+  const generation = connectionGeneration;
 
   const dir = tokensDir();
   const remote = remoteTokenFiles(tree);
@@ -442,6 +490,7 @@ export async function refreshRepoBaseline(): Promise<void> {
     if (same !== undefined) files.push({ path: buildPath, json: same });
   }
 
+  if (generation !== connectionGeneration || view.settings === null) return;
   send({ type: "git-repo-baseline", files });
 }
 
@@ -562,7 +611,9 @@ export async function pull(paths: string[]): Promise<PullOutcome | null> {
     at: new Date().toISOString(),
   };
   send({ type: "git-save-sync", state: next });
-  update({ sync: next, lastPull: result });
+  // The merge outcome is unknown until `git-pull-result` comes back; nulled so the report never
+  // shows the previous pull's numbers next to this pull's list.
+  update({ sync: next, lastPull: result, lastPullMerge: null });
 
   await refreshRepoBaseline();
   await checkStatus();
@@ -715,8 +766,9 @@ export function saveSettings(settings: RepoSettings, token?: string | null): voi
       previous.repo !== settings.repo ||
       previous.branch !== settings.branch);
   if (moved) {
+    connectionGeneration += 1;
     remoteTree = null;
-    update({ settings, sync: null, status: null, checkedAt: null, lastPull: null });
+    update({ settings, sync: null, status: null, checkedAt: null, lastPull: null, lastPullMerge: null });
   } else {
     update({ settings });
   }
@@ -724,6 +776,7 @@ export function saveSettings(settings: RepoSettings, token?: string | null): voi
 
 export function disconnect(): void {
   send({ type: "git-save-settings", settings: null, token: null });
+  connectionGeneration += 1;
   remoteTree = null;
   update({
     settings: null,
@@ -733,6 +786,7 @@ export function disconnect(): void {
     checkedAt: null,
     failure: null,
     lastPull: null,
+    lastPullMerge: null,
     unreadable: [],
   });
 }
@@ -743,5 +797,5 @@ export async function testConnection(): Promise<string[] | null> {
 }
 
 export function clearLastPull(): void {
-  update({ lastPull: null });
+  update({ lastPull: null, lastPullMerge: null });
 }

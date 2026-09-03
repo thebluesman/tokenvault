@@ -239,3 +239,40 @@ test("entries written before Phase 6 default to local", () => {
   assert.equal(originOf({ target, op: "set-value", at: NOW } as OverlayEntry), "local");
   assert.equal(originOf({ target, op: "set-value", at: NOW, origin: "pulled" } as OverlayEntry), "pulled");
 });
+
+test("a repo conflict on an entry that already has a Figma one keeps both sides", () => {
+  // A token can genuinely conflict with both: a rescan flags the target as drifted, then a pull
+  // lands on the same edit. Overwriting the first with the second left the panel unable to show the
+  // value the user had been asked to choose against.
+  const local = recordEdit(
+    overlayWith([]),
+    { target, path: "color.accent", set: "Theme/Light", op: "set-value", value: "#111111", base: "#b4342a" },
+    NOW
+  );
+  const drifted: EditOverlay = {
+    version: 1,
+    entries: local.entries.map((entry) => ({
+      ...entry,
+      conflict: { figma: "#222222" as Token["$value"], at: NOW, origin: "figma" as const },
+    })),
+  };
+
+  const merged = applyPull(drifted, pulled, NOW);
+  const conflict = merged.overlay.entries[0].conflict;
+  assert.equal(conflict?.origin, "repo");
+  assert.equal(conflict?.figma, "#c33a2e");
+  assert.equal(conflict?.previous?.origin, "figma");
+  assert.equal(conflict?.previous?.figma, "#222222");
+});
+
+test("a second pull onto the same conflict refreshes the repo side rather than stacking it", () => {
+  const local = recordEdit(
+    overlayWith([]),
+    { target, path: "color.accent", set: "Theme/Light", op: "set-value", value: "#111111", base: "#b4342a" },
+    NOW
+  );
+  const first = applyPull(local, pulled, NOW).overlay;
+  const second = applyPull(first, [{ ...pulled[0], value: "#d44b3f" as Token["$value"] }], NOW).overlay;
+  assert.equal(second.entries[0].conflict?.figma, "#d44b3f");
+  assert.equal(second.entries[0].conflict?.previous, undefined);
+});

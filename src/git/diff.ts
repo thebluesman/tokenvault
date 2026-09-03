@@ -19,7 +19,8 @@
 
 import type { FileStatus, SyncStatus } from "./types";
 import { blobSha } from "./blob";
-import { IMPORT_REPORT_PATH } from "./paths";
+import { DEFAULT_TOKENS_DIR } from "./state";
+import { IMPORT_REPORT_PATH, toRepoPath } from "./paths";
 
 export interface StatusInput {
   /** Repo-relative path → the exact bytes a push would write. `stableStringify` output. */
@@ -28,6 +29,8 @@ export interface StatusInput {
   remote: Record<string, string>;
   /** The merge base: path → blob SHA at the last successful sync. Empty before first connect. */
   base: Record<string, string>;
+  /** The configured folder, so the reserved report path can be recognised in its repo shape. */
+  tokensDir?: string;
 }
 
 function sameSha(a: string | undefined, b: string | undefined): boolean {
@@ -55,7 +58,7 @@ export function computeStatus(input: StatusInput): SyncStatus {
   for (const path of allPaths(input)) {
     // The report is machine state about a scan and is not part of the repo (ADR-0006 §5). Excluded
     // here rather than filtered in the UI (UX §14) so it cannot reach a diff list by any route.
-    if (isExcluded(path)) continue;
+    if (isExcluded(path, input.tokensDir ?? DEFAULT_TOKENS_DIR)) continue;
 
     const content = input.local.get(path);
     const localSha = content === undefined ? undefined : blobSha(content);
@@ -99,17 +102,17 @@ export function computeStatus(input: StatusInput): SyncStatus {
 /**
  * `$import-report.json` and nothing else. Named as a predicate so the reason travels with it.
  *
- * Matched on the **basename**, not on `IMPORT_REPORT_PATH`: the constant is a build-shaped path
- * (`tokens/…`) and the paths reaching here are repo-shaped, so a user who points Tokenvault at
- * `design/` — or at the repo root, where the report has no directory prefix at all — would
- * otherwise slip the one file ADR-0006 §5 says is never committed straight into a commit.
+ * Matched on the **whole path**, not the basename: the report only ever lives at one place, and a
+ * basename match would silently swallow an unrelated user file that happened to be called
+ * `$import-report.json` somewhere else in the repo — excluded from every diff and every push with
+ * nothing in the UI to say why. `tokensDir` translates `IMPORT_REPORT_PATH` into the repo shape for
+ * the callers holding repo-shaped paths; omitted, the comparison is against the build-shaped path
+ * the generator emits.
  */
-export function isExcluded(path: string): boolean {
-  return path.slice(path.lastIndexOf("/") + 1) === basenameOf(IMPORT_REPORT_PATH);
-}
-
-function basenameOf(path: string): string {
-  return path.slice(path.lastIndexOf("/") + 1);
+export function isExcluded(path: string, tokensDir?: string): boolean {
+  const expected =
+    tokensDir === undefined ? IMPORT_REPORT_PATH : toRepoPath(IMPORT_REPORT_PATH, tokensDir);
+  return path === expected;
 }
 
 /**

@@ -79,12 +79,16 @@ test("the file list is sorted, so two identical checks never look like they foun
 });
 
 test("$import-report.json can never reach a diff list, whatever the folder is called", () => {
-  // Excluded at the boundary rather than filtered in the UI (ADR-0006 §5, UX §14). The basename
-  // match is what makes that true for a repo whose tokens folder is `design/` or the root itself.
+  // Excluded at the boundary rather than filtered in the UI (ADR-0006 §5, UX §14). Matched on the
+  // whole path in the configured folder's shape, so it holds for `design/` and for the root — and
+  // so a user file that merely shares the name somewhere else is *not* silently swallowed.
   assert.equal(isExcluded("tokens/$import-report.json"), true);
-  assert.equal(isExcluded("design/$import-report.json"), true);
-  assert.equal(isExcluded("$import-report.json"), true);
+  assert.equal(isExcluded("design/$import-report.json", "design"), true);
+  assert.equal(isExcluded("$import-report.json", ""), true);
   assert.equal(isExcluded("tokens/$manifest.json"), false);
+  // Same basename, different place: somebody else's file, and it stays in the diff.
+  assert.equal(isExcluded("tokens/nested/$import-report.json"), false);
+  assert.equal(isExcluded("docs/$import-report.json", "tokens"), false);
 
   const result = status(
     { "tokens/$import-report.json": B, "tokens/a.json": A },
@@ -92,6 +96,15 @@ test("$import-report.json can never reach a diff list, whatever the folder is ca
     { "tokens/a.json": shaA }
   );
   assert.deepEqual(result.files.map((file) => file.path), ["tokens/a.json"]);
+
+  // A user file that happens to share the name is a real file with a real diff, not machine state.
+  const coincidence = computeStatus({
+    local: new Map([["docs/$import-report.json", B]]),
+    remote: { "docs/$import-report.json": shaA },
+    base: { "docs/$import-report.json": shaA },
+    tokensDir: "tokens",
+  });
+  assert.deepEqual(coincidence.files.map((file) => file.path), ["docs/$import-report.json"]);
   assert.equal(result.clean, true);
 });
 

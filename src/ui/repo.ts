@@ -174,9 +174,13 @@ function renderHome(): void {
   fresh.appendChild(again);
   body.appendChild(fresh);
 
-  if (git.rateLimit !== null && git.rateLimit.remaining < 500) {
+  const remaining = git.rateLimit === null ? undefined : git.rateLimit.remaining;
+  if (remaining === null) {
+    // An unreadable header is not a clean bill of health — say so rather than imply a full budget.
+    body.appendChild(el("div", "empty", "GitHub didn't say how many requests are left this hour."));
+  } else if (remaining !== undefined && remaining < 500) {
     // Surfaced rather than discovered as an unexplained 403 later (ADR-0006 §10).
-    body.appendChild(el("div", "empty", `${git.rateLimit.remaining} GitHub requests left this hour.`));
+    body.appendChild(el("div", "empty", `${remaining} GitHub requests left this hour.`));
   }
   if (git.truncated) {
     body.appendChild(
@@ -302,10 +306,34 @@ function freshness(): string {
  * result, and never becomes a persistent badge — hence the dismiss rather than a counter.
  */
 function renderPullReport(into: HTMLElement): void {
-  const last = getGit().lastPull;
-  if (last === null || last.unmatched.length === 0) return;
+  const git = getGit();
+  const last = git.lastPull;
+  const merge = git.lastPullMerge;
+  const conflicted = merge === null ? 0 : merge.conflicts;
+  if (last === null || (last.unmatched.length === 0 && conflicted === 0)) return;
 
   const box = el("div", "entry");
+  // What the merge actually did, not what the pull predicted: an entry that landed on a token the
+  // user had also edited is a conflict waiting on an answer, not a pending change (§8.2).
+  if (conflicted > 0) {
+    box.appendChild(
+      el(
+        "div",
+        undefined,
+        `${conflicted} pulled change${conflicted === 1 ? "" : "s"} landed on a token you'd edited — resolve ${conflicted === 1 ? "it" : "them"} in Conflicts.`
+      )
+    );
+  }
+  if (last.unmatched.length === 0) {
+    const dismissOnly = button("Dismiss");
+    dismissOnly.addEventListener("click", () => {
+      clearLastPull();
+      renderRepo();
+    });
+    box.appendChild(dismissOnly);
+    into.appendChild(box);
+    return;
+  }
   box.appendChild(
     el(
       "div",
@@ -376,6 +404,11 @@ function openReview(): void {
   review.loading = true;
   renderRepo();
 
+  // The session this fetch belongs to. Leaving the screen and coming back replaces `review` with a
+  // fresh one, and a late-resolving fetch that wrote through the module binding would drop the old
+  // session's trees onto the new one — and clear a `loading` flag that belongs to another request.
+  const session = review;
+
   void (async () => {
     const status = getGit().status;
     if (status === null) return;
@@ -384,10 +417,12 @@ function openReview(): void {
     const trees = new Map<string, TokenGroup>();
     for (const file of status.toPush) {
       const tree = await repoTreeFor(file.path);
+      if (review !== session) return;
       if (tree !== null) trees.set(file.path, tree);
     }
-    review.repoTrees = trees;
-    review.loading = false;
+    if (review !== session) return;
+    session.repoTrees = trees;
+    session.loading = false;
     renderRepo();
   })();
 }
@@ -795,7 +830,10 @@ function advanceDiverged(): void {
     goRepoHome();
     return;
   }
-  divergedAt = 0;
+  // The file just resolved has left `status.diverged`, so the same index now points at the next
+  // unresolved one — clamped for the case where it was the last. Resetting to 0 would send a user
+  // resolving `4/5` back to the top of a queue they had already worked through.
+  divergedAt = Math.min(divergedAt, status.diverged.length - 1);
   comparingTree = null;
   renderRepo();
   void loadDivergedTree();

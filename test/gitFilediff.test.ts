@@ -109,3 +109,22 @@ test("the manifest row explains itself in the panel's own words", () => {
 test("a manifest change with nothing nameable still says something", () => {
   assert.deepEqual(describeManifestChange(manifest, manifest), ["Set order or metadata changed."]);
 });
+
+test("two values that differ only in key order are not a change", () => {
+  // Repo blobs are written by `stableStringify` with sorted keys, while a value built in the panel
+  // carries the order its producer used. Comparing with a plain `JSON.stringify` reported the two
+  // as changed and put a row in the commit diff for a token nobody had touched.
+  const ordered = {
+    grid: {
+      layout: { $type: "grid", $value: { pattern: "columns", count: 12, gutter: 16 } },
+    },
+  } as unknown as TokenGroup;
+  const shuffled = {
+    grid: {
+      layout: { $type: "grid", $value: { count: 12, gutter: 16, pattern: "columns" } },
+    },
+  } as unknown as TokenGroup;
+
+  assert.deepEqual(diffTrees(ordered, shuffled).rows, []);
+  assert.equal(diffTrees(ordered, shuffled).changed, 0);
+});

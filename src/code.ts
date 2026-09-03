@@ -129,6 +129,8 @@ let baselineKnown = false;
  * hasn't made.
  */
 let repoBaseline: FlatToken[] | null = null;
+/** Whether this file currently has repo settings — the gate on accepting a repo drift baseline. */
+let repoConnected = false;
 
 /** Set when the repo baseline changed, so the next rebuild recomputes drift without a rescan. */
 let driftDirty = false;
@@ -694,6 +696,7 @@ function describeSelection(result: { selected: number; found: number; pages: num
  */
 async function loadGitConfig(): Promise<GitConfig> {
   const settings = parseSettings(await figma.clientStorage.getAsync(SETTINGS_KEY));
+  repoConnected = settings !== null;
   const stored = parseSyncState(await figma.clientStorage.getAsync(syncKey(resolveFileIdentity())));
   const token = await figma.clientStorage.getAsync(PAT_KEY);
   return {
@@ -755,7 +758,9 @@ function setRepoBaseline(files: SerializedFile[] | null): void {
     driftDirty = true;
     return;
   }
-  if (importResult === null) return;
+  // A baseline fetch that resolves after the user disconnected must not silently re-point drift at
+  // a repo this file is no longer connected to — the disconnect prompt promised the opposite (§7).
+  if (importResult === null || !repoConnected) return;
 
   const trees = new Map<string, TokenGroup>();
   for (const file of files) {
