@@ -16,11 +16,9 @@
 
 import type { ApplyEntry, ApplyPlan } from "../tokens/plan";
 import type { PlannedWrite } from "../figma/apply";
-import type { TokenValue } from "../tokens/types";
-import { button, clear, el, swatch } from "./dom";
+import { button, clear, el } from "./dom";
 import { getModel, send } from "./state";
-import { truncateReference } from "../tokens/preview";
-import { describeValue } from "../tokens/format";
+import { diffRow } from "./diffRow";
 
 const modalEl = document.getElementById("modal") as HTMLElement;
 
@@ -225,12 +223,14 @@ function renderPlan(
   }
 }
 
+/**
+ * One ready row — the shared `{ path, before, after, state }` component from `diffRow.ts`.
+ *
+ * Per-row checkboxes, all checked. Not a nag — the escape hatch for "apply six of these, I'm not
+ * sure about the seventh".
+ */
 function readyRow(entry: ApplyEntry, checked: Set<string>, recount: () => void): HTMLElement {
-  const row = el("div", "plan-row");
   const id = entry.key + entry.op;
-
-  // Per-row checkboxes, all checked. Not a nag — the escape hatch for "apply six of these, I'm not
-  // sure about the seventh".
   const box = el("input") as HTMLInputElement;
   box.type = "checkbox";
   box.checked = checked.has(id);
@@ -239,77 +239,25 @@ function readyRow(entry: ApplyEntry, checked: Set<string>, recount: () => void):
     else checked.delete(id);
     recount();
   });
-  row.appendChild(box);
 
-  const grow = el("div", "grow");
-  const path = el("div", "path", entry.path);
-  path.title = `${entry.path} · ${entry.set}`;
-  grow.appendChild(path);
-  grow.appendChild(diff(entry));
-  row.appendChild(grow);
-  return row;
+  return diffRow(
+    {
+      path: entry.path,
+      set: entry.set,
+      before: entry.before,
+      after: entry.after,
+      alias: entry.alias,
+      state: "ready",
+    },
+    { checkbox: box }
+  );
 }
 
 function blockedRow(entry: ApplyEntry): HTMLElement {
-  const row = el("div", "plan-row blocked");
-  row.appendChild(el("span", "dot", "⚠"));
-  const grow = el("div", "grow");
-  const path = el("div", "path", entry.path);
-  path.title = `${entry.path} · ${entry.set}`;
-  grow.appendChild(path);
-  grow.appendChild(el("div", "why", entry.message ?? entry.reason ?? "Can't be applied."));
-  row.appendChild(grow);
-  return row;
-}
-
-/**
- * `old → new`, in the same value vocabulary as the tree.
- *
- * This is a diff and it should look like one — it is the row component Phase 6's commit diff
- * inherits, which is why it takes `{ before, after }` and knows nothing about the overlay.
- */
-function diff(entry: ApplyEntry): HTMLElement {
-  const wrap = el("div");
-  const line = el("div", "diff");
-  appendValue(line, entry.before, false);
-  line.appendChild(el("span", undefined, "→"));
-
-  if (entry.alias !== undefined) {
-    // A reference row shows the **pointer**, not a colour, on the "after" side. `↗` on the primary
-    // line is the load-bearing signal: it tells the user what they'll see on the canvas without
-    // letting them mistake a pointer for a colour (UX §5.6).
-    const pointer = el("span", "to", `↗ {${truncateReference(entry.alias.path)}}`);
-    pointer.title = `{${entry.alias.path}}`;
-    line.appendChild(pointer);
-    wrap.appendChild(line);
-    if (entry.alias.resolved !== undefined) {
-      const resolved = el("div", "resolved");
-      resolved.appendChild(document.createTextNode("resolves to "));
-      appendValue(resolved, entry.alias.resolved, false);
-      wrap.appendChild(resolved);
-    }
-    return wrap;
-  }
-
-  appendValue(line, entry.after, true);
-  wrap.appendChild(line);
-  return wrap;
-}
-
-function appendValue(into: HTMLElement, value: TokenValue | undefined, isAfter: boolean): void {
-  const text = describe(value);
-  if (typeof value === "string" && /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(value)) {
-    const wrapper = el("span", "swatch-wrap");
-    wrapper.appendChild(swatch(value, false));
-    const fill = el("span", "swatch-fill");
-    fill.style.background = value;
-    wrapper.appendChild(fill);
-    into.appendChild(wrapper);
-  }
-  into.appendChild(el("span", isAfter ? "to" : undefined, text));
-}
-
-/** 46 characters is what one side of the `old → new` diff line holds at 460px. */
-function describe(value: TokenValue | undefined): string {
-  return describeValue(value, { unset: "unset", limit: 46 });
+  return diffRow({
+    path: entry.path,
+    set: entry.set,
+    state: "blocked",
+    why: entry.message ?? entry.reason ?? "Can't be applied.",
+  });
 }

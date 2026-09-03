@@ -28,12 +28,15 @@ import {
   planFor,
   planRestoreDrift,
   resolveKeepMine,
+  resolveTakeRepo,
   revert,
   revertEntries,
 } from "./state";
 import { openApplyDialog } from "./applyDialog";
 import { button, el, toast } from "./dom";
 import { describeValue } from "../tokens/format";
+import { branchName, isConnected } from "./git";
+import { originOf } from "../tokens/overlay";
 
 const panelEl = document.getElementById("panel") as HTMLElement;
 
@@ -43,6 +46,15 @@ let open = false;
 let section: Section = "local";
 let selected = new Set<string>();
 let navigate: (path: string) => void = () => undefined;
+
+/** Which bulk action is awaiting §10.4's inline confirmation, or `null` when none is. */
+let confirming: "figma" | "repo" | null = null;
+
+// `Esc` cancels the confirm strip, matching every other dismissable thing in the panel. A tap on
+// the list cancels too — see the body's mousedown handler in `renderChanges`.
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && confirming !== null) cancelConfirm();
+});
 
 export function setChangesNavigator(fn: (path: string) => void): void {
   navigate = fn;
@@ -99,6 +111,14 @@ export function renderChanges(): void {
   panelEl.appendChild(head);
 
   const body = el("div", "panel-body");
+  // A tap on the list cancels the confirm strip (§10.4) — nothing here is destructive, so backing
+  // out must be at least as easy as going through.
+  body.addEventListener("mousedown", (event) => {
+    if (confirming === null) return;
+    const bar = document.getElementById("drift-bulk");
+    if (bar !== null && bar.contains(event.target as Node)) return;
+    cancelConfirm();
+  });
 
   const tabs = el("div", "chips");
   tabs.style.marginBottom = "8px";
@@ -173,6 +193,10 @@ function renderLocal(body: HTMLElement, entries: OverlayEntry[]): void {
     row.appendChild(name);
     row.appendChild(el("span", "badge", entry.op === "delete" ? "deleted" : entry.set));
     if (entry.orphaned === true) row.appendChild(el("span", "badge needs", "orphaned"));
+    // *"A small grey `from repo` tag on its row. That is the whole visual difference, and it is
+    // grey rather than a badge, because a pulled change **needs nothing from you** beyond the
+    // apply you were going to do anyway."* (UX git-sync §8.2.)
+    if (originOf(entry) === "pulled") row.appendChild(el("span", "empty", "from repo"));
 
     const revertOne = button("Revert");
     revertOne.addEventListener("click", () => revert([entry.target], entry.op));
@@ -250,39 +274,137 @@ function renderChanged(body: HTMLElement, lines: Line[]): void {
   renderBulkBar();
 }
 
+/**
+ * The footer under the drift list — and, since Phase 6, §10.4's inline confirm strip.
+ *
+ * The two bulk actions are named for whichever baseline drift is actually comparing against
+ * (UX §10.2, ADR-0006 §7): connected, the left button writes **the repo's** value into Figma and is
+ * called that; disconnected, the only thing left to push is the value from before the change, so it
+ * stays Phase 5's *Put Figma back*. Both are live code paths — a file can be disconnected at any
+ * time — and the labels follow the connection, never a feature flag (UX §14).
+ */
 function renderBulkBar(): void {
   const bar = document.getElementById("drift-bulk");
   if (bar === null) return;
   bar.textContent = "";
+  const connected = isConnected();
+
+  // §10.4, the phase's one new component. **It replaces the bulk button in the footer, in place:**
+  // nothing dims, nothing overlays, the rows the user is being asked about stay visible and
+  // scrollable behind it. A bulk action deserves a beat, not an interruption.
+  if (confirming !== null) {
+    const count = selected.size;
+    const strip = el("div", "confirm-strip");
+    strip.appendChild(
+      el(
+        "div",
+        undefined,
+        confirming === "figma"
+          ? `Accept Figma's values for ${count} token${count === 1 ? "" : "s"}?`
+          : `Take the repo's values for ${count} token${count === 1 ? "" : "s"}?`
+      )
+    );
+    // The second line names the consequence in the user's units and names the branch. That
+    // sentence is the entire reason the confirm exists; without it this is friction.
+    strip.appendChild(
+      el(
+        "div",
+        "empty",
+        confirming === "figma"
+          ? `They become ${count} change${count === 1 ? "" : "s"} to push to ${branchName()}.`
+          : "They'll be pending changes to apply in Figma."
+      )
+    );
+
+    const actions = el("div", "actions");
+    // Cancel is the wider, quieter of the two, and `Esc` and tapping the list both cancel —
+    // nothing here is destructive, so backing out must be at least as easy as going through.
+    const cancel = button("Cancel");
+    cancel.addEventListener("click", cancelConfirm);
+    actions.appendChild(cancel);
+    actions.appendChild(el("span", "grow"));
+    // `[ Accept 40 ]`, not `[ Confirm ]`: the button restates the scale, so a stray tap on a
+    // confirm still tells you what it did.
+    const go = button(confirming === "figma" ? `Accept ${count}` : `Take ${count}`, "primary");
+    go.addEventListener("click", () => {
+      const kind = confirming;
+      confirming = null;
+      if (kind === "figma") acceptFigma();
+      else takeRepo();
+    });
+    actions.appendChild(go);
+    strip.appendChild(actions);
+    bar.appendChild(strip);
+    return;
+  }
 
   bar.appendChild(el("span", "empty", `${selected.size} selected`));
 
-  const reapply = button("Put Figma back");
+  const reapply = button(connected ? "Take the repo's" : "Put Figma back");
   reapply.disabled = selected.size === 0;
   reapply.addEventListener("click", () => {
-    // A canvas write, so it routes through the dialog like every other one (§6.5, guardrail 3).
-    openApplyDialog({
-      plan: planRestoreDrift(Array.from(selected)),
-      title: "Put Figma back",
-      nothingToDo: "Nothing to put back.",
-      onNothingToDo: toast,
-    });
+    // Its counterpart confirms too — one vocabulary for picking a side, one for confirming the
+    // pick (§10.4). Single-token accepts never confirm; nothing confirms while disconnected.
+    if (connected && selected.size > 1) {
+      confirming = "repo";
+      renderBulkBar();
+      return;
+    }
+    takeRepo();
   });
   bar.appendChild(reapply);
 
   const take = button("Take Figma's");
   take.disabled = selected.size === 0;
   take.addEventListener("click", () => {
-    const count = selected.size;
-    dismissDrift(Array.from(selected));
-    selected = new Set();
-    // Honest about what just happened. For an unedited token the tree *already shows* Figma's
-    // value — the tree is re-derived from Figma on every scan — so this accepts the change rather
-    // than writing anything, and the toast should not imply otherwise.
-    toast(`Accepted ${count} change${count === 1 ? "" : "s"} from Figma.`);
-    renderChanges();
+    // The rule is: confirm when the action stages more than one change into work that is headed
+    // for a shared repo. Disconnected, accepting still writes nothing, and Phase 5's dissolved
+    // premise is intact.
+    if (connected && selected.size > 1) {
+      confirming = "figma";
+      renderBulkBar();
+      return;
+    }
+    acceptFigma();
   });
   bar.appendChild(take);
+}
+
+/**
+ * *Take Figma's* — accepts the drift.
+ *
+ * **Disconnected it writes nothing** and the toast says so, exactly as Phase 5 did: the tree is
+ * re-derived from Figma on every scan, so an unedited drifted token already shows Figma's value.
+ * **Connected, that same acceptance is an uncommitted change**: the file the panel would push
+ * already carries Figma's value, so the repo now disagrees with it and the file reads as *to push*.
+ * Two different facts, two different sentences (UX §10.2, §14).
+ */
+function acceptFigma(): void {
+  const count = selected.size;
+  dismissDrift(Array.from(selected));
+  selected = new Set();
+  if (isConnected()) {
+    toast(`Accepted ${count} change${count === 1 ? "" : "s"} from Figma — ${count} change${count === 1 ? "" : "s"} to push.`);
+  } else {
+    toast(`Accepted ${count} change${count === 1 ? "" : "s"} from Figma.`);
+  }
+  renderChanges();
+}
+
+/** *Take the repo's* / *Put Figma back* — a canvas write, so it routes through the dialog (§6.5). */
+function takeRepo(): void {
+  openApplyDialog({
+    plan: planRestoreDrift(Array.from(selected)),
+    title: isConnected() ? "Take the repo's" : "Put Figma back",
+    nothingToDo: "Nothing to put back.",
+    onNothingToDo: toast,
+  });
+}
+
+function cancelConfirm(): void {
+  if (confirming === null) return;
+  confirming = null;
+  renderBulkBar();
 }
 
 function shortDrift(kind: string): string {
@@ -325,9 +447,20 @@ function renderConflicts(body: HTMLElement, lines: Line[]): void {
     row.appendChild(el("span", "badge", line.set.code));
     body.appendChild(row);
 
+    // ADR-0006 §5's `origin` field doing UX work: *"so a conflict message can name the repo rather
+    // than the user"* (UX §8.2). Guessing wrong here is the difference between blaming a colleague
+    // and blaming a bot.
+    const fromRepo = conflict.conflict?.origin === "repo";
     const compare = el("div", "mono empty");
-    compare.textContent = `yours ${describe(conflict.value)} · Figma ${describe(conflict.conflict?.figma)}`;
+    compare.textContent = fromRepo
+      ? `Yours ${describe(conflict.value)} · From the repo ${describe(conflict.conflict?.figma)}`
+      : `yours ${describe(conflict.value)} · Figma ${describe(conflict.conflict?.figma)}`;
     body.appendChild(compare);
+    if (fromRepo) {
+      body.appendChild(
+        el("div", "empty", "You edited this token; the repo changed it too. Pick one.")
+      );
+    }
 
     const actions = el("div", "toolbar");
 
@@ -357,10 +490,16 @@ function renderConflicts(body: HTMLElement, lines: Line[]): void {
     });
     actions.appendChild(mineAndApply);
 
-    const theirs = button("Take Figma's");
+    const theirs = button(fromRepo ? "Take the repo's" : "Take Figma's");
     theirs.addEventListener("click", () => {
-      if (line.target !== null) revert([line.target], conflict.op);
-      toast("Took Figma's value.");
+      if (fromRepo) {
+        // The repo's value is not in Figma, so taking it *records* it as a pending change rather
+        // than dropping the entry and falling back to something neither side asked for.
+        if (resolveTakeRepo(line)) toast("Took the repo's value — apply it to update Figma.");
+      } else if (line.target !== null) {
+        revert([line.target], conflict.op);
+        toast("Took Figma's value.");
+      }
       renderChanges();
     });
     actions.appendChild(theirs);

@@ -37,9 +37,19 @@ export type OverlayOp = "set-value" | "set-description" | "delete";
  * later, and the "Now in Figma" side has to still be there when they do.
  */
 export interface OverlayConflict {
-  /** What the fresh import produced — the side the user is choosing against. */
+  /** What the other side says — the value the user is choosing against. */
   figma?: TokenValue;
   at: string;
+  /**
+   * Which other side that is — ADR-0006 §5's `origin` field, doing UX work.
+   *
+   * `"figma"` (the default, and everything written before Phase 6) is ADR-0004's conflict: a rescan
+   * found the target moved under the edit. `"repo"` is Phase 6's: a pull landed on a token the user
+   * had also edited. The two are structurally identical and resolve identically; they differ only in
+   * what the block can honestly call the opposing value — *Now in Figma* or *From the repo*
+   * (UX §8.2). Guessing wrong there is the difference between blaming a colleague and blaming a bot.
+   */
+  origin?: "figma" | "repo";
 }
 
 /**
@@ -66,6 +76,25 @@ export interface OverlayEntry {
    */
   orphaned?: boolean;
   conflict?: OverlayConflict;
+  /**
+   * Where this pending change came from — ADR-0006 §5, and the only field Phase 6 adds.
+   *
+   * `"local"` is the default and is what every entry written before Phase 6 means, so it is left
+   * absent rather than backfilled. `"pulled"` marks an entry materialised from the repo, which
+   * exists so the panel can say *where* a pending change came from and so a conflict message can
+   * name the repo rather than the user (UX §8.2).
+   *
+   * Nothing in ADR-0004 §4's merge table changes: a pulled entry merges, conflicts and retires
+   * exactly like an authored one. This is a label on an existing thing, not a second kind of thing.
+   */
+  origin?: OverlayOrigin;
+}
+
+export type OverlayOrigin = "local" | "pulled";
+
+/** The default, said once, so no call site has to remember that absent means local. */
+export function originOf(entry: OverlayEntry): OverlayOrigin {
+  return entry.origin === "pulled" ? "pulled" : "local";
 }
 
 export interface EditOverlay {

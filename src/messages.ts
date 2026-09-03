@@ -11,6 +11,7 @@ import type {
 import type { DriftEntry } from "./tokens/drift";
 import type { Refusal } from "./tokens/toFigma";
 import type { ConsumerCount, PlannedWrite, WriteOutcome } from "./figma/apply";
+import type { RepoSettings, SyncState } from "./git/types";
 
 /** One generated file, already serialized deterministically, ready to display or copy. */
 export interface SerializedFile {
@@ -92,6 +93,28 @@ export interface ImportPayload {
    * rather than as an all-clear: an unpopulated guard map passes every lookup made against it.
    */
   guardsKnown: boolean;
+
+  // --- Phase 6 (ADR-0006) ---
+
+  /**
+   * What the drift baseline actually was — ADR-0006 §7's swap, reported rather than assumed.
+   *
+   * `"repo"` means drift is divergence from the source of truth and the block reads *In the repo* /
+   * *Now in Figma*. `"scan"` is Phase 5's changelog against a local watermark, and keeps Phase 5's
+   * wording. Both are live code paths: a file can be disconnected at any time, and a connected file
+   * whose repo content hasn't been fetched this session legitimately has only the scan baseline
+   * (§3 never persists the pulled tree). The labels follow this field, never a feature flag (UX §14).
+   */
+  driftBaseline: "repo" | "scan";
+}
+
+/** The connection, as the UI is allowed to know it — never including the PAT (ADR-0006 §1). */
+export interface GitConfig {
+  settings: RepoSettings | null;
+  /** Present only when it still describes the configured repo and branch (`syncStateApplies`). */
+  sync: SyncState | null;
+  /** Whether a PAT is stored at all. The token itself crosses only on `git-token`. */
+  hasToken: boolean;
 }
 
 /** What one apply run did, per entry (ADR-0005 §6 — a report, never a rollback). */
@@ -159,7 +182,38 @@ export type UiToPluginMessage =
   /** The delete confirmation's blast radius. Expensive, so it runs only for that one screen. */
   | { type: "count-consumers"; targets: Array<{ key: string; variableId?: string; styleId?: string }> }
   /** `[ Show them ]` / `[ Details ]` — selects those nodes on the canvas (UX §5.5, §5.7). */
-  | { type: "select-nodes"; nodeIds: string[] };
+  | { type: "select-nodes"; nodeIds: string[] }
+
+  // --- Phase 6 (ADR-0006) ---
+
+  /** Hand back the stored connection. Sent once at startup and after every settings write. */
+  | { type: "git-load" }
+  /**
+   * Persist the connection. `token` is the one field that may be absent meaning *leave it alone*
+   * and `null` meaning *clear it* — a distinction the settings overlay needs, because editing a
+   * repo URL must not silently drop a credential the field can never show back to the user.
+   */
+  | { type: "git-save-settings"; settings: RepoSettings | null; token?: string | null }
+  /** The merge base after a successful sync, or `null` to invalidate it (§9's branch change). */
+  | { type: "git-save-sync"; state: SyncState | null }
+  /**
+   * Ask for the PAT, for the duration of one operation — ADR-0006 §1.
+   *
+   * The sandbox owns `clientStorage`; the iframe owns `fetch`. There is no arrangement that avoids
+   * the credential crossing this channel, so the ADR says so plainly and mitigates it in code: the
+   * iframe holds it in a closure for one operation and drops it.
+   */
+  | { type: "git-request-token" }
+  /**
+   * The repo's `tokens/**` content, for the drift baseline — ADR-0006 §7.
+   *
+   * Held in memory only and never written to `clientStorage`: §3 refuses a second ~700KB blob in a
+   * 5MB store to cache something one cheap request re-derives. `null` clears it, which is what a
+   * disconnect does — and is why disconnecting visibly reverts drift to Phase 5's meaning.
+   */
+  | { type: "git-repo-baseline"; files: SerializedFile[] | null }
+  /** Land a pull as overlay entries — ADR-0006 §5. Never a Figma write. */
+  | { type: "git-pull"; entries: Array<Omit<OverlayEntry, "at">> };
 
 export type PluginToUiMessage =
   | { type: "plugin-ready"; fileName: string }
@@ -184,4 +238,12 @@ export type PluginToUiMessage =
   | { type: "apply-result"; report: ApplyReport }
   /** Layer counts for the delete confirmation's blast radius (UX §5.7). */
   | { type: "consumer-counts"; counts: ConsumerCount[] }
-  | { type: "import-error"; message: string };
+  | { type: "import-error"; message: string }
+
+  // --- Phase 6 (ADR-0006) ---
+
+  | { type: "git-config"; config: GitConfig }
+  /** The PAT, for one operation. Never rendered, never logged, never cached (ADR-0006 §1). */
+  | { type: "git-token"; token: string | null }
+  /** What landing a pull did to the overlay — the count the toast reports (UX §8.1). */
+  | { type: "git-pull-result"; applied: number; conflicts: number };

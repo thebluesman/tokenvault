@@ -28,16 +28,32 @@ import {
   revealPath,
   setImportNavigator,
 } from "./tokens";
+import { checkStatus, getGit, handleGitMessage, onGitChange, recomputeStatus } from "./git";
+import {
+  connectionBroken,
+  openSettings,
+  renderSettings,
+  setSettingsCloseHandler,
+} from "./settings";
+import {
+  renderRepo,
+  repoTabLabel,
+  setPullReviewHandler,
+  setSettingsOpener,
+  showRepoTab,
+} from "./repo";
 
 const fileNameEl = document.getElementById("file-name") as HTMLHeadingElement;
 const scanButton = document.getElementById("scan") as HTMLButtonElement;
 const importTab = document.getElementById("tab-import") as HTMLButtonElement;
 const tokensTab = document.getElementById("tab-tokens") as HTMLButtonElement;
+const repoTab = document.getElementById("tab-repo") as HTMLButtonElement;
+const gearButton = document.getElementById("gear") as HTMLButtonElement;
 const stateSlot = document.getElementById("state-slot") as HTMLElement;
 const contentEl = document.getElementById("content") as HTMLElement;
 const tokensEl = document.getElementById("tokens") as HTMLElement;
 
-type Tab = "import" | "tokens";
+type Tab = "import" | "tokens" | "repo";
 let tab: Tab = "import";
 let hasImport = false;
 
@@ -50,8 +66,12 @@ function showTab(next: Tab): void {
   closeModal();
   importTab.classList.toggle("active", tab === "import");
   tokensTab.classList.toggle("active", tab === "tokens");
+  repoTab.classList.toggle("active", tab === "repo");
   contentEl.classList.toggle("hidden", tab !== "import");
   tokensEl.classList.toggle("hidden", tab !== "tokens");
+  // The Repo tab is a sibling of the other two, and switching to it never buries the state chip
+  // behind a back arrow — the header stays put (UX git-sync §4.1, §6.2).
+  showRepoTab(tab === "repo");
   if (tab === "tokens") renderTokens();
 }
 
@@ -80,43 +100,99 @@ function showTab(next: Tab): void {
 function renderStateSlot(): void {
   stateSlot.textContent = "";
   const model = getModel();
-  if (!model.ready && model.overlay.entries.length === 0) return;
+  const git = getGit();
+  if (!model.ready && model.overlay.entries.length === 0 && git.settings === null) return;
 
   const conflicts = conflictedLines().length;
   const drifted = driftedLines().length;
   const local = model.overlay.entries.filter((entry) => entry.conflict === undefined).length;
 
   let label: string;
-  let className: string;
+  let tone: "" | "on" | "warn" | "ok";
 
   if (conflicts > 0) {
     label = `${conflicts} conflict${conflicts === 1 ? "" : "s"}`;
-    className = "chip warn on";
+    tone = "warn";
   } else if (local === 0 && drifted === 0) {
     // Never a green all-clear without a baseline (ADR-0005 §8): "we haven't checked" and "nothing
     // to report" are different answers, and only one of them has earned a green dot.
     if (!model.driftKnown) {
       label = "Not compared";
-      className = "chip";
+      tone = "";
     } else {
       label = "● In sync";
-      className = "chip ok";
+      tone = "ok";
     }
   } else {
     const parts: string[] = [];
     if (local > 0) parts.push(`${local} local`);
     if (drifted > 0) parts.push(`${drifted} changed`);
     label = parts.join(" · ");
-    className = "chip on";
+    tone = "on";
   }
 
-  const chip = el("button", className, label);
-  chip.title = "What state is my work in?";
-  chip.addEventListener("click", () => {
+  // One chip, split by a hairline divider — left half Figma, right half repo (UX git-sync §6.1).
+  // Not two chips: the divider is what makes *in sync with what* answerable without a word, and
+  // since §4.1 each half also has its own destination on tap.
+  const chip = el("div", "sync-chip");
+
+  const left = el("button", tone === "ok" ? "ok" : undefined, label);
+  left.title = "What state is my work in?";
+  left.addEventListener("click", () => {
     showTab("tokens");
     openChanges();
   });
+  chip.appendChild(left);
+
+  const right = repoHalf();
+  if (right !== null) {
+    // Precedence when it doesn't all fit (§6.1): diverged › conflicts › repo counts › Figma counts.
+    chip.classList.add(right.tone === "warn" ? "warn" : right.tone === "on" ? "on" : "");
+    const button = el("button", undefined, right.label);
+    button.title = "What does the repo think?";
+    button.addEventListener("click", () => showTab("repo"));
+    chip.appendChild(button);
+  } else if (tone === "warn") {
+    chip.classList.add("warn");
+  } else if (tone === "on") {
+    chip.classList.add("on");
+  }
+
   stateSlot.appendChild(chip);
+}
+
+/**
+ * The chip's right half — UX §6.1.
+ *
+ * **When not connected it is absent entirely** — not greyed, not `—` — and takes no taps. That is
+ * the whole reason this returns `null` rather than an empty string: an empty slot that still holds
+ * width and a click target is a control that does nothing, which is worse than no control.
+ *
+ * `↑`/`↓` are **file** counts and appear only here; every list spells out *To push* / *To pull*
+ * in words (§6.1, §12). `diverged` is always a word, never a glyph — it is the one state that
+ * blocks an operation and the one term the user won't already know.
+ */
+function repoHalf(): { label: string; tone: "on" | "warn" } | null {
+  const git = getGit();
+  if (git.settings === null) return null;
+  if (git.failure !== null && git.failure.kind === "offline") return { label: "⚠ offline", tone: "warn" };
+  if (git.status === null) return { label: git.checking ? "…" : "not checked", tone: "on" };
+
+  const status = git.status;
+  if (status.diverged.length > 0) {
+    return { label: `${status.diverged.length} diverged`, tone: "warn" };
+  }
+  const parts: string[] = [];
+  if (status.toPush.length > 0) parts.push(`↑ ${status.toPush.length}`);
+  if (status.toPull.length > 0) parts.push(`↓ ${status.toPull.length}`);
+  if (parts.length === 0) return { label: "● in sync", tone: "on" };
+  return { label: parts.join(" "), tone: "on" };
+}
+
+/** The Repo tab's label and the gear's one state mark, both recomputed on every git change. */
+function renderRepoChrome(): void {
+  repoTab.textContent = repoTabLabel();
+  gearButton.classList.toggle("needs", connectionBroken());
 }
 
 // ---------------------------------------------------------------------------
@@ -131,8 +207,37 @@ setNavigator(goToPath);
 setChangesNavigator(goToPath);
 setImportNavigator(() => showTab("import"));
 
-onChange(() => {
+setSettingsOpener(openSettings);
+setSettingsCloseHandler(() => {
   renderStateSlot();
+  renderRepoChrome();
+  renderRepo();
+});
+setPullReviewHandler(() => {
+  // *"`[ Review ]` opens the Changes list on the Local tab, where the entries are sitting"* — the
+  // state moving from the repo half of the chip to the Figma half, visibly, in one hop (§8.1).
+  showTab("tokens");
+  openChanges("local");
+});
+
+onGitChange(() => {
+  renderStateSlot();
+  renderRepoChrome();
+  renderRepo();
+  renderSettings();
+  // The drift block's labels are keyed to connection state (UX §10.2), so a connect or disconnect
+  // has to repaint whatever is open — both are live code paths, and a file can be disconnected at
+  // any time.
+  if (tab === "tokens" && isChangesOpen()) renderChanges();
+});
+
+onChange(() => {
+  // Locally, from the tree already fetched — an edit moves the local half of §4's comparison and
+  // nothing else. No request is made here; the network cadence is untouched.
+  recomputeStatus();
+  renderStateSlot();
+  renderRepoChrome();
+  if (tab === "repo") renderRepo();
   if (tab !== "tokens") return;
   renderTokens();
   // The three full-panel surfaces share one element, so exactly one of them owns it at a time.
@@ -144,6 +249,8 @@ onChange(() => {
 
 importTab.addEventListener("click", () => showTab("import"));
 tokensTab.addEventListener("click", () => showTab("tokens"));
+repoTab.addEventListener("click", () => showTab("repo"));
+gearButton.addEventListener("click", () => openSettings());
 
 scanButton.addEventListener("click", () => {
   setImportScanning(true);
@@ -156,8 +263,22 @@ window.onmessage = (event: MessageEvent) => {
   const message = event.data.pluginMessage as PluginToUiMessage | undefined;
   if (!message) return;
 
+  // Git messages are routed first and consumed there — the credential reply in particular must not
+  // fall through to anything that logs or renders a message (ADR-0006 §1).
+  if (handleGitMessage(message)) {
+    if (message.type === "git-pull-result" && message.conflicts > 0) {
+      toast(
+        `${message.conflicts} pulled change${message.conflicts === 1 ? "" : "s"} landed on a token you'd edited — resolve them in Conflicts.`
+      );
+    }
+    return;
+  }
+
   if (message.type === "plugin-ready") {
     fileNameEl.textContent = message.fileName;
+    // *"A status check runs on panel open"* (UX §14). It transfers no content and costs one
+    // request, which is what makes it affordable to answer on demand rather than remember.
+    void checkStatus();
     return;
   }
 

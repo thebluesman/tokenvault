@@ -44,6 +44,7 @@ import {
   deleteBlockers,
   deleteLines,
   dismissDrift,
+  driftBaseline,
   editBlockedReason,
   editDescription,
   editValue,
@@ -52,9 +53,11 @@ import {
   planFor,
   planRestoreDrift,
   resolveKeepMine,
+  resolveTakeRepo,
   revert,
   send,
 } from "./state";
+import { isConnected } from "./git";
 import { openApplyDialog } from "./applyDialog";
 import { openDeleteInFigma } from "./deleteFigma";
 import { button, copy, el, toast } from "./dom";
@@ -261,11 +264,25 @@ function renderSetSection(row: Row, line: Line): HTMLElement {
 /** UX §5.5's conflict block: both sides, local shown as live, one tap each way. */
 function renderConflict(line: Line): HTMLElement {
   const conflict = line.conflict as NonNullable<Line["conflict"]>;
+  // A pulled conflict names the repo rather than the user — ADR-0006 §5's `origin` field doing UX
+  // work (UX git-sync §8.2). The two are structurally identical and resolve identically; they
+  // differ only in what the block can honestly call the opposing value.
+  const fromRepo = conflict.conflict?.origin === "repo";
   const box = el("div", "conflict-box");
-  box.appendChild(el("div", undefined, "⚑ Conflict — both you and Figma changed this"));
-  box.appendChild(el("div", "mono", `Your edit    ${describe(conflict.value)}`));
-  box.appendChild(el("div", "mono", `Now in Figma ${describe(conflict.conflict?.figma)}`));
-  box.appendChild(el("div", undefined, "Your edit is being used."));
+  box.appendChild(
+    el(
+      "div",
+      undefined,
+      fromRepo ? "⚑ Conflict — you and the repo both changed this" : "⚑ Conflict — both you and Figma changed this"
+    )
+  );
+  box.appendChild(el("div", "mono", `${fromRepo ? "Yours        " : "Your edit    "}${describe(conflict.value)}`));
+  box.appendChild(
+    el("div", "mono", `${fromRepo ? "From the repo" : "Now in Figma "} ${describe(conflict.conflict?.figma)}`)
+  );
+  box.appendChild(
+    el("div", undefined, fromRepo ? "You edited this token; the repo changed it too. Pick one." : "Your edit is being used.")
+  );
 
   const actions = el("div", "actions");
   const mine = button("Keep mine");
@@ -273,8 +290,14 @@ function renderConflict(line: Line): HTMLElement {
     if (line.target !== null) resolveKeepMine(line.target, conflict.op);
     toast("Kept your value.");
   });
-  const theirs = button("Take Figma's");
+  const theirs = button(fromRepo ? "Take the repo's" : "Take Figma's");
   theirs.addEventListener("click", () => {
+    if (fromRepo) {
+      // The repo's value is in neither the tree nor Figma, so taking it records it as a pending
+      // change rather than dropping the entry and falling back to a third thing.
+      if (resolveTakeRepo(line)) toast("Took the repo's value — apply it to update Figma.");
+      return;
+    }
     if (line.target !== null) revert([line.target], conflict.op);
     toast("Took Figma's value.");
   });
@@ -304,10 +327,25 @@ function renderDrift(line: Line): HTMLElement {
   const box = el("div", "conflict-box");
   box.appendChild(el("div", undefined, "⚑ Changed in Figma"));
 
+  // Phase 6's rebaseline — UX git-sync §10.2, amending `apply-and-drift.md` §6.4 exactly as that
+  // section predicted. Connected, the repo holds a value genuinely independent of Figma, so the two
+  // rows are once again two different things and the labels say which is which. Disconnected, the
+  // tree is still re-derived from Figma on every scan and Phase 5's honest nouns stand.
+  //
+  // Keyed to the connection, not to a feature flag: both are live code paths, and a file can be
+  // disconnected at any time (UX §14).
+  const connected = driftBaseline() === "repo" && isConnected();
+
   if (drift.kind === "drift-added") {
     box.appendChild(el("div", undefined, "This is new in Figma since your last scan."));
   } else if (drift.kind === "drift-removed") {
     box.appendChild(el("div", undefined, "This was in Figma at your last scan and isn't any more."));
+  } else if (connected) {
+    // `In the repo`, not `Your token`: the tree renders `build(scan) + overlay`, so "your token" is
+    // showing Figma's value on this row. `In the repo` names the thing the row actually holds.
+    box.appendChild(el("div", "mono", `In the repo   ${describe(drift.baseline)}`));
+    box.appendChild(el("div", "mono", `Now in Figma  ${describe(drift.current)}`));
+    box.appendChild(el("div", undefined, "The repo and Figma disagree about this token."));
   } else {
     box.appendChild(el("div", "mono", `At your last scan  ${describe(drift.baseline)}`));
     box.appendChild(el("div", "mono", `Now in Figma       ${describe(drift.current)}`));
@@ -319,15 +357,18 @@ function renderDrift(line: Line): HTMLElement {
   const actions = el("div", "actions");
 
   if (drift.kind === "drift-value") {
-    // "Re-apply token" in UX §6.4's table. In Phase 5 the token's value *is* Figma's, so the only
-    // thing left to push is the value from before the change — i.e. put Figma back. A canvas
-    // write, so it routes through the dialog like every other one.
-    const restore = button("Put Figma back");
-    restore.title = `Writes ${describe(drift.baseline)} — the value at your last scan — back into Figma.`;
+    // Connected this really is *take the repo's* — the baseline is the repo's value, so writing it
+    // back into Figma is what the button says. Disconnected the baseline is only a watermark, so
+    // the honest label is Phase 5's `Put Figma back`. Same plan, same dialog, two names for two
+    // different facts. A canvas write, so it routes through the dialog like every other one.
+    const restore = button(connected ? "Take the repo's" : "Put Figma back");
+    restore.title = connected
+      ? `Writes ${describe(drift.baseline)} — the repo's value — into Figma.`
+      : `Writes ${describe(drift.baseline)} — the value at your last scan — back into Figma.`;
     restore.addEventListener("click", () => {
       openApplyDialog({
         plan: planRestoreDrift([line.key as string]),
-        title: `Put back ${line.entry.path}`,
+        title: connected ? `Take the repo's ${line.entry.path}` : `Put back ${line.entry.path}`,
         nothingToDo: "Nothing to put back.",
         onNothingToDo: toast,
       });
@@ -336,10 +377,15 @@ function renderDrift(line: Line): HTMLElement {
   }
 
   const accept = button("Take Figma's");
-  accept.title = "Accepts the change and clears the flag. Nothing is written.";
+  // Connected, accepting gains a consequence it did not have in Phase 5: the file the panel would
+  // push already carries Figma's value, so the repo now disagrees with it and the file becomes an
+  // uncommitted change. Disconnected, it still writes nothing. Two facts, two sentences (§10.2).
+  accept.title = connected
+    ? "Accepts the change. Nothing is written to Figma — the token becomes a change to push."
+    : "Accepts the change and clears the flag. Nothing is written.";
   accept.addEventListener("click", () => {
     dismissDrift([line.key as string]);
-    toast("Accepted Figma's change.");
+    toast(connected ? "Accepted the change from Figma — 1 change to push." : "Accepted Figma's change.");
   });
   actions.appendChild(accept);
 
