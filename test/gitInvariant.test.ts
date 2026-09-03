@@ -166,3 +166,24 @@ test("$import-report.json is excluded at the boundary, not in a renderer", () =>
     );
   }
 });
+
+test("no source file contains a literal NUL byte, so every one of them stays reviewable", () => {
+  // A single raw NUL makes git and GitHub classify the whole file as binary: `git diff`, `gh pr
+  // diff` and the web UI all render "Binary files differ" with no hunks at all, which takes the
+  // file straight out of the review gate. Written as the escape `\u0000` it has identical runtime
+  // semantics and costs nothing, so that is how the map-key joiners are always spelled.
+  const offenders: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      // Read raw, not comment-stripped: a NUL in a comment is as fatal to the diff as one in code.
+      else if (readFileSync(full, "utf8").indexOf("\u0000") !== -1) {
+        offenders.push(full.slice(ROOT.length + 1));
+      }
+    }
+  };
+  walk(join(ROOT, "src"));
+  walk(join(ROOT, "test"));
+  assert.deepEqual(offenders, []);
+});

@@ -276,3 +276,47 @@ test("a second pull onto the same conflict refreshes the repo side rather than s
   assert.equal(second.entries[0].conflict?.figma, "#d44b3f");
   assert.equal(second.entries[0].conflict?.previous, undefined);
 });
+
+test("the indexed merge agrees with a loop over recordEdit, entry for entry", () => {
+  // `applyPull` indexes the overlay rather than rescanning it per pulled entry — on a first-connect
+  // *adopt the repo* every token in the repo arrives at once, and the scan-per-entry it replaced was
+  // quadratic on the plugin's single main thread. The rules it applies are still `recordEdit`'s, and
+  // this is what keeps the two from drifting apart.
+  const second = { variableId: "VariableID:2:2", modeId: "1:0" };
+  const batch: Array<Omit<OverlayEntry, "at">> = [
+    { target, path: "color.accent", set: "Theme/Light", op: "set-value", value: "#c33a2e", base: "#b4342a", origin: "pulled" },
+    { target, path: "color.accent", set: "Theme/Light", op: "set-description", value: "brand red", base: "", origin: "pulled" },
+    { target: second, path: "color.ink", set: "Theme/Light", op: "set-value", value: "#101010", base: "#000000", origin: "pulled" },
+    // The repo moved again inside the same batch — the later entry replaces the earlier one.
+    { target, path: "color.accent", set: "Theme/Light", op: "set-value", value: "#d44b3f", base: "#b4342a", origin: "pulled" },
+    // And back to what Figma already had, which stores no entry at all.
+    { target: second, path: "color.ink", set: "Theme/Light", op: "set-value", value: "#000000", base: "#000000", origin: "pulled" },
+  ];
+
+  let expected = overlayWith([]);
+  for (const entry of batch) expected = recordEdit(expected, entry, NOW);
+
+  const merged = applyPull(overlayWith([]), batch, NOW);
+  assert.deepEqual(merged.overlay, expected);
+  assert.equal(merged.applied, batch.length);
+  assert.equal(merged.conflicts, 0);
+});
+
+test("a pulled delete supersedes the value and description entries on the same target", () => {
+  const seeded = applyPull(
+    overlayWith([]),
+    [
+      { target, path: "color.accent", set: "Theme/Light", op: "set-value", value: "#c33a2e", base: "#b4342a", origin: "pulled" },
+      { target, path: "color.accent", set: "Theme/Light", op: "set-description", value: "brand red", base: "", origin: "pulled" },
+    ],
+    NOW
+  ).overlay;
+  assert.equal(seeded.entries.length, 2);
+
+  const after = applyPull(
+    seeded,
+    [{ target, path: "color.accent", set: "Theme/Light", op: "delete", origin: "pulled" }],
+    NOW
+  ).overlay;
+  assert.deepEqual(after.entries.map((entry) => entry.op), ["delete"]);
+});

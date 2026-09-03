@@ -86,6 +86,8 @@ function blankReview(): ReviewState {
 let divergedAt = 0;
 let compareFor: string | null = null;
 let comparingTree: TokenGroup | null = null;
+/** The path `comparingTree` is being fetched for — an in-flight fetch's claim on that slot. */
+let comparingFor: string | null = null;
 
 export function showRepoTab(show: boolean): void {
   openTab = show;
@@ -701,6 +703,7 @@ function openDiverged(path: string): void {
   divergedAt = status === null ? 0 : Math.max(0, status.diverged.findIndex((file) => file.path === path));
   screen = "diverged";
   comparingTree = null;
+  comparingFor = null;
   renderRepo();
   void loadDivergedTree();
 }
@@ -709,7 +712,14 @@ async function loadDivergedTree(): Promise<void> {
   const status = getGit().status;
   const file = status?.diverged[divergedAt];
   if (file === undefined) return;
-  comparingTree = await repoTreeFor(file.path);
+  // The file this fetch belongs to. Opening another diverged file — or advancing the queue — while
+  // it is in flight would otherwise land *this* file's repo content under *that* file's path, and
+  // the Compare screen would be summarising two different files at once. Same reason `openReview`
+  // pins its session.
+  comparingFor = file.path;
+  const tree = await repoTreeFor(file.path);
+  if (comparingFor !== file.path) return;
+  comparingTree = tree;
   renderRepo();
 }
 
@@ -835,6 +845,7 @@ function advanceDiverged(): void {
   // resolving `4/5` back to the top of a queue they had already worked through.
   divergedAt = Math.min(divergedAt, status.diverged.length - 1);
   comparingTree = null;
+  comparingFor = null;
   renderRepo();
   void loadDivergedTree();
 }

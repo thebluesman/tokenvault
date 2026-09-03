@@ -131,13 +131,28 @@ export function createClient(options: ClientOptions): GitClient {
       });
     }
     if (response.status === 403 || response.status === 429) {
+      // Two different limits wear the same status code. The primary one spends
+      // `x-ratelimit-remaining` down to zero; the **secondary** one — GitHub's throttle on bursts of
+      // writes — sends `Retry-After` with the budget still showing plenty left, and a 429 is a rate
+      // limit by definition whatever the headers say. Missing that case sent a correctly scoped
+      // token down the permissions branch and told the user to go widen it, which is both wrong and
+      // the one piece of advice that can't be undone by waiting.
       const remaining = response.headers.get("x-ratelimit-remaining");
-      if (remaining === "0") {
+      const retryAfter = numberOrNull(response.headers.get("retry-after"));
+      if (remaining === "0" || retryAfter !== null || response.status === 429) {
         const reset = Number(response.headers.get("x-ratelimit-reset") ?? 0);
+        const secondary = remaining !== "0";
         return new GitError({
           kind: "rate-limited",
-          message: "GitHub's rate limit is used up.",
-          rateLimitReset: reset,
+          message: secondary
+            ? "GitHub is throttling requests from this token. Give it a minute and try again."
+            : "GitHub's rate limit is used up.",
+          // `Retry-After` is a delay in seconds; `x-ratelimit-reset` is an absolute time. The field
+          // holds the latter, so the delay is turned into one rather than passed through as 60.
+          rateLimitReset:
+            secondary && retryAfter !== null
+              ? Math.floor(Date.now() / 1000) + retryAfter
+              : reset,
         });
       }
       if (method !== "GET") {

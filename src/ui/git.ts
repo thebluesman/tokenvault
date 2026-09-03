@@ -143,6 +143,16 @@ export function tokensDir(): string {
 
 let tokenWaiters: Array<(token: string | null) => void> = [];
 
+/**
+ * Woken by `git-pull-result`, so a pull can wait for its own merge.
+ *
+ * `git-pull` is a one-way message; the sandbox merges, persists, and posts `overlay-state` and then
+ * `git-pull-result` back. Anything that reads the overlay before that lands reads the *pre-pull*
+ * overlay — which is how the baseline refresh was re-fetching every path the pull had just brought
+ * into agreement, roughly doubling the blob fetches on every pull.
+ */
+let pullWaiters: Array<() => void> = [];
+
 /** One status check per panel open, fired from the first `git-config` that can support one. */
 let openChecked = false;
 
@@ -178,6 +188,9 @@ export function handleGitMessage(message: {
     update({
       lastPullMerge: { applied: message.applied ?? 0, conflicts: message.conflicts ?? 0 },
     });
+    const waiters = pullWaiters;
+    pullWaiters = [];
+    for (const resolve of waiters) resolve();
     return true;
   }
   return false;
@@ -592,7 +605,13 @@ export async function pull(paths: string[]): Promise<PullOutcome | null> {
     paths: new Set(trees.keys()),
   });
 
-  if (result.entries.length > 0) send({ type: "git-pull", entries: result.entries });
+  const merged =
+    result.entries.length > 0
+      ? new Promise<void>((resolve) => {
+          pullWaiters.push(resolve);
+          send({ type: "git-pull", entries: result.entries });
+        })
+      : Promise.resolve();
 
   // The base advances for every file actually read, whether or not it produced an entry: the two
   // sides now agree on what that file said, which is exactly what a merge base records.
@@ -615,6 +634,10 @@ export async function pull(paths: string[]): Promise<PullOutcome | null> {
   // shows the previous pull's numbers next to this pull's list.
   update({ sync: next, lastPull: result, lastPullMerge: null });
 
+  // Sequenced after the merge, not after the request: the baseline is computed from the overlay,
+  // and reading it before the sandbox has merged reads a tree that still disagrees with every path
+  // this pull just reconciled — every one of which would then be fetched a second time.
+  await merged;
   await refreshRepoBaseline();
   await checkStatus();
   return { result, files: Object.keys(changes).length };
@@ -757,14 +780,19 @@ export function tokenCounts(trees: Map<string, TokenGroup>, manifest: Manifest |
 export function saveSettings(settings: RepoSettings, token?: string | null): void {
   const previous = view.settings;
   send({ type: "git-save-settings", settings, token });
-  // Changing branch, repo or owner invalidates the base — *"a different branch is a different
-  // base"* (§9). The sandbox filters a stale state on read; the view drops it now so the panel
-  // never renders a status computed against a base that no longer applies.
+  // Changing branch, repo, owner or tokens folder invalidates the base — *"a different branch is a
+  // different base"* (§9), and a different folder is a different set of paths, so every blob SHA in
+  // the base is keyed to files the panel is no longer looking at. The sandbox filters a stale state
+  // on read; the view drops it now so the panel never renders a status computed against a base that
+  // no longer applies. `tokensDir` belongs here for a second reason: leaving `sync` non-null keeps
+  // `maybeFirstConnect` from re-baselining, so the panel would report drift against the old folder
+  // until the user disconnected and reconnected.
   const moved =
     previous !== null &&
     (previous.owner !== settings.owner ||
       previous.repo !== settings.repo ||
-      previous.branch !== settings.branch);
+      previous.branch !== settings.branch ||
+      previous.tokensDir !== settings.tokensDir);
   if (moved) {
     connectionGeneration += 1;
     remoteTree = null;
