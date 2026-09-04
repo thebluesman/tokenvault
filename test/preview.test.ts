@@ -21,7 +21,10 @@ test("a colour previews as its hex, with a swatch to paint", () => {
   assert.equal(preview.reference, undefined);
 });
 
-test("a reference previews verbatim and asks for an outlined swatch, never a fill", () => {
+test("a reference previews verbatim and carries no swatch of its own", () => {
+  // `previewOf` is pure over the token, so it cannot know where a pointer lands. The row paints a
+  // reference's swatch from the *resolution* instead (tokens.ts `appendValue`) — which is why the
+  // swatch branch for references survives the §4.5 amendment even though its styling does not.
   const preview = previewOf(token("color", "{folio.ref.palette.red-warm.50}"));
   assert.equal(preview.swatch, undefined, "we can't resolve it, so we must not claim to");
   assert.equal(preview.reference, "folio.ref.palette.red-warm.50");
