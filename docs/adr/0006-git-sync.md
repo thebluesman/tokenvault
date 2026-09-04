@@ -4,7 +4,14 @@
 **Date**: 2026-09-02
 **Accepted**: 2026-09-02 — Shyam resolved every open question that was his to make; the one item still open is an API fact to verify during implementation, not a decision. See [Open questions](#open-questions-not-decided-here). Phase 6 built and merged against this ADR 2026-09-03 (PR #14, `8efe321`), unamended.
 **Owner**: @tech-lead
-**Extended by**: [ADR-0008 — Multi-repo push routing](0008-multi-repo-push-routing.md) (Proposed, 2026-09-04). This ADR remains the single-repo design and is unchanged except where ADR-0008 marks a section amended: §2's source-of-truth sentence is qualified to name a primary connection (ADR-0008 §1), §3's `tokenvault:sync:<file-id>` key gains a connection id (ADR-0008 §6), and §10's "no partial commit state" stays true per repo but not across repos (ADR-0008 §4).
+**Extended by**: [ADR-0008 — Multi-repo push routing](0008-multi-repo-push-routing.md) (Accepted, 2026-09-04). This ADR remains the single-repo design and behaves exactly as written whenever one repo is connected. Four sections are generalised there:
+
+- **§2 — scope note, editorial.** *"The repo is the source of truth"* was written for the single-repo case. With N repos there is no primary: the **local tree** (`build(scan, userSubtypes, pathRules) + overlay`) is the authored truth, and each repo is an independently-tracked sync target (ADR-0008 §1). The overlay's demotion to uncommitted work survives unchanged, and strengthens — it is uncommitted with respect to every connection.
+- **§3 — `tokenvault:sync:<file-id>` gains a connection id** (ADR-0008 §2, §6). The PAT key is unchanged: one shared token, by Shyam's decision, reversing §1's per-repo scoping (ADR-0008 §2).
+- **§7 — the drift baseline is left undefined by the removal of a primary repo, and is not yet re-settled.** ADR-0008 §6a recommends measuring drift against the local tree with no repo involved, and flags it back to Shyam because it is a semantics change rather than an editorial one. **Until that is answered, §7 stands as written for the single-repo case.**
+- **§10 — "no partial commit state"** stays true per repo and is false across repos; a fan-out push has a per-repo result list (ADR-0008 §4).
+
+§1's per-repo PAT scoping is the one decision here that ADR-0008 reverses outright; the tradeoff is recorded in ADR-0008 §2 rather than edited away here.
 
 > Shyam resolved this ADR's six open questions on 2026-09-02, before acceptance. They are folded into the decision sections below and marked *(resolved 2026-09-02)*: divergence is per-file, whole-file pick-a-side and only the diverged file blocks (§6); first connect asks once whether to adopt the repo (§6); push and pull are manual, with no auto-pull (§5); the diff/commit view is its own surface (§8); Tokenvault is a sync client, not a git client (§9); and a bulk *Take Figma's* gets its own confirmation (§7).
 

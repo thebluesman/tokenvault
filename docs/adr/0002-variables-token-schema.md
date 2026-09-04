@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Date**: 2026-09-01
-**Revision**: 3 — amended 2026-09-01, see [Amendment 1](#amendment-1--2026-09-01-phase-2-implementation-feedback); amended 2026-09-04 (Proposed, not yet accepted), see [Amendment 2](#amendment-2--2026-09-04-proposed--configurable-path-transform-rules)
+**Revision**: 3 — amended 2026-09-01, see [Amendment 1](#amendment-1--2026-09-01-phase-2-implementation-feedback); amended 2026-09-04, see [Amendment 2](#amendment-2--2026-09-04--configurable-path-transform-rules)
 **Owner**: @tech-lead
 
 ## Context
@@ -30,7 +30,7 @@ Path is always `tokens/<collection-slug>/<mode-slug>.json`, including single-mod
 
 Inside a file, the `/`-delimited variable name splits directly into nested DTCG groups, segments verbatim from Figma — the token path is the round-trip identity, so it is never slugged, cased, or prefixed. A variable named `atlas/ref/palette/neutral/black` becomes `atlas.ref.palette.neutral.black` regardless of which collection or mode file it lands in.
 
-> **Amended by [Amendment 2](#amendment-2--2026-09-04-proposed--configurable-path-transform-rules) (Proposed, 2026-09-04).** "Verbatim" is narrowed to "verbatim, unless a declared path rule says otherwise". The token path becomes a pure function of the variable name *and* the committed rule set, rather than of the variable name alone. Everything this paragraph was protecting — no implicit slugging, no implicit casing, no implicit prefixing, one predictable answer per re-scan — still holds; what changes is that the function is now user-declarable and visible in the repo instead of being fixed at identity.
+> **Amended by [Amendment 2](#amendment-2--2026-09-04--configurable-path-transform-rules) (2026-09-04).** "Verbatim" is narrowed to "verbatim, unless a declared path rule says otherwise", and a rule may also exclude a variable from import entirely. The token path becomes a pure function of the variable name *and* the committed rule set, rather than of the variable name alone. Everything this paragraph was protecting — no implicit slugging, no implicit casing, no implicit prefixing, one predictable answer per re-scan — still holds; what changes is that the function is now user-declarable and visible in the repo instead of being fixed at identity.
 
 The collection name is deliberately **not** prepended to the token path. Collection identity lives in the manifest and in each token's `$extensions.figma.collectionId`, not in its name. This means a token's reference string survives a variable moving between collections, matches Figma's own model (an alias points at a Variable, not at a variable-in-a-collection), and matches the shape the atlas pipeline already produces.
 
@@ -255,7 +255,7 @@ Note that the `tv` root here comes from the variable *names*, not from the colle
 
 - **Theme naming and composition UX** when multiple multi-mode collections exist — product/UX call for `@ux-designer` or Shyam, deferred to Phase 7.
 - **The flag/tag step's interaction design** (bulk-tag by name pattern? per-token?) — `@ux-designer`'s call; this ADR only fixes what that step writes.
-- **Name-prefix filtering and platform scoping.** The atlas pipeline treated only `atlas/`-prefixed variables as real tokens, excluded `*`-prefixed segments as design-tooling scaffolding, and parsed a `web`/`app`/`ios`/`android` segment out of the path. Issue #2 asks for none of this and Phase 2 imports every variable, but it is adjacent to collision handling and will resurface if a real file turns out to be full of non-token variables. Deferred, not designed for. **Partly answered by Amendment 2 (2026-09-04)**: the *path-parsing* half of it is now a declared rule engine. The *filtering* half — excluding a variable from import entirely — is still deferred, and is Amendment 2's open question 1.
+- **Name-prefix filtering and platform scoping.** The atlas pipeline treated only `atlas/`-prefixed variables as real tokens, excluded `*`-prefixed segments as design-tooling scaffolding, and parsed a `web`/`app`/`ios`/`android` segment out of the path. Issue #2 asks for none of this and Phase 2 imports every variable, but it is adjacent to collision handling and will resurface if a real file turns out to be full of non-token variables. Deferred, not designed for. **Answered in full by Amendment 2 (2026-09-04)**: the path-parsing half is now a declared rule engine (§A–§D), and the filtering half is the `exclude` action (§I). This question is closed.
 
 ## Amendment 1 — 2026-09-01 (Phase 2 implementation feedback)
 
@@ -328,9 +328,11 @@ Figma stores FLOAT variable values as 32-bit floats, so a variable a designer ty
 
 Against the Phase 2 branch as built, four things change: the `theme-composition` kind (§C), the synthesised `Default` theme (§D), the `dangling-reference` kind (§G), and the winner comparator plus `winnerRule` field (§F). §A, §B, §E and §H bless what is already there.
 
-## Amendment 2 — 2026-09-04 (Proposed) — configurable path transform rules
+## Amendment 2 — 2026-09-04 — configurable path transform rules
 
-**Status of this amendment**: Proposed. Phase 10 (PRD §9 item 10) asks for configurable token naming rules: a pattern match against a Figma variable's name that transforms the resulting token path — `xyz/base/color/bg/primary` → `base.color.bg.primary`, `semantic/typography/xyz/title` → `semantic.typography.title` — configured once and re-evaluated on every scan, never baked into a token's stored data.
+**Status of this amendment**: Accepted 2026-09-04. Shyam resolved all three of its open questions, two of them against this amendment's own recommendation: **exclusion is in** (§B), and **all three transform actions ship**, not just stripping (§B). Rule-set mismatch **blocks** (§F), as recommended. One residual question is recorded at the end.
+
+Phase 10 (PRD §9 item 10) asks for configurable token naming rules: a pattern match against a Figma variable's name that transforms the resulting token path — `xyz/base/color/bg/primary` → `base.color.bg.primary`, `semantic/typography/xyz/title` → `semantic.typography.title` — configured once and re-evaluated on every scan, never baked into a token's stored data.
 
 That contradicts §1 as written, so it is amended here rather than decided in code. ADR-0008 (multi-repo push routing) depends on §A's matcher and is a separate decision.
 
@@ -366,20 +368,28 @@ The matcher, used here and by ADR-0008:
 }
 ```
 
+**All four actions ship** *(resolved 2026-09-04 — Shyam, over this amendment's recommendation to ship stripping alone)*:
+
 | Action | Effect |
 |---|---|
 | `drop-matched-segments` | Removes every segment the match selected, wherever it occurs |
 | `replace-segment` (`with`) | Rewrites every matched segment to a literal |
 | `rewrite` (`pattern`, `replacement`) | Regex replace over the whole `/`-delimited name, `$1` capture groups |
+| `exclude` | The variable is **not imported at all** — §I |
+
+Insertion needs no fifth action; it is `rewrite` with a replacement that keeps its capture. Prepending `brand/` to everything under `color/` is `{ "pattern": "^color/(.*)$", "replacement": "brand/color/$1" }`. Shipping the general form rather than a `prepend`/`append` pair keeps the action list closed — anything positional is expressible, and there is no next amendment adding `insert-at`.
 
 **Rules are an ordered list and every enabled rule runs, in order, each on the previous rule's output.** A pipeline, not first-match-wins. Both of Shyam's examples are one rule applied at two positions, so position-independence is required; and a pipeline makes "two rules disagree" a non-question — the later rule operates on what the earlier one produced, and precedence is the array order. Order is meaningful data and is never sorted, per §7's array rule.
+
+**`exclude` short-circuits the pipeline** for that variable. Later rules do not run — there is no path left to transform — so a rule set is read top-to-bottom and an `exclude` is a terminal statement about everything below it, for the variables it matched.
 
 The pipeline runs **once** per variable per scan. It is a pure function of the source name and the rule set, so re-scan determinism does not depend on any individual rule being idempotent.
 
 ### C. Where it runs: before path splitting, therefore before collision detection
 
 ```
-scan → sourceName → pathRules → tokenPath → split on "/" → §5 collision detection → build → serialize
+scan → sourceName → pathRules ─┬─ excluded → not imported (§I)
+                               └─ tokenPath → split on "/" → §5 collision detection → build → serialize
 ```
 
 Rules run at the one place a name becomes a path, inside the pure build layer, before §5. That ordering is required rather than convenient: **rules create collisions**, and they must arrive at the existing detector as ordinary collisions rather than as a new failure mode. Stripping `xyz/` from one variable when an un-prefixed twin already exists is a `cross-set` or `same-set-case` collision like any other, resolved by Amendment 1 §F's comparator, every participant reported, nothing renamed and nothing silently dropped.
@@ -413,7 +423,9 @@ The rule set determines the shape of the committed tree. A second machine, or a 
 
 Serialized by §7's rules, with `pathRules` order preserved. `clientStorage` holds the working copy under `tokenvault:rules:<file-id>` — a few KB, the same relationship the edit overlay has to the committed tree (ADR-0004 §2), and negligible against ADR-0004 §1's 5MB budget.
 
-**A repo whose `$rules.json` differs from the local one blocks sync and says so**, resolved by ADR-0006 §6's per-file pick-a-side. Pulling under a mismatched rule set would mis-match every token by path, which is the silently-wrong class this project refuses everywhere.
+**A repo whose `$rules.json` differs from the local one blocks both push and pull for that repo, and says so** *(resolved 2026-09-04 — Shyam, as recommended)*. Pulling under a mismatched rule set would mis-match every token by path, and pushing under one would overwrite a tree built to different paths; both are the silently-wrong class this project refuses everywhere. It is resolved the way every other divergence is — ADR-0006 §6's pick-a-side, here over one file: take the repo's rules, or push yours over them.
+
+Unlike a diverged token file, this blocks the **whole** repo rather than one file, because the rule set determines the path of every token in the tree; there is no subset of files it leaves trustworthy. Other connected repos are unaffected (ADR-0008 §4).
 
 ### G. A rule edit is a mass rename, and it is previewed rather than discovered
 
@@ -433,14 +445,30 @@ The preview reports how many tokens change path, how many references are rewritt
 
 - **`build()` gains a third input.** It was a pure function of (scan, `userSubtypes`); it becomes a pure function of (scan, `userSubtypes`, `pathRules`). ADR-0004's statement that a build is reproducible from the Figma file plus `userSubtypes` needs that one word added. §7's byte-identical guarantee is unchanged — same three inputs, same bytes.
 - **Drift (ADR-0005 §7, ADR-0006 §7) is unaffected in mechanism and noisy on rule edits.** A re-pathed token reads as `drift-removed` plus `drift-added` against the old baseline. §G's preview is the mitigation; no drift-side change is made, because the drift comparator is correct and the confusion is entirely upstream of it.
-- **Excluding variables is still out of scope.** The engine could trivially carry an `exclude` action, which is the atlas name-prefix filtering this ADR's open questions deferred. Phase 10 did not ask for it, dropping tokens is a different risk from re-pathing them, and it stays deferred — noted here only because the engine makes it cheap, not because it is designed.
+- **Excluding variables is in scope** (§I), which closes this ADR's long-standing name-prefix-filtering deferral.
 - **Authoring UI is `@ux-designer`'s.** This amendment fixes the rule shape, the ordering semantics, the storage location and the preview requirement. What the rules editor looks like, how a rule is tested against the live file, and how the preview is presented are not decided here.
+
+### I. `exclude`: the deferred name-prefix filter, now built *(resolved 2026-09-04)*
+
+Shyam's call, over this amendment's recommendation to defer it. An `exclude` action means the variable produces **no token**: nothing in any set file, nothing in the manifest, nothing pushed. It closes this ADR's original open question about the atlas pipeline's prefix filtering, which treated only `atlas/`-prefixed variables as real tokens and discarded `*`-prefixed tooling scaffolding — the case that made this deferral worth recording in the first place.
+
+Excluding is a bigger act than re-pathing, so three guards, none of them new machinery:
+
+- **Exclusions are reported in aggregate, not per variable.** §5's "no silent drop" rule applies, but a file that excludes 400 scaffolding variables must not produce 400 report entries — that is how a report stops being read. One entry per rule: kind `path-rule`, reason `excluded`, carrying `ruleId` and `count`. Attributable, countable, and one line.
+- **A reference to an excluded variable dangles, and Amendment 1 §G already covers it.** The reference is still written, the token is still imported, and the report gains a new reason on the existing `dangling-reference` kind: `alias-target-excluded`. No new kind, no new behaviour — the same treatment a collision loser's referrers already get.
+- **§G's preview counts exclusions before the rule is saved.** "This rule excludes 412 variables and leaves 6 references dangling" is the number that has to be visible *before* the write, because after it those variables are simply absent and the mistake is invisible.
+
+Exclusion is a content decision — it changes what the tree contains — so it lives in the committed `$rules.json` like every other rule (§F).
+
+**Not decided here, and flagged below**: whether an exclusion that leaves a reference dangling should *block* a push, the way ADR-0008 §3 blocks a routing-induced dangle. This amendment says no — it warns and reports — and the reasoning is in the residual question.
 
 ### Open questions for Shyam (Amendment 2)
 
-1. **Should a rule set also be able to exclude variables from import?** Recommendation: no, keep it out of Phase 10 (§H). It is one action away and it is the atlas prefix-filter case, so it is worth an explicit yes/no rather than a silent omission.
-2. **Rule-set divergence between repo and local: block, or warn and proceed?** Recommendation: block (§F), because a pull under mismatched rules mis-matches every token. Warning-and-proceeding is defensible if rule edits turn out to be routine and always intentional.
-3. **`replace-segment` and `rewrite` — needed now, or is `drop-matched-segments` the whole Phase 10 requirement?** Both examples given are drops. The other two actions cost little and remove a future amendment, but if the answer is "only ever stripping", shipping one action is smaller and the rule shape stays open.
+All three original questions were resolved on 2026-09-04 and are folded into the sections above: **exclusion is in** (§I, overriding the recommendation to defer), **all four actions ship** (§B, overriding the recommendation to ship stripping alone), and **rule-set mismatch blocks** (§F, as recommended).
+
+**One residual, surfaced by the first two answers rather than left over from them:**
+
+1. **Should an `exclude` rule that leaves a reference dangling block a push, for symmetry with ADR-0008 §3's routing wall?** This amendment says **no** — it warns in §G's preview and reports via `dangling-reference` / `alias-target-excluded` — on the grounds that an exclusion dangle is uniform across every repo (so there is no "correct in repo A, broken in repo B" asymmetry to protect against), it is caught before the rule is saved, and blocking it would relitigate Amendment 1 §G, which deliberately writes-and-reports dangling references rather than refusing them. The counter-argument is real and is Shyam's to weigh: a dangling reference fails a Phase 8 export build outright, so a warned-and-committed exclusion dangle breaks CI in every repo at once, which is exactly the outcome the routing wall exists to prevent. If he wants symmetry, the change is small — the preview already computes the number.
 
 ## Precedent checked
 
