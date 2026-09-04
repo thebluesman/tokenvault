@@ -177,7 +177,7 @@ Nested disclosure rows following the DTCG group nesting exactly, since a node is
 
 | `$type` | Preview | Notes |
 |---|---|---|
-| `color` | 12px swatch (checkerboard behind, alpha is real — `#C33A2E33`) + hex, monospace | Reference values show the swatch as an outline, not a fill — we can't resolve it in Phase 4. |
+| `color` | 12px swatch (checkerboard behind, alpha is real — `#C33A2E33`) + hex, monospace | Reference values show the swatch as an outline, not a fill — we can't resolve it in Phase 4. **Amended 2026-09-04 — see the note below; once references resolve, a reference's swatch renders like any other.** |
 | `number` | `16` + subtype tag (`spacing`, `radius`, …) | Subtype tag is muted; `default`-sourced ones get the existing `.badge.needs` amber treatment. |
 | `boolean` | `true` / `false`, monospace | |
 | `string` | truncated, quoted | |
@@ -185,6 +185,15 @@ Nested disclosure rows following the DTCG group nesting exactly, since a node is
 | `shadow` | `2 shadows` or `0 4 4 #00000040` for a single | `$value` is a single object *or* an array — the row copy must handle both. |
 | `grid` | `columns · 4 · 8px` | |
 | reference | `{folio.ref.palette.red-warm.50}` in monospace, muted, with a `↗` link glyph | The path is truncated **from the left** (`{…palette.red-warm.50}`) — the tail carries the meaning. |
+
+**Amendment — 2026-09-04: a reference's colour swatch renders exactly like a literal's.** Once Phase 7 made references resolvable, this row's outline treatment became a fade: the swatch showed the resolved colour at 55% opacity with a dashed outline, so a reference and a literal wouldn't look identical. That is retired. **A reference-valued colour token gets a full-opacity swatch with a solid border, indistinguishable from a literal's.**
+
+Shyam's direct call, from live UX testing during Phase 10 dark-mode review (issue #21, tracked as issue #28) — comparing Figma's own Variables panel against Tokenvault's Tokens tab for the same `red-warm` set. Two things came out of that comparison:
+
+- **The fade wasn't adding information.** Reference-ness is already carried twice on the row: the `↗` glyph and the `{…}` value text. The swatch was a third, weaker signal for something already unambiguous.
+- **It was actively lying at the ends of a scale.** A near-black or near-white reference at 55% opacity reads as mid-grey — not "faded", *wrong*. The swatch's one job is showing the true resolved colour, and the treatment was breaking it in exactly the range where a designer is checking a colour most carefully.
+
+The swatch shows the colour; the `↗` and the value text say where it came from. Nothing about how references resolve or display in the value/detail view changes — this is the swatch's own rendering only.
 
 ### 4.6 Search and filter
 

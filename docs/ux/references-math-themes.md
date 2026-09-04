@@ -112,7 +112,7 @@ Tokens Studio does the same thing — one input, `{` triggers suggestions — an
 | `$type` | What changes in Phase 7 |
 |---|---|
 | `number` | The field accepts a literal, a reference, or an expression. The subtype dropdown is unaffected — a reference does not inherit its target's subtype, and the field beside it keeps saying what this token is tagged as. |
-| `color` | The field accepts a literal or a **whole-value reference**. Not an expression (ADR-0007 §1: operands must be numbers). While the value is a reference, the native `<input type="color">` swatch is **inert and shows the resolved colour**, not editable — clicking it does nothing except focus the text field, because a colour picker that silently converts a pointer into a hex value is the exact silent flattening §6 exists to prevent. |
+| `color` | The field accepts a literal or a **whole-value reference**. Not an expression (ADR-0007 §1: operands must be numbers). While the value is a reference, the native `<input type="color">` swatch is **inert and shows the resolved colour**, not editable — clicking it does nothing except focus the text field, because a colour picker that silently converts a pointer into a hex value is the exact silent flattening §6 exists to prevent. It renders that resolved colour at **full opacity with a solid border, identical to a literal's swatch** — see the 2026-09-04 amendment at `local-editor.md` §4.5. |
 | `boolean`, `string` | Whole-value reference or literal. The boolean's segmented control gains a third, non-selectable readout position when the value is a reference; picking `true` or `false` replaces the reference, and that is a deliberate two-tap action, not a stray one. |
 | `typography`, `shadow`, `grid` | **Unchanged.** Composite sub-keys are ADR-0007 §10's deferral. The fields take literals. §12 carries the copy. |
 
@@ -577,6 +577,8 @@ Phase 6 §6.1 set the precedence: **diverged → conflicts → repo counts → F
 ## 12. What this doc amends
 
 **`local-editor.md` §5.3 is lifted, as it said it would be.** The section currently reads *"the value field is disabled, styled as a reference chip"* with the copy *"Editing references lands in Phase 7 — for now, change the token it points at."* Both go. The replacement is §4 of this doc: the same field, editable, with the picker on `{` and the four rules on commit. **`Go to target` survives unchanged** — it was the right affordance and it is now reachable from an editable field.
+
+**`local-editor.md` §4.5's outlined swatch is retired** (amended there, 2026-09-04). Phase 4 outlined a reference's colour swatch because it couldn't resolve it; Phase 7 can, and the swatch now shows the resolved colour at full opacity with a solid border, like any literal. Reference-ness stays on the `↗` glyph and the value text — see §6.3 on why `↗` is the load-bearing mark.
 
 **`local-editor.md` §7's delete-blocking copy needs one clause removed.** It currently says *"Phase 4 can't edit a reference, so the only way to clear these is to delete the referencing tokens first."* Phase 7 can edit a reference, so the sentence becomes:
 
