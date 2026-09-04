@@ -126,7 +126,7 @@ No component has a cost floor above $0 at solo/small-team usage; the only plausi
 
 ## 9. Build Plan (Phased, for Claude Code sessions)
 
-**Phases 1–3 are locked** — scoped and ready to build. **Phases 4–7, 9 are provisional** — sequencing and scope are right, but the design detail (editor UX, apply/drift semantics, sync flow) is deliberately deferred until Phases 2–3 produce real imported token data to design against, rather than guessing ahead of it. Revisit and firm up each phase's detail shortly before it starts. **Phase 8 is locked** — scope settled 2026-09-03 (issue #17): repo-side CI export only, no in-plugin export UI.
+**Phases 1–3 are locked** — scoped and ready to build. **Phase 9 is locked** — scope settled 2026-09-04 (issue #19): a polish pass, publish-target decision explicitly deferred, not blocking. **Phase 8 is scoped but shelved** — see below. Revisit and firm up any remaining phase's detail shortly before it starts.
 
 1. **Scaffold** ✅ locked — Figma plugin boilerplate (manifest, TypeScript setup, plugin UI shell).
 2. **Import — Variables** ✅ locked — define the token schema scoped to Variables-backed types (color, number, boolean, string), then build the Variables → token JSON import (§6.5.1): read every collection/mode, map to token sets/themes (§6.2), validate the schema against a real file. No editor, no Styles, no sync yet.
@@ -135,8 +135,8 @@ No component has a cost floor above $0 at solo/small-team usage; the only plausi
 5. **Figma application** — provisional — apply tokens back to Figma Variables/Styles (§6.5.2) and drift detection (§6.5.3).
 6. **Git sync (PAT-based)** — provisional — push/pull token JSON to a GitHub repo, with a diff view before commit.
 7. **Themes, aliasing, math** — provisional — layer in multi-theme composition and token references.
-8. **Export pipeline** ✅ locked — wire up Style Dictionary, wire a GitHub Actions job to run it on push. Repo-side CI only (no in-plugin export UI), per-theme builds driven by `$manifest.json`, CSS custom properties for v1 (stretch platform deferred), math-expression preprocessing flagged as the phase's primary design risk — see issue #17.
-9. **Polish** — provisional — sync status UI, error states, settings panel; decide whether to publish privately or to Figma Community.
+8. **Export pipeline** — scoped, built, **shelved 2026-09-04** — Style Dictionary + GitHub Actions export was built against issue #17's scope (PR #18) but Shyam decided to leave it out of the product for now. PR is open, unmerged, on hold. Scope stands if revisited — see issue #17.
+9. **Polish** ✅ locked — scope settled 2026-09-04 (issue #19). Sync status indicator and settings panel already shipped in Phase 6 — this phase is mainly three undesigned error states plus an audit of existing error handling, and clearing Phase 7's outstanding UX-doc amendments. Publish target (private vs. Figma Community) explicitly deferred out of this phase.
 
 ## 10. Success Metrics
 
