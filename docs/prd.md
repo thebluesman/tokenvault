@@ -126,7 +126,7 @@ No component has a cost floor above $0 at solo/small-team usage; the only plausi
 
 ## 9. Build Plan (Phased, for Claude Code sessions)
 
-**Phases 1–3 are locked** — scoped and ready to build. **Phase 9 is locked** — scope settled 2026-09-04 (issue #19): a polish pass, publish-target decision explicitly deferred, not blocking. **Phase 8 is scoped but shelved** — see below. Revisit and firm up any remaining phase's detail shortly before it starts.
+**Phases 1–3 are locked** — scoped and ready to build. **Phase 9 is locked and landed** — see below. **Phase 8 is scoped but shelved** — see below.
 
 1. **Scaffold** ✅ locked — Figma plugin boilerplate (manifest, TypeScript setup, plugin UI shell).
 2. **Import — Variables** ✅ locked — define the token schema scoped to Variables-backed types (color, number, boolean, string), then build the Variables → token JSON import (§6.5.1): read every collection/mode, map to token sets/themes (§6.2), validate the schema against a real file. No editor, no Styles, no sync yet.
@@ -136,7 +136,7 @@ No component has a cost floor above $0 at solo/small-team usage; the only plausi
 6. **Git sync (PAT-based)** — provisional — push/pull token JSON to a GitHub repo, with a diff view before commit.
 7. **Themes, aliasing, math** — provisional — layer in multi-theme composition and token references.
 8. **Export pipeline** — scoped, built, **shelved 2026-09-04** — Style Dictionary + GitHub Actions export was built against issue #17's scope (PR #18) but Shyam decided to leave it out of the product for now. PR is open, unmerged, on hold. Scope stands if revisited — see issue #17.
-9. **Polish** ✅ locked — scope settled 2026-09-04 (issue #19). Sync status indicator and settings panel already shipped in Phase 6 — this phase is mainly three undesigned error states plus an audit of existing error handling, and clearing Phase 7's outstanding UX-doc amendments. Publish target (private vs. Figma Community) explicitly deferred out of this phase.
+9. **Polish** ✅ **landed 2026-09-04** — scoped per issue #19, shipped via PR #20. Sync status indicator and settings panel needed no new work (already shipped in Phase 6, verified not rebuilt). Delivered: three previously-undesigned error states (corrupt overlay recovery, plugin crash screen, scan-failure handling — see `docs/ux/error-states.md`), an audit-and-fix pass across every phase's documented error table, and Phase 7's outstanding UX-doc amendments applied. Publish target (private vs. Figma Community) remains explicitly deferred, unblocked by nothing in this phase.
 
 ## 10. Success Metrics
 
