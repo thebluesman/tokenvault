@@ -69,3 +69,31 @@ test("the settings overlay sits above the panel, and the modal above both", () =
   assert.equal(zIndex("#panel") < zIndex("#settings"), true, "Settings is reachable from every tab");
   assert.equal(zIndex("#settings") < zIndex("#modal"), true, "first connect opens over Settings");
 });
+
+test("a resolved colour swatch is painted one way, whatever the value was written as", () => {
+  // UX references-math-themes §4.5 (amended, issue #28): a reference-valued colour token paints the
+  // colour it lands on at full opacity with a solid ring — identical to a literal. The faded/dashed
+  // treatment it used to get made the ends of a scale (near-white, near-black) read as the wrong
+  // colour, and the `↗` plus the value text already say "pointer".
+  //
+  // There is no DOM harness here, so the guarantee is structural: both branches of `appendValue`
+  // build their chip through the single `colorSwatch` helper. This pins that — a second hand-rolled
+  // `swatch-fill` in the token list is how the two treatments drifted apart the first time.
+  const tokensTs = readFileSync(join(UI, "tokens.ts"), "utf8");
+
+  assert.equal(
+    tokensTs.split('"swatch-fill"').length - 1,
+    1,
+    "the token list builds more than one swatch fill — route both value branches through colorSwatch"
+  );
+  assert.equal(
+    /\.opacity\s*=/.test(tokensTs),
+    false,
+    "a swatch in the token list is never faded — full opacity, literal or reference alike"
+  );
+  assert.equal(
+    tokensTs.indexOf('"swatch outlined"') !== -1,
+    true,
+    "the dashed chip is still the mark for a reference that resolves to no colour at all"
+  );
+});

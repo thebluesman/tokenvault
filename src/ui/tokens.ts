@@ -865,6 +865,19 @@ function setCode(line: Line): HTMLElement {
   return code;
 }
 
+/**
+ * The one colour chip in the token list: checkerboard base under a full-opacity fill. Literal and
+ * reference values share it, so the two cannot drift apart into different treatments (§4.5).
+ */
+function colorSwatch(color: string): HTMLElement {
+  const wrap = el("span", "swatch-wrap");
+  wrap.appendChild(el("span", "swatch"));
+  const fill = el("span", "swatch-fill");
+  fill.style.background = color;
+  wrap.appendChild(fill);
+  return wrap;
+}
+
 function appendValue(container: HTMLElement, line: Line, row: Row): void {
   const preview = previewOf(line.entry.token);
   const resolution = resolutionFor(line);
@@ -885,25 +898,21 @@ function appendValue(container: HTMLElement, line: Line, row: Row): void {
   }
 
   if (preview.swatch !== undefined) {
-    const wrap = el("span", "swatch-wrap");
-    wrap.appendChild(el("span", "swatch"));
-    const fill = el("span", "swatch-fill");
-    fill.style.background = preview.swatch;
-    wrap.appendChild(fill);
-    container.appendChild(wrap);
+    container.appendChild(colorSwatch(preview.swatch));
   } else if (preview.reference !== undefined && line.entry.token.$type === "color") {
-    // Phase 7 *can* resolve a reference, so the swatch shows the colour it lands on — but keeps the
-    // outline treatment, because the `↗` beside it is what says this is a pointer and a plain fill
-    // would make a reference and a literal look identical (§4.5).
-    const wrap = el("span", "swatch-wrap");
-    wrap.appendChild(el("span", "swatch outlined"));
+    // `previewOf` is pure over the token, so a pointer never carries a `swatch` — the colour it
+    // lands on only exists on the resolution, which is why this stays its own branch. What it is
+    // *not* is a different swatch: a reference paints at full opacity with a solid ring, exactly
+    // like a literal (§4.5, amended). The `↗` and the value text already say "pointer"; fading the
+    // fill only made the ends of a scale — near-white, near-black — read as the wrong colour.
     if (typeof resolution.value === "string") {
-      const fill = el("span", "swatch-fill");
-      fill.style.background = resolution.value;
-      fill.style.opacity = "0.55";
-      wrap.appendChild(fill);
+      container.appendChild(colorSwatch(resolution.value));
+    } else {
+      // Nothing resolves, so there is no colour to show: the dashed outline is the whole mark.
+      const wrap = el("span", "swatch-wrap");
+      wrap.appendChild(el("span", "swatch outlined"));
+      container.appendChild(wrap);
     }
-    container.appendChild(wrap);
   }
 
   // A token with no overlay target has nothing to key an edit on (ADR-0004 §2), so it reads as
