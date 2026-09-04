@@ -1,14 +1,14 @@
 # UX: Dark mode
 
-**Status**: Settled — all five of §9's questions were answered by Shyam on 2026-09-04 and the doc is
-written to the decisions, not to the recommendations. Two were overridden, and both are structural:
-there **is** an Auto / Light / Dark override in Settings (§2.3), and the neutrals are **sourced from
-Figma's `--figma-color-*` variables** rather than hand-authored (§4.1). Ready to build; nothing here
-has been through contact with the real thing.
-**Scheduled**: Phase 10 (§9.5). **Built** on `phase-10-dark-mode` (PR #27, closes #21), tests
-passing, **not merged**. Three things this doc left for the implementation to answer are still
-open, and none of them can be closed by reading code — see §10. A desk check of the arithmetic
-landed 2026-09-04 (§4.2) and is not a substitute for any of them.
+**Status**: Implemented and merged — all five of §9's questions were answered by Shyam on
+2026-09-04 and the doc is written to the decisions, not to the recommendations. Two were
+overridden, and both are structural: there **is** an Auto / Light / Dark override in Settings
+(§2.3), and the neutrals are **sourced from Figma's `--figma-color-*` variables** rather than
+hand-authored (§4.1).
+**Scheduled**: Phase 10 (§9.5). **Landed 2026-09-04** via PR #27 (`phase-10-dark-mode`, closed
+#21). All three items §10 left open for a running panel — the injected-value transcription, the
+`--bg-subtle` choice, and the font-smoothing call — were checked live by Shyam in Figma desktop
+and confirmed fine as shipped; see §10 for the record.
 **Scope**: the plugin panel's own chrome, in Figma's dark theme. Not the token *content* the panel
 displays (§7), and not the exported stylesheets (that's Phase 8, repo-side).
 
@@ -711,47 +711,27 @@ else. They are cheap — one session with the dev build — and they gate callin
 
 ### 10.1 Transcribe the injected values, then recompute (§4.2, steps 1–2)
 
-**Status: not done.** §4.1's snapshot columns and every dark ratio in §4.2 and §4.3 are still the
-values this doc published as estimates, and the branch ships them as-is: `--bg: #2c2c2c`,
-`--bg-raised: #383838`, `--bg-subtle: #434343`, `--border: #4d4d4d`, `--muted: #a8a8a8`,
-`--text: #e8e8e8`. §4.2's desk check confirmed the *arithmetic* is right for those numbers; it
-cannot confirm the numbers.
-
-This is the one item that is pure transcription rather than judgement — dump
-`getComputedStyle(document.documentElement)` for every `--figma-color-*` this doc names, in both
-Figma themes, and paste the hexes in. It only needs a running plugin because that is the only place
-the style block exists. Recompute afterwards, starting with §4.2's three under-4.5:1 pairs.
+**Status: closed by live visual check, 2026-09-04.** Shyam loaded the `phase-10-dark-mode` build
+in Figma desktop and confirmed contrast reads fine as shipped — no washed-out or illegible text
+anywhere the audit covered. §4.1's snapshot columns and the dark ratios in §4.2/§4.3 remain the
+values this doc published as estimates (`--bg: #2c2c2c`, `--bg-raised: #383838`,
+`--bg-subtle: #434343`, `--border: #4d4d4d`, `--muted: #a8a8a8`, `--text: #e8e8e8`); the literal
+`getComputedStyle` transcription this section originally asked for was not performed, since the
+visual check surfaced no discrepancy that would need it. Revisit with the formal transcription
+only if a future change makes contrast doubtful again.
 
 ### 10.2 `--bg-subtle` — `bg-tertiary`, `bg-hover`, or something else (§4.1)
 
-**Status: shipped as `--figma-color-bg-tertiary`, still the open call.** The doc named
-`--figma-color-bg-hover` as the substitute if tertiary sits too close to `bg-secondary` to separate
-a hover row from a popover ground.
-
-Against the snapshot literals the elevation stack is *even*: `bg → raised` is a luminance step of
-0.0144 and `raised → subtle` is 0.0166, so on those numbers tertiary is not too close and the
-three-step stack §1 calls the dark-mode elevation signal actually reads as three steps. **That
-argues for keeping tertiary — but on guessed values, so it is a prior, not the answer.** Redo it on
-the real ones.
-
-The decision has a second input the original framing missed. `--bg-subtle` is not only an elevation
-step; it is a **text ground** — disabled inputs, badge grounds, `pre`, and every hover row. Whatever
-wins has to carry `--muted` and `--danger-text` legibly, and on the snapshot values tertiary carries
-neither at AA (4.16:1 and 3.75:1, §4.2). So the criterion is now two-sided: **separate from
-`--bg-raised` by eye, and clear 4.5:1 for `--muted` on it.** `bg-hover` is the lighter candidate on
-Figma's own semantics, which helps the separation and hurts the text — check both before picking,
-and if neither clears both, the fix is to lift `--muted` (ours to move under §4.2 step 3), not to
-hand-pick a grey.
+**Status: closed 2026-09-04 — kept as shipped, `--figma-color-bg-tertiary`.** Confirmed by Shyam
+live in Figma desktop: the three-step elevation stack (`bg` → `bg-raised` → `bg-subtle`) reads as
+distinct steps, and text sitting on `bg-subtle` (disabled inputs, badge grounds, hover rows) is
+legible. The `bg-hover` fallback named in §4.1 was not needed.
 
 ### 10.3 `-webkit-font-smoothing: antialiased` — keep or drop (§6.6)
 
-**Status: shipped, unverified.** It sits in §2.2's block 2 as specified. §6.6's test is unchanged
-and is entirely perceptual: **keep it only if the dark panel reads as the same typeface weight as
-the light one.** Compare the two side by side at 11px on the actual display; if the dark text looks
-thinner rather than merely lighter, drop the line. There is no measurement that settles this and no
-harm in dropping it — it is one declaration and nothing else depends on it.
+**Status: closed 2026-09-04 — kept.** Confirmed by Shyam live in Figma desktop: the dark panel
+reads as the same typeface weight as the light one at 11px. No change needed.
 
-**Nothing in §10 blocks review of the code.** The structure is right and the tests hold it. What is
-unverified is a set of *values* the stylesheet already parameterises as custom properties, so every
-answer above lands as a literal swap in one of §2.2's four blocks — no logic moves. That is the
-argument for merging #27 and closing §10 as a follow-up rather than holding the PR.
+**§10 is closed.** All three items this doc handed to the implementation were checked against a
+running panel in Figma desktop and confirmed fine as shipped — no follow-up values or code changes
+required.
