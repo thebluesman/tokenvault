@@ -36,6 +36,8 @@ import {
   type CollisionItem,
 } from "./collisions";
 
+import { RULES_FILE_PATH, makeRuleSetFile, type PathRule } from "./rules";
+
 const TOKENS_DIR = "tokens";
 
 export function buildMergedImport(scan: FileScan, options: BuildOptions): ImportResult {
@@ -120,7 +122,15 @@ export function buildMergedImport(scan: FileScan, options: BuildOptions): Import
     .concat([
       { path: `${TOKENS_DIR}/$manifest.json`, content: manifest },
       { path: `${TOKENS_DIR}/$import-report.json`, content: report },
-    ]);
+    ])
+    // ADR-0002 Amendment 2 §F: the rule set commits alongside the manifest, because the tree
+    // cannot be reproduced without it. Written only when there are rules — an absent file is a
+    // truthful "no rules", and emitting an empty one would add a file to every Phase 2-era repo.
+    .concat(
+      (options.pathRules ?? []).length > 0
+        ? [{ path: RULES_FILE_PATH, content: makeRuleSetFile(options.pathRules as PathRule[]) }]
+        : []
+    );
   files.sort((a, b) => compareKeys(a.path, b.path));
 
   const modes = manifest.collections.reduce((total, collection) => total + collection.modes.length, 0);

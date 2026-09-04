@@ -990,6 +990,18 @@
       .cycle-block {
         margin: 6px 0;
       }
+      /* The pre-push refusal (ADR-0002 Amendment 3). Bordered and bold rather than red: dark mode
+         §4 keeps red a button colour, and this is a state, not an action. */
+      .push-block {
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 8px;
+        margin: 6px 0;
+        background: var(--bg-subtle);
+      }
+      .push-block p {
+        margin: 4px 0 0;
+      }
       .cycle-steps {
         margin: 4px 0;
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

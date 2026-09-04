@@ -54,6 +54,7 @@ import {
 import { buildResolveContext, graphReport, themePathSet } from "./tokens/resolve";
 import { currentPageModes, switchPageToModes } from "./figma/modes";
 import { buildMergedImport } from "./tokens/merge";
+import { makeRuleSetFile, parseRuleSet, type PathRule } from "./tokens/rules";
 import { stableStringify } from "./tokens/serialize";
 import { detectDrift, emptyDrift } from "./tokens/drift";
 import { styleGuards } from "./tokens/toFigma";
@@ -111,6 +112,14 @@ const EDIT_QUARANTINE_PREFIX = "tokenvault:edits-unreadable:";
  */
 const ACTIVE_THEME_PREFIX = "tokenvault:active-theme:";
 
+/**
+ * The working copy of the committed rule set — ADR-0002 Amendment 2 §F.
+ *
+ * `clientStorage` holds it the way it holds the edit overlay: a few KB, negligible against
+ * ADR-0004 §1's 5MB budget, and the *committed* `tokens/$rules.json` is the durable one.
+ */
+const PATH_RULES_PREFIX = "tokenvault:rules:";
+
 /** Which file the import cache currently holds, so a different file's cache can be evicted. */
 const IMPORT_CACHE_OWNER_KEY = "tokenvault:last-import-owner";
 
@@ -135,6 +144,9 @@ figma.showUI(__html__, { width: 460, height: 640, themeColors: true });
 
 let snapshot: FileScan | null = null;
 let userSubtypes: Record<string, SubtypeSelection> = {};
+
+/** The rule set in force for this file — Amendment 2 §A's third build input. */
+let pathRules: PathRule[] = [];
 let fileIdentity: string | null = null;
 
 /**
@@ -298,6 +310,10 @@ function importCacheKey(): string {
   return IMPORT_CACHE_PREFIX + resolveFileIdentity();
 }
 
+function pathRulesKey(): string {
+  return PATH_RULES_PREFIX + resolveFileIdentity();
+}
+
 function activeThemeKey(): string {
   return ACTIVE_THEME_PREFIX + resolveFileIdentity();
 }
@@ -354,6 +370,16 @@ async function loadOverlay(): Promise<EditOverlay> {
     raw,
   };
   return read.overlay;
+}
+
+async function loadPathRules(): Promise<PathRule[]> {
+  try {
+    return parseRuleSet(await figma.clientStorage.getAsync(pathRulesKey()));
+  } catch {
+    // A rule set that cannot be read is no rules, not a broken panel: the tree still builds, just
+    // with the paths Figma's own names give it, and the editor can write a fresh set over it.
+    return [];
+  }
 }
 
 async function loadUserSubtypes(): Promise<Record<string, SubtypeSelection>> {
@@ -524,6 +550,10 @@ function emitImport(fileName: string, refresh = false): void {
       // write overwrite?", and only one of them may enable Apply — §8's rule, applied a second time.
       guardsKnown: guards !== null && nonLocal !== null,
       driftBaseline: repoBaseline === null ? "scan" : "repo",
+      // Sent with the tree so the rules editor and its preview (Amendment 2 §G) read the same set
+      // the build used, rather than re-reading storage and possibly disagreeing with the paths on
+      // screen.
+      pathRules,
       themes,
       activeTheme: active === null ? null : active.name,
       themeFellBackFrom: pendingThemeFallback ?? state.fellBackFrom,
@@ -564,6 +594,10 @@ async function rebuild(fromScan: boolean, refresh = false): Promise<void> {
 
   const result = buildMergedImport(snapshot, {
     userSubtypes,
+    // Amendment 2 §H: a build is a pure function of (scan, userSubtypes, pathRules). Read live from
+    // the module-level rule set rather than baked into the tree, which is what makes "editing a
+    // rule updates the paths without a re-import" a rebuild rather than a rescan.
+    pathRules,
     // Stamped from the last real scan, never from a subtype edit: `importedAt` claims the Figma
     // file was read at that moment, and retagging hours later does not re-read anything.
     importedAt: lastScanAt ?? new Date().toISOString(),
@@ -1073,6 +1107,7 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
   const run = async (): Promise<void> => {
     if (message.type === "ui-ready") {
       userSubtypes = await loadUserSubtypes();
+      pathRules = await loadPathRules();
       overlay = await loadOverlay();
       const storedTheme = await figma.clientStorage.getAsync(activeThemeKey());
       activeThemeName = typeof storedTheme === "string" && storedTheme.length > 0 ? storedTheme : null;
@@ -1195,6 +1230,20 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
     }
 
     // --- Phase 7 (ADR-0007) ---
+
+    if (message.type === "set-path-rules") {
+      // §G: the preview is the editor's job and has already happened by the time this arrives —
+      // this is the write, and it rebuilds rather than rescans, because the rules are a pure
+      // function of names the last scan already read.
+      pathRules = message.rules;
+      try {
+        await figma.clientStorage.setAsync(pathRulesKey(), makeRuleSetFile(pathRules));
+      } catch {
+        // In memory either way; losing the write costs it surviving a reopen, not this session.
+      }
+      await rebuild(false, true);
+      return;
+    }
 
     if (message.type === "set-active-theme") {
       await handleSetActiveTheme(message.name);

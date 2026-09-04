@@ -24,7 +24,15 @@ import type {
   VariableValueSnapshot,
 } from "./types";
 import { compareKeys } from "./serialize";
-import { normalizePathKey, setTokenAtPath, slugify, splitVariableName, toDottedPath } from "./paths";
+import { normalizePathKey, setTokenAtPath, slugify, splitVariableName } from "./paths";
+import {
+  RULES_FILE_PATH,
+  applyPathRules,
+  makeRuleSetFile,
+  usableRules,
+  validateRules,
+  type PathRule,
+} from "./rules";
 import { isAlias, isRgba, normalizeFloat, rgbaToHex, toReference } from "./values";
 import { resolveSubtype, type SubtypeTag } from "./subtype";
 import {
@@ -61,13 +69,24 @@ export function buildImport(snapshot: FileSnapshot, options: BuildOptions): Impo
 
   // Names for alias resolution come from every variable in the file, including ones that later
   // lose a collision — a reference should name what Figma actually points at.
-  const namesById = new Map<string, string>();
-  for (const variable of snapshot.variables) namesById.set(variable.id, variable.name);
+  const sourceNames = new Map<string, string>();
+  for (const variable of snapshot.variables) sourceNames.set(variable.id, variable.name);
   for (const id of Object.keys(snapshot.aliasTargetNames)) {
-    if (!namesById.has(id)) namesById.set(id, snapshot.aliasTargetNames[id]);
+    if (!sourceNames.has(id)) sourceNames.set(id, snapshot.aliasTargetNames[id]);
   }
 
-  const prepared = prepareVariables(snapshot.variables, collectionsById, excludedCollectionIds, entries);
+  const derivation = deriveNames(sourceNames, options.pathRules ?? [], entries);
+  // Amendment 2 §D: alias targets go through the *same* pipeline as the tokens they point at, or
+  // every reference in a rule-transformed file dangles.
+  const namesById = derivation.names;
+
+  const prepared = prepareVariables(
+    snapshot.variables,
+    collectionsById,
+    excludedCollectionIds,
+    derivation,
+    entries
+  );
   const inboundAliases = countInboundAliases(snapshot.variables);
   const collisions = detectCollisions(prepared, inboundAliases);
   entries.push(...collisions.entries);
@@ -115,7 +134,7 @@ export function buildImport(snapshot: FileSnapshot, options: BuildOptions): Impo
     }
   }
 
-  const index = buildResolutionIndex(plans, snapshot.variables);
+  const index = buildResolutionIndex(plans, snapshot.variables, derivation.excluded);
 
   const files: TokenFileOutput[] = [];
   const manifestCollections: ManifestCollection[] = [];
@@ -179,6 +198,11 @@ export function buildImport(snapshot: FileSnapshot, options: BuildOptions): Impo
 
   files.push({ path: `${TOKENS_DIR}/$manifest.json`, content: manifest });
   files.push({ path: `${TOKENS_DIR}/$import-report.json`, content: report });
+  // Amendment 2 §F: authored configuration the tree cannot be reproduced without, so it commits —
+  // unlike `$import-report.json`, which ADR-0006 §5 keeps local as per-scan machine state.
+  if ((options.pathRules ?? []).length > 0) {
+    files.push({ path: RULES_FILE_PATH, content: makeRuleSetFile(options.pathRules as PathRule[]) });
+  }
   files.sort((a, b) => compareKeys(a.path, b.path));
 
   const modeCount = collections.reduce((total, collection) => total + collection.modes.length, 0);
@@ -268,15 +292,76 @@ function resolveCollections(
   };
 }
 
+/**
+ * Every variable id's *derived* name — Amendment 2 §A's `pathRules(sourceName)`.
+ *
+ * Run over alias targets as well as over local variables, because §D makes the reference-rewriting
+ * and the path-rewriting the same function: a reference is written to the target's transformed
+ * name, so both ends of an alias move together and a rule change never strands one.
+ *
+ * A rule that cannot work — an uncompilable regex, a duplicate id — is reported **once**, here,
+ * and then dropped. Reporting it per variable would bury one broken rule under a thousand
+ * identical lines, and leaving it in silently is exactly the inert-rule failure §F guards against.
+ */
+function deriveNames(
+  sourceNames: Map<string, string>,
+  configured: PathRule[],
+  entries: ReportEntry[]
+): Derivation {
+  for (const issue of validateRules(configured)) {
+    entries.push({ kind: "path-rule", reason: issue.reason, message: issue.message });
+  }
+
+  const rules = usableRules(configured);
+  const names = new Map<string, string>();
+  const paths = new Map<string, string>();
+  const excluded = new Map<string, string>();
+  const invalid = new Map<string, { ruleId: string; reason: string }>();
+
+  for (const id of Array.from(sourceNames.keys())) {
+    const outcome = applyPathRules(sourceNames.get(id) as string, rules);
+    // `name` is populated in all three outcomes, including `excluded`: §I keeps writing a
+    // reference to an excluded target, so it needs the path that target *would* have had.
+    names.set(id, outcome.name);
+    paths.set(id, splitVariableName(outcome.name).join("."));
+    if (outcome.kind === "excluded") excluded.set(id, outcome.ruleId);
+    if (outcome.kind === "invalid") invalid.set(id, { ruleId: outcome.ruleId, reason: outcome.reason });
+  }
+
+  return { names, paths, excluded, invalid };
+}
+
+interface Derivation {
+  /** Variable id → transformed `/`-delimited name. */
+  names: Map<string, string>;
+  /** Variable id → transformed dotted token path. */
+  paths: Map<string, string>;
+  /** Variable id → the id of the `exclude` rule that dropped it (§I). */
+  excluded: Map<string, string>;
+  /** Variable id → the rule whose output was unusable, so the source name was used (§C). */
+  invalid: Map<string, { ruleId: string; reason: string }>;
+}
+
 function prepareVariables(
   variables: VariableSnapshot[],
   collectionsById: Map<string, CollectionSnapshot>,
   excludedCollectionIds: Set<string>,
+  derivation: Derivation,
   entries: ReportEntry[]
 ): PreparedVariable[] {
   const prepared: PreparedVariable[] = [];
+  /** §I: exclusions are reported in aggregate — one entry per rule, never one per variable. */
+  const excludedCounts = new Map<string, number>();
 
   for (const variable of variables) {
+    const excludedBy = derivation.excluded.get(variable.id);
+    if (excludedBy !== undefined) {
+      // The variable produces no token at all: nothing in any set file, nothing in the manifest,
+      // nothing pushed (§I). Counted rather than listed.
+      excludedCounts.set(excludedBy, (excludedCounts.get(excludedBy) ?? 0) + 1);
+      continue;
+    }
+
     const collection = collectionsById.get(variable.collectionId);
     if (!collection) {
       // Either the collection lost a slug clash (already reported) or Figma handed us an
@@ -312,7 +397,21 @@ function prepareVariables(
       continue;
     }
 
-    const segments = splitVariableName(variable.name);
+    const badRule = derivation.invalid.get(variable.id);
+    if (badRule !== undefined) {
+      // §C: the transform is not applied, the verbatim source name is used, and the rule is named.
+      // A mangled path is never written — §5's "no silent drop, no mangled name" covers rules too.
+      entries.push({
+        kind: "path-rule",
+        reason: "invalid-result",
+        message: `Rule "${badRule.ruleId}" produced an unusable path for variable "${variable.name}" (${badRule.reason}). The rule was not applied to it; its Figma name was used instead.`,
+        path: derivation.paths.get(variable.id),
+        participants: [participantOf(variable, collection)],
+      });
+    }
+
+    const derivedName = derivation.names.get(variable.id) ?? variable.name;
+    const segments = splitVariableName(derivedName);
     if (segments.length === 0) {
       entries.push({
         kind: "unmappable-value",
@@ -323,13 +422,27 @@ function prepareVariables(
       continue;
     }
 
-    const path = toDottedPath(variable.name);
+    const path = segments.join(".");
     prepared.push({
       variable,
       collection,
       path,
       segments,
       normalizedPath: normalizePathKey(path),
+      // Amendment 2 §C: a rule-induced collision has to be readable, and a report saying two
+      // variables collided at a path neither of them is *named* is not.
+      sourceName: variable.name,
+    });
+  }
+
+  for (const ruleId of Array.from(excludedCounts.keys()).sort(compareKeys)) {
+    const count = excludedCounts.get(ruleId) as number;
+    entries.push({
+      kind: "path-rule",
+      reason: "excluded",
+      message: `Rule "${ruleId}" excluded ${count} variable${count === 1 ? "" : "s"} from import. ${count === 1 ? "It produces" : "They produce"} no tokens.`,
+      ruleId,
+      count,
     });
   }
 
@@ -348,7 +461,11 @@ function modeNameOf(collection: CollectionSnapshot, modeId: string): string {
  * produces no token, so the variable is "missing" from that set even though it exists in the
  * file. That is the hole a reference can fall through.
  */
-function buildResolutionIndex(plans: FilePlan[], variables: VariableSnapshot[]): ResolutionIndex {
+function buildResolutionIndex(
+  plans: FilePlan[],
+  variables: VariableSnapshot[],
+  excludedByRule: Map<string, string>
+): ResolutionIndex {
   const writtenAnywhere = new Set<string>();
   const missingSets = new Map<string, string[]>();
 
@@ -376,7 +493,7 @@ function buildResolutionIndex(plans: FilePlan[], variables: VariableSnapshot[]):
     names.set(variable.id, variable.name);
   }
 
-  return { writtenAnywhere, missingSets, collectionOf, names };
+  return { writtenAnywhere, missingSets, collectionOf, names, excludedByRule };
 }
 
 function participantOf(variable: VariableSnapshot, collection: CollectionSnapshot) {
@@ -418,6 +535,8 @@ interface ResolutionIndex {
   /** Every variable's owning collection id, including ones that were never written. */
   collectionOf: Map<string, string>;
   names: Map<string, string>;
+  /** Variable id → the `exclude` rule that dropped it, so a dangle can name the cause (§I). */
+  excludedByRule: Map<string, string>;
 }
 
 /**
@@ -447,6 +566,17 @@ function danglingReference(
     return {
       reason: "alias-target-external",
       message: `references "${targetName}", which lives in a team library rather than this file, so no token in this repo defines it.`,
+    };
+  }
+
+  const excludedBy = index.excludedByRule.get(targetId);
+  if (excludedBy !== undefined) {
+    // §I: a reference to an excluded variable dangles, and import still writes it — the token was
+    // mapped fine, only its target was dropped. Its own reason, because unlike a collision loser
+    // the fix is a rule edit rather than a rename in Figma. Amendment 3 makes this block the push.
+    return {
+      reason: "alias-target-excluded",
+      message: `references "${targetName}", which rule "${excludedBy}" excludes from import, so nothing in the token files defines it.`,
     };
   }
 

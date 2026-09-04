@@ -32,6 +32,7 @@ import {
   messageFor,
   pull,
   push,
+  pushBlocks,
   repoTreeFor,
   setsForFile,
   tokenCounts,
@@ -468,6 +469,28 @@ function renderReview(): void {
   );
 
   if (review.loading) body.appendChild(el("p", "empty", "Loading the diff…"));
+
+  // ADR-0002 Amendment 3 §A / ADR-0008 §7: an unresolvable local tree blocks every repo, so it is
+  // one message above the file list rather than a badge repeated per row. Every block names its
+  // cause and its fix — a block whose cause is not on screen is a block the user cannot clear.
+  const blocks = pushBlocks();
+  if (blocks.length > 0) {
+    const note = el("div", "push-block");
+    note.appendChild(
+      el(
+        "strong",
+        undefined,
+        blocks.length === 1
+          ? "This can't be pushed yet"
+          : `This can't be pushed yet — ${blocks.length} problems`
+      )
+    );
+    for (const block of blocks.slice(0, 10)) note.appendChild(el("p", "note", block.message));
+    if (blocks.length > 10) {
+      note.appendChild(el("p", "note", `…and ${blocks.length - 10} more, listed in the import report.`));
+    }
+    body.appendChild(note);
+  }
 
   let first = true;
   for (const file of status.toPush) {
