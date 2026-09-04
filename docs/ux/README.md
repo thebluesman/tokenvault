@@ -12,6 +12,7 @@ fixtures in `test/fixtures/`, not against a hypothetical schema.
 | [`git-sync.md`](git-sync.md) | 6 — Git sync, diff, settings | Settled — ready to build |
 | [`references-math-themes.md`](references-math-themes.md) | 7 — Reference authoring, math, theme selection | Implemented — §11's four questions all closed 2026-09-03 |
 | [`error-states.md`](error-states.md) | 9 — Scan failure, crash, unreadable overlay | Implemented |
+| [`user-journeys.md`](user-journeys.md) | 1–9 — Narrative survey | Published (not a spec; informs Phase 10 scoping) |
 
 **Status vocabulary.** *Provisional* — written ahead of the build, open questions still in the doc.
 *Settled* — every open question closed and the design is ready to build, but nothing has shipped yet,
@@ -52,5 +53,4 @@ every other async operation against the error table its own phase doc already ow
 doc by construction — the per-phase error tables stay where they are and stay authoritative, and §5 records
 the two places implementation and doc were reconciled.
 
-Not yet written: the export pipeline (Phase 8 — **scope locked, work parked**; PR #18 is open and unmerged,
-issue #17 stays open).
+Phase 8 (the export pipeline: Style Dictionary + GitHub Actions) shipped outside the plugin scope — the build is repo-side by PRD §7, so there is no UX doc for it, though `README.md` "Exporting to code" documents the workflow. Phases 10–11 are now on the build plan (2026-09-04): Phase 10 is penultimate with scope TBD pending discussion; Phase 11 is Figma publishing.
