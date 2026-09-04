@@ -9,6 +9,7 @@
 // here. A crash screen that shows up for a 404 is a crash screen the user learns to ignore.
 
 import { button, clear, el } from "./dom";
+import { releaseFirstPaint } from "./appearance";
 
 const crashEl = document.getElementById("crash") as HTMLElement;
 
@@ -122,6 +123,11 @@ export function crash(detail: CrashDetail): void {
   // diagnostics go to `[ Copy details ]`, which is a deliberate act by the person holding the token.
   if (crashed) return;
   crashed = true;
+
+  // A crash before the handshake replies would otherwise land behind the first-paint hold (UX
+  // `dark-mode.md` §2.4) — a crash screen nobody can see is the blank iframe §3 exists to replace.
+  // Auto is what paints in that case, which is the right guess when the stored value never arrived.
+  releaseFirstPaint();
 
   clear(crashEl);
   crashEl.classList.remove("hidden");

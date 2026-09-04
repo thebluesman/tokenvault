@@ -155,7 +155,7 @@ export function cycleBlock(
 function pathTarget(path: string, navigate?: (target: string) => void): HTMLElement {
   if (navigate === undefined) return el("span", undefined, path);
   const link = button(path, "toast-action");
-  link.style.color = "var(--accent)";
+  link.style.color = "var(--accent-text)";
   link.addEventListener("click", () => navigate(path));
   return link;
 }

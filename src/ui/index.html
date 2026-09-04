@@ -4,15 +4,63 @@
     <meta charset="UTF-8" />
     <title>Tokenvault</title>
     <style>
+      /*
+        ==========================================================================================
+        Dark mode — Phase 10, UX `docs/ux/dark-mode.md`.
+
+        Four `:root` blocks and nothing else (§2.2). **No component selector ever gets a theme
+        variant**: if a rule needs a `.tv-dark` override, that rule has a hardcoded colour that
+        should have been a custom property, and §3's audit exists so that none are left.
+        `test/darkMode.test.ts` pins both halves of that.
+
+        Two independent facts are in play (§2.1):
+
+          - **Figma's theme**, learned from the `figma-light` / `figma-dark` class Figma stamps on
+            `<html>` because `code.ts` passes `themeColors: true`. Never ours to set.
+          - **The panel's effective theme** — Figma's when the Appearance setting is Auto, and the
+            setting's own value otherwise. An override stamps `tv-light` / `tv-dark` *beside*
+            Figma's class; Auto stamps nothing and costs zero lines of script.
+
+        Figma's injected `--figma-color-*` variables always describe **Figma's** theme, so they can
+        only be trusted where the two facts agree. Blocks 1–2 below are the effective theme and
+        carry the entire palette from the snapshot literals; blocks 3–4 repoint *only the neutrals*
+        at Figma's variables, and only in the two cells where the facts agree. Equal specificity
+        with block 2 means source order decides, which is why they come last.
+
+        | Figma | Setting        | Effective | Neutrals from        |
+        |-------|----------------|-----------|----------------------|
+        | Light | Auto or Light  | Light     | `--figma-color-*`    |
+        | Dark  | Auto or Dark   | Dark      | `--figma-color-*`    |
+        | Dark  | Light          | Light     | light snapshot below |
+        | Light | Dark           | Dark      | dark snapshot below  |
+
+        The snapshot is Figma's own values written down, not a second palette maintained by eye. It
+        also serves as the `var()` fallback if a future Figma release stops injecting something we
+        read — which is why every reference in blocks 3–4 carries one.
+        ==========================================================================================
+      */
+
+      /* ---- Block 1: effective light — snapshot neutrals + light semantics ---------------- */
       :root {
-        --border: #e6e6e6;
-        --muted: #8c8c8c;
+        /* Explicit, not merely left unset, so a `tv-light` panel inside a *dark* Figma still gets
+           light scrollbars, selects, checkboxes and colour inputs rather than the host's (§6.5). */
+        color-scheme: light;
+
+        /* -- Neutrals (§4.1). Sourced from Figma in blocks 3–4; these are the snapshot. -- */
+        --bg: #ffffff;
+        --bg-raised: #ffffff;
         --bg-subtle: #f5f5f5;
-        --accent: #0d99ff;
-        --warn: #b8730a;
-        --warn-bg: #fff6e5;
+        --text: #1a1a1a;
+        --muted: #8c8c8c;
+        --border: #e6e6e6;
+        /* Text on *our* --accent and --danger fills, which stay ours in both themes. Figma's
+           `text-onbrand` is tuned to Figma's brand fill, not ours, so this is not sourced. */
+        --on-fill: #ffffff;
+
         /*
-          Phase 5 adds two colours, both tightly fenced (UX apply-and-drift §8).
+          -- The four semantic colours (§4.2). Hand-authored in both themes: Figma's variable set
+          has no equivalent and never will — its `bg-warning` / `bg-danger` tints are for Figma's
+          own banners, not for a four-value language with a documented ranking (§5).
 
           --ok is the "agreed" green: muted and desaturated, deliberately quieter than the amber
           it sits beside, because a confirmation must never out-shout a warning. It appears in
@@ -23,11 +71,127 @@
           --danger is a **button and menu-label colour, not a state colour**. Phase 4's ban on a
           third badge colour is intact: nothing in a row or a banner turns red. Red here means
           exactly one thing — this control destroys something in the file, and no second apply
-          brings it back.
+          brings it back. The `--danger` / `--danger-text` split below is a dark-mode legibility
+          fix and **does not widen where red is allowed** (§5.3): still exactly two sites.
         */
+        --accent: #0d99ff;
+        --accent-text: #0d99ff;
+        --warn: #b8730a;
+        --warn-bg: #fff6e5;
         --ok: #2f7d55;
         --ok-bg: #eef7f1;
         --danger: #c4382f;
+        --danger-text: #c4382f;
+
+        /* -- Everything else (§4.3) -- */
+        --mark-bg: #fff2a8;
+        /* The swatch ring and the checkerboard have to stay legible against a background we no
+           longer choose (§6.3). Both are expressed against the panel's own ground rather than a
+           tuned hairline, so they hold whatever that ground turns out to be. */
+        --swatch-ring: rgba(0, 0, 0, 0.4);
+        --checker-a: var(--bg);
+        --checker-b: var(--border);
+        /* Light keeps an authored near-black: the toast is deliberately the one inverted surface
+           in the panel, and no Figma variable means "inverted chrome". */
+        --toast-bg: #1a1a1a;
+        --toast-text: #ffffff;
+        --toast-action: #7cc4ff;
+        --scrim: rgba(0, 0, 0, 0.32);
+        --shadow-pop: 0 4px 14px rgba(0, 0, 0, 0.14);
+        --shadow-modal: 0 8px 28px rgba(0, 0, 0, 0.24);
+        --fill-hover: brightness(0.93);
+      }
+
+      /* ---- Block 2: effective dark — snapshot neutrals + dark semantics ------------------ */
+      :root.tv-dark,
+      :root.figma-dark:not(.tv-light) {
+        color-scheme: dark;
+        /* Light-on-dark text renders visually heavier on macOS; this thins it back toward the
+           light-mode weight at 11px (§6.6). Type is otherwise untouched — same stacks, same
+           sizes, same weights. */
+        -webkit-font-smoothing: antialiased;
+
+        /* -- Neutrals: the dark snapshot (§4.1) --
+           In dark, elevation is a *lighter surface*, not a shadow: a black shadow on a dark ground
+           barely reads (§6.1). --bg-raised being lighter than --bg is what makes an overlay read
+           as above the panel, and the shadows below become edge separation rather than the cue. */
+        --bg: #2c2c2c;
+        --bg-raised: #383838;
+        --bg-subtle: #434343;
+        --text: #e8e8e8;
+        --muted: #a8a8a8;
+        --border: #4d4d4d;
+
+        /* -- Semantics. `--accent` and `--danger` stay put: they are fills carrying --on-fill,
+           and matching Figma's own primary blue is worth more here than the ratio. Their `-text`
+           halves move, because a fill light enough to carry white text is too light to read as
+           text on a dark ground.
+
+           **The green must stay quieter than the amber** (§5.1, apply-and-drift §8). --ok sits
+           below --warn by contrast ratio, deliberately. This is the one ratio in the palette that
+           must not be "improved": lifting --ok to match --warn inverts the ranking and breaks the
+           rule that a confirmation never out-shouts a warning. If a future contrast pass wants to
+           lift --ok, it has to lift --warn further first. -- */
+        --accent-text: #66b5ff;
+        --warn: #e0a33c;
+        --warn-bg: #3a2f1c;
+        --ok: #6fae87;
+        --ok-bg: #24352b;
+        --danger-text: #ef7f76;
+
+        /* A wash, not a highlighter (§4.3, §9.3): `.tname mark` inherits its colour, so a pale
+           yellow ground here would put near-white text on near-white. */
+        --mark-bg: #6b5a10;
+        --swatch-ring: rgba(255, 255, 255, 0.4);
+        /* The toast gets *lighter*, not darker (§6.2) — one step up from the raised surface, the
+           same direction elevation goes. A white chip at 460px reads as a modal, not a transient
+           line. Repointed at Figma's `bg-tertiary` in block 4. */
+        --toast-bg: #434343;
+        --toast-text: var(--text);
+        --toast-action: #8fcdff;
+        /* Dimming a dark surface takes more alpha to read as dimmed. */
+        --scrim: rgba(0, 0, 0, 0.55);
+        --shadow-pop: 0 4px 14px rgba(0, 0, 0, 0.45);
+        --shadow-modal: 0 8px 28px rgba(0, 0, 0, 0.5);
+        /* Darkening a fill on a dark ground reads as *receding* — the opposite of a hover (§6.4). */
+        --fill-hover: brightness(1.12);
+      }
+
+      /* ---- Block 3: Figma light and the panel agrees — neutrals come from Figma --------- */
+      :root:not(.figma-dark):not(.tv-dark) {
+        --bg: var(--figma-color-bg, #ffffff);
+        /* In light, elevation is carried by shadow and border rather than by lightness, exactly
+           as it always has been — raised is identical to the floor (§4.1). */
+        --bg-raised: var(--figma-color-bg, #ffffff);
+        --bg-subtle: var(--figma-color-bg-secondary, #f5f5f5);
+        --text: var(--figma-color-text, #1a1a1a);
+        --muted: var(--figma-color-text-secondary, #8c8c8c);
+        --border: var(--figma-color-border, #e6e6e6);
+        /* `border-strong` rather than `border`: at 12px a stronger line is what separates a swatch
+           from a hairline nobody notices. Falls back to `border`, never to a literal (§6.3). */
+        --swatch-ring: var(--figma-color-border-strong, var(--figma-color-border, rgba(0, 0, 0, 0.4)));
+      }
+
+      /* ---- Block 4: Figma dark and the panel agrees — neutrals come from Figma ---------- */
+      :root.figma-dark:not(.tv-light) {
+        --bg: var(--figma-color-bg, #2c2c2c);
+        /* `bg-secondary` flips role with the theme — recessed in light, raised in dark — which is
+           why this mapping is per-theme and not one line (§4.1). */
+        --bg-raised: var(--figma-color-bg-secondary, #383838);
+        --bg-subtle: var(--figma-color-bg-tertiary, #434343);
+        --text: var(--figma-color-text, #e8e8e8);
+        --muted: var(--figma-color-text-secondary, #a8a8a8);
+        --border: var(--figma-color-border, #4d4d4d);
+        --swatch-ring: var(--figma-color-border-strong, var(--figma-color-border, rgba(255, 255, 255, 0.4)));
+        --toast-bg: var(--figma-color-bg-tertiary, #434343);
+      }
+
+      /* Held until the stored Appearance value has arrived and its class is stamped (§2.4) —
+         otherwise an overriding user sees a frame of the other theme on every open. `tv-painted`
+         is set by the `plugin-ready` handler, and by a short failsafe timer so a main thread that
+         never answers gives us a themed panel rather than a blank one. */
+      :root:not(.tv-painted) body {
+        visibility: hidden;
       }
       * {
         box-sizing: border-box;
@@ -43,12 +207,14 @@
         font-family: Inter, "Segoe UI", sans-serif;
         font-size: 11px;
         line-height: 1.45;
-        color: #1a1a1a;
+        color: var(--text);
+        /* The panel floor. Transparent would borrow whatever Figma paints behind the iframe. */
+        background: var(--bg);
       }
       header {
         flex: none;
         z-index: 2;
-        background: #fff;
+        background: var(--bg-raised);
         border-bottom: 1px solid var(--border);
       }
       .header-row {
@@ -83,7 +249,7 @@
       .tab.active {
         background: var(--bg-subtle);
         border-color: var(--border);
-        color: #1a1a1a;
+        color: var(--text);
       }
       .tab:disabled {
         opacity: 0.45;
@@ -100,7 +266,7 @@
         padding: 5px 10px;
         border: 1px solid var(--border);
         border-radius: 5px;
-        background: #fff;
+        background: var(--bg);
         cursor: pointer;
       }
       button:hover {
@@ -109,10 +275,10 @@
       button.primary {
         background: var(--accent);
         border-color: var(--accent);
-        color: #fff;
+        color: var(--on-fill);
       }
       button.primary:hover {
-        filter: brightness(0.93);
+        filter: var(--fill-hover);
       }
       button:disabled {
         opacity: 0.45;
@@ -126,7 +292,7 @@
         padding: 2px 4px;
         border: 1px solid var(--border);
         border-radius: 4px;
-        background: #fff;
+        background: var(--bg);
         color: inherit;
       }
       input:disabled {
@@ -297,14 +463,14 @@
         padding: 2px 7px;
         border: 1px solid var(--border);
         border-radius: 10px;
-        background: #fff;
+        background: var(--bg);
         color: var(--muted);
         font: inherit;
         cursor: pointer;
       }
       .chip.on {
-        border-color: var(--accent);
-        color: var(--accent);
+        border-color: var(--accent-text);
+        color: var(--accent-text);
       }
       .chip.warn.on {
         border-color: var(--warn);
@@ -338,7 +504,7 @@
         border: 1px solid var(--border);
         border-radius: 10px;
         overflow: hidden;
-        background: #fff;
+        background: var(--bg);
       }
       .sync-chip > button {
         border: none;
@@ -353,10 +519,10 @@
         border-left: 1px solid var(--border);
       }
       .sync-chip.on {
-        border-color: var(--accent);
+        border-color: var(--accent-text);
       }
       .sync-chip.on > button {
-        color: var(--accent);
+        color: var(--accent-text);
       }
       .sync-chip.warn {
         border-color: var(--warn);
@@ -373,7 +539,7 @@
       #settings {
         position: absolute;
         inset: 0;
-        background: #fff;
+        background: var(--bg-raised);
         display: flex;
         flex-direction: column;
       }
@@ -537,7 +703,10 @@
       }
       .tnode.group {
         cursor: pointer;
-        background: #fff;
+        /* Group rows are *floor*, not raised (§6.1) — they sit above the scroll ground so a
+           sticky-feeling header row doesn't show tokens through it, and their distinction from
+           token rows stays the font weight and the caret. */
+        background: var(--bg);
       }
       .tnode.group:hover,
       .tnode.token:hover {
@@ -571,7 +740,7 @@
         font-weight: 500;
       }
       .tname mark {
-        background: #fff2a8;
+        background: var(--mark-bg);
         color: inherit;
       }
       .vline {
@@ -595,7 +764,7 @@
         color: var(--muted);
       }
       .vline .val.edited {
-        color: var(--accent);
+        color: var(--accent-text);
       }
       .setcode {
         flex: none;
@@ -613,17 +782,33 @@
         color: var(--muted);
         font-size: 10px;
       }
+      /*
+        The swatch renders the user's actual token colour, and its two decorations are the only
+        part of it that is ours (§6.3, §7). Both are drawn against a background we no longer
+        choose, so neither is a tuned hairline any more:
+
+        - The **ring** is `--swatch-ring`, sourced from Figma's own border colour. Figma's border
+          is *defined* as a line that reads against Figma's background, and Figma's background is
+          now ours — so the ring is visible against the panel floor by construction, including on
+          a release that retunes the floor. That is what stops a `#000000` token being an invisible
+          12px square. Drawn as an inset shadow rather than a border so the 12px box and the
+          checkerboard geometry are unchanged.
+        - The **checkerboard** squares are the panel's own ground and its own border, so a
+          semi-transparent token composites against exactly the surface it will look like in use —
+          and never glows in dark.
+      */
       .swatch {
         flex: none;
         width: 12px;
         height: 12px;
         border-radius: 3px;
-        border: 1px solid rgba(0, 0, 0, 0.15);
-        background-color: #fff;
-        background-image: linear-gradient(45deg, #ddd 25%, transparent 25%),
-          linear-gradient(-45deg, #ddd 25%, transparent 25%),
-          linear-gradient(45deg, transparent 75%, #ddd 75%),
-          linear-gradient(-45deg, transparent 75%, #ddd 75%);
+        border: 0;
+        box-shadow: inset 0 0 0 1px var(--swatch-ring);
+        background-color: var(--checker-a);
+        background-image: linear-gradient(45deg, var(--checker-b) 25%, transparent 25%),
+          linear-gradient(-45deg, var(--checker-b) 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, var(--checker-b) 75%),
+          linear-gradient(-45deg, transparent 75%, var(--checker-b) 75%);
         background-size: 6px 6px;
         background-position: 0 0, 0 3px, 3px -3px, -3px 0;
       }
@@ -637,11 +822,13 @@
         position: absolute;
         inset: 0;
         border-radius: 3px;
-        border: 1px solid rgba(0, 0, 0, 0.15);
+        box-shadow: inset 0 0 0 1px var(--swatch-ring);
       }
+      /* The "no colour" case: nothing to ring, so a dashed --border is the whole mark. */
       .swatch.outlined {
         background-image: none;
-        border-style: dashed;
+        box-shadow: none;
+        border: 1px dashed var(--border);
       }
       .menu-btn {
         flex: none;
@@ -654,7 +841,7 @@
       }
       .menu-btn:hover {
         background: none;
-        color: #1a1a1a;
+        color: var(--text);
       }
       .count-right {
         flex: none;
@@ -670,10 +857,12 @@
       .popover {
         position: fixed;
         z-index: 40;
-        background: #fff;
+        background: var(--bg-raised);
+        /* Nearly redundant in light; in dark it is the crisp edge that stops a lighter card from
+           looking like a glow (§6.1). */
         border: 1px solid var(--border);
         border-radius: 6px;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+        box-shadow: var(--shadow-pop);
         padding: 4px;
         max-width: 300px;
         max-height: 380px;
@@ -713,7 +902,7 @@
         position: absolute;
         inset: 0;
         z-index: 20;
-        background: #fff;
+        background: var(--bg-raised);
         display: flex;
         flex-direction: column;
       }
@@ -877,7 +1066,7 @@
         position: fixed;
         inset: 0;
         z-index: 80;
-        background: #fff;
+        background: var(--bg-raised);
         padding: 16px;
         overflow: auto;
       }
@@ -906,8 +1095,9 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        background: #1a1a1a;
-        color: #fff;
+        background: var(--toast-bg);
+        color: var(--toast-text);
+        box-shadow: var(--shadow-modal);
         padding: 6px 12px;
         border-radius: 5px;
         opacity: 0;
@@ -922,7 +1112,7 @@
       .toast-action {
         border: none;
         background: none;
-        color: #7cc4ff;
+        color: var(--toast-action);
         padding: 0;
         font: inherit;
         cursor: pointer;
@@ -950,15 +1140,15 @@
       button.danger {
         background: var(--danger);
         border-color: var(--danger);
-        color: #fff;
+        color: var(--on-fill);
       }
       button.danger:hover {
         background: var(--danger);
-        filter: brightness(0.92);
+        filter: var(--fill-hover);
       }
       /* The menu label, and the only other place red is allowed. */
       .popover .item.danger {
-        color: var(--danger);
+        color: var(--danger-text);
       }
       .popover .divider {
         height: 1px;
@@ -984,7 +1174,7 @@
         align-items: center;
         justify-content: center;
         padding: 16px;
-        background: rgba(0, 0, 0, 0.32);
+        background: var(--scrim);
       }
       .modal-card {
         display: flex;
@@ -992,9 +1182,10 @@
         width: 100%;
         /* Sized to content, capped at roughly two-thirds of the panel; the list scrolls inside. */
         max-height: 66%;
-        background: #fff;
+        background: var(--bg-raised);
+        border: 1px solid var(--border);
         border-radius: 8px;
-        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.24);
+        box-shadow: var(--shadow-modal);
         overflow: hidden;
       }
       .modal-head {
@@ -1080,7 +1271,7 @@
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
       .plan-row .diff .to {
-        color: #1a1a1a;
+        color: var(--text);
       }
       .plan-row.blocked {
         color: var(--muted);

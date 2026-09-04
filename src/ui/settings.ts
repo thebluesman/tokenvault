@@ -15,7 +15,9 @@
 // sandbox, and is never read back. `patLastFour` is derived at save time in `state.ts` so that
 // rendering this screen never requires the PAT to be read out of storage at all.
 
+import type { Appearance } from "../messages";
 import type { RepoSettings } from "../git/types";
+import { getAppearance, setAppearance } from "./appearance";
 import { DEFAULT_TOKENS_DIR, parseRepo } from "../git/state";
 import { normalizeTokensDir } from "../git/paths";
 import { button, el, toast } from "./dom";
@@ -231,6 +233,8 @@ export function renderSettings(): void {
     body.appendChild(failure);
   }
 
+  appearanceSection(body);
+
   settingsEl.appendChild(body);
 
   // --- Status line and the footer ------------------------------------------
@@ -269,6 +273,43 @@ export function renderSettings(): void {
   cut.addEventListener("click", () => confirmDisconnect());
   foot2.appendChild(cut);
   settingsEl.appendChild(foot2);
+}
+
+/**
+ * The Appearance section — UX `dark-mode.md` §2.3.
+ *
+ * **Settings, not a header control.** `git-sync.md` §4.1 fixes the test: tabs and header controls
+ * are for things you do repeatedly, and this is something you set once. The gear already exists and
+ * the overlay already exists, so this is one more field in it rather than a new surface.
+ *
+ * **The control never explains itself further.** Three words and one line of help; the case for the
+ * override does not need arguing inside the panel.
+ */
+function appearanceSection(into: HTMLElement): void {
+  into.appendChild(el("h3", undefined, "Appearance"));
+  const wrap = el("div", "field");
+  wrap.appendChild(el("label", undefined, "Theme"));
+
+  const group = el("div", "chips");
+  const options: Array<{ value: Appearance; label: string }> = [
+    { value: "auto", label: "Auto" },
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+  ];
+  for (const option of options) {
+    const chip = el("button", getAppearance() === option.value ? "chip on" : "chip", option.label);
+    chip.addEventListener("click", () => {
+      // Live, not on next open: the class is stamped before this handler returns and the cascade
+      // repaints every open surface in place. A user who switches and sees one white rectangle
+      // stay white reads it as a bug in the plugin, which it would be.
+      setAppearance(option.value);
+      renderSettings();
+    });
+    group.appendChild(chip);
+  }
+  wrap.appendChild(group);
+  into.appendChild(wrap);
+  into.appendChild(el("div", "empty", "Auto follows Figma's own theme."));
 }
 
 function statusLine(): string {

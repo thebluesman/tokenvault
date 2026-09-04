@@ -36,6 +36,7 @@ import {
   setImportNavigator,
 } from "./tokens";
 import { crash, describeOperation, guard, installErrorBoundary } from "./errors";
+import { applyAppearance, installFirstPaintFailsafe, releaseFirstPaint } from "./appearance";
 import { getGit, handleGitMessage, onGitChange, recomputeStatus } from "./git";
 import {
   connectionBroken,
@@ -349,6 +350,11 @@ function handleMessage(message: PluginToUiMessage | undefined): void {
 
   if (message.type === "plugin-ready") {
     fileNameEl.textContent = message.fileName;
+    // Before the release below, and in that order: the class has to be on `<html>` when the chrome
+    // is first allowed to paint, or an overriding user sees a frame of the other theme on every
+    // open (UX `dark-mode.md` §2.4).
+    applyAppearance(message.appearance);
+    releaseFirstPaint();
     // *"A status check runs on panel open"* (UX §14) — fired from the `git-config` handler rather
     // than here, because the settings and the token it needs arrive in that later message.
     return;
@@ -521,5 +527,8 @@ function firstFailure(message: { report: { outcomes: Array<{ ok: boolean; messag
   const failed = message.report.outcomes.filter((outcome) => !outcome.ok);
   return failed[0]?.message ?? "Figma refused the write.";
 }
+
+// If the reply never comes, an unthemed panel beats a blank one (`appearance.ts`).
+installFirstPaintFailsafe();
 
 send({ type: "ui-ready" } satisfies UiToPluginMessage);

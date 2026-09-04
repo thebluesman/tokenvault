@@ -5,7 +5,10 @@ written to the decisions, not to the recommendations. Two were overridden, and b
 there **is** an Auto / Light / Dark override in Settings (§2.3), and the neutrals are **sourced from
 Figma's `--figma-color-*` variables** rather than hand-authored (§4.1). Ready to build; nothing here
 has been through contact with the real thing.
-**Scheduled**: Phase 10 (§9.5).
+**Scheduled**: Phase 10 (§9.5). **Built** on `phase-10-dark-mode` (PR #27, closes #21), tests
+passing, **not merged**. Three things this doc left for the implementation to answer are still
+open, and none of them can be closed by reading code — see §10. A desk check of the arithmetic
+landed 2026-09-04 (§4.2) and is not a substitute for any of them.
 **Scope**: the plugin panel's own chrome, in Figma's dark theme. Not the token *content* the panel
 displays (§7), and not the exported stylesheets (that's Phase 8, repo-side).
 
@@ -310,6 +313,16 @@ and a text colour legible there is too pale to be a fill. So each splits into a 
 must not be "improved" — raising the green to match the amber breaks `apply-and-drift.md` §8. If a
 future contrast pass wants to lift `--ok`, it must lift `--warn` further first.
 
+**"Sits below" means two different things in the two themes, and only the dark one is a ratio.**
+In dark, green is quieter than amber *by contrast* — 5.4:1 under 6.3:1 — so the constraint and the
+measurement are the same number. In light they come apart: `#2f7d55` is quieter than `#b8730a` by
+chroma, but its contrast on white is **higher** (5.02:1 against the amber's 3.82:1). That inversion
+is not a defect and must not be "fixed". §1 already says why — light mode achieves the ranking by
+desaturating the green, dark mode by the numeric ratio, because saturation behaves differently on a
+dark ground. **Anyone auditing the light palette by contrast alone will conclude the green is too
+loud and reach for a darker amber or a paler green. Both moves break `apply-and-drift.md` §8's
+ranking rule.** The light-mode check is by eye against §8's item 8, never by ratio.
+
 **Every dark ratio above is provisional and must be re-verified empirically.** They were computed
 against `#2c2c2c`, which was this doc's *guess* at Figma's dark background back when the background
 was ours to choose. After §9.2 it is not: `--bg` is now whatever `--figma-color-bg` resolves to,
@@ -330,6 +343,38 @@ So `@frontend-engineer` should, as the first step of the palette half:
    both above 4.5:1, `--danger-text` and `--accent-text` above 4.5:1. If the real background makes
    the published figures shift by a few tenths, that is expected and fine. If it inverts the
    green/amber ranking, that is a bug and §5.1 says why.
+
+**Desk check, 2026-09-04 — arithmetic only, still not transcribed.** The eight ratios were
+recomputed (WCAG 2.x relative luminance) against the snapshot literals as shipped on
+`phase-10-dark-mode`. This closes *none* of step 1 above: the snapshot is still `#2c2c2c` /
+`#383838` / `#434343`, still Figma's values as guessed rather than read out of a running plugin.
+What it does close is whether the published figures are right *for the values in the stylesheet*.
+Six of eight are. Three things are not:
+
+- **`--toast-action` is misprinted.** `#8fcdff` on a `#434343` toast is **5.8:1**, not the 4.9:1 in
+  §4.3. The value is fine — better than advertised. The number is wrong.
+- **`--on-fill` on `--danger` is 5.3:1**, not 5.2:1. A rounding slip, noted for completeness.
+- **Three ratios fall under 4.5:1 at their actual use sites**, which the table misses because every
+  figure in it is quoted against `--bg` and these three don't land there:
+
+  | Pair | Where | Ratio |
+  |---|---|---|
+  | `--danger-text` on `--bg-subtle` | `.popover .item.danger` **on hover** | **3.75:1** |
+  | `--danger-text` on `--bg-raised` | `.popover .item.danger` at rest | **4.45:1** |
+  | `--muted` on `--bg-subtle` | disabled inputs, badge grounds, hover rows | **4.16:1** |
+
+  The danger pair is the sharper one: the popover *is* a raised surface, so red's only surviving
+  text site (§5.3) never actually sits on `--bg`, and its real ratio is the marginal 4.45:1 —
+  dropping to 3.75:1 the moment you mouse over the row you are about to click. §8's item 10 already
+  asks for the `--muted`-on-raised check (4.9:1, passes); nobody asked for `--muted` on `--bg-subtle`,
+  and that is the one that misses.
+
+**No values are being changed on this evidence, deliberately.** All three are computed against a
+background that §4.2 has already declared a guess, and `--bg-subtle` itself is still an open call
+(§4.1). Retuning a semantic colour against an unverified neutral is the exact mistake step 3 above
+warns off. These are inputs to the live pass, not conclusions: when the real `--figma-color-*`
+values land, recompute these three first, because they are the ones already sitting on the line.
+If they still miss, §4.2 step 3 applies — move the semantics, not the neutrals.
 
 ### 4.3 Everything else
 
@@ -648,8 +693,65 @@ lighter than raised" is a relationship, not a number.
 
 **Recommended:** Phase 10, Phase 11, or a standalone ticket — but not after publishing.
 
-**✅ Phase 10.** Shyam's reasoning: *"since we're doing UI improvements."* Phase 10's scope is
+**✅ Phase 10 — landing now.** Shyam's reasoning: *"since we're doing UI improvements."* Phase 10's scope is
 forming around UI and UX polish and dark mode belongs in it. The rest of Phase 10 is still being
 scoped and nothing here claims otherwise — this doc claims one thing, that dark mode is part of it.
 It lands before Phase 11 (publishing), which is the one ordering constraint that mattered: a plugin
 shipped to the Figma Community with no dark mode is the first thing anyone reports.
+
+---
+
+## 10. Open after implementation — needs a running panel, not a reader
+
+PR #27 implements everything above and the tests pin the structure (four `:root` blocks, no
+component-level theme variant, every sourced reference carrying a snapshot fallback). Three
+questions this doc deliberately handed to the implementation are **still open**, because each one
+is answered by looking at a rendered panel in Figma desktop in both editor themes, and by nothing
+else. They are cheap — one session with the dev build — and they gate calling this Implemented.
+
+### 10.1 Transcribe the injected values, then recompute (§4.2, steps 1–2)
+
+**Status: not done.** §4.1's snapshot columns and every dark ratio in §4.2 and §4.3 are still the
+values this doc published as estimates, and the branch ships them as-is: `--bg: #2c2c2c`,
+`--bg-raised: #383838`, `--bg-subtle: #434343`, `--border: #4d4d4d`, `--muted: #a8a8a8`,
+`--text: #e8e8e8`. §4.2's desk check confirmed the *arithmetic* is right for those numbers; it
+cannot confirm the numbers.
+
+This is the one item that is pure transcription rather than judgement — dump
+`getComputedStyle(document.documentElement)` for every `--figma-color-*` this doc names, in both
+Figma themes, and paste the hexes in. It only needs a running plugin because that is the only place
+the style block exists. Recompute afterwards, starting with §4.2's three under-4.5:1 pairs.
+
+### 10.2 `--bg-subtle` — `bg-tertiary`, `bg-hover`, or something else (§4.1)
+
+**Status: shipped as `--figma-color-bg-tertiary`, still the open call.** The doc named
+`--figma-color-bg-hover` as the substitute if tertiary sits too close to `bg-secondary` to separate
+a hover row from a popover ground.
+
+Against the snapshot literals the elevation stack is *even*: `bg → raised` is a luminance step of
+0.0144 and `raised → subtle` is 0.0166, so on those numbers tertiary is not too close and the
+three-step stack §1 calls the dark-mode elevation signal actually reads as three steps. **That
+argues for keeping tertiary — but on guessed values, so it is a prior, not the answer.** Redo it on
+the real ones.
+
+The decision has a second input the original framing missed. `--bg-subtle` is not only an elevation
+step; it is a **text ground** — disabled inputs, badge grounds, `pre`, and every hover row. Whatever
+wins has to carry `--muted` and `--danger-text` legibly, and on the snapshot values tertiary carries
+neither at AA (4.16:1 and 3.75:1, §4.2). So the criterion is now two-sided: **separate from
+`--bg-raised` by eye, and clear 4.5:1 for `--muted` on it.** `bg-hover` is the lighter candidate on
+Figma's own semantics, which helps the separation and hurts the text — check both before picking,
+and if neither clears both, the fix is to lift `--muted` (ours to move under §4.2 step 3), not to
+hand-pick a grey.
+
+### 10.3 `-webkit-font-smoothing: antialiased` — keep or drop (§6.6)
+
+**Status: shipped, unverified.** It sits in §2.2's block 2 as specified. §6.6's test is unchanged
+and is entirely perceptual: **keep it only if the dark panel reads as the same typeface weight as
+the light one.** Compare the two side by side at 11px on the actual display; if the dark text looks
+thinner rather than merely lighter, drop the line. There is no measurement that settles this and no
+harm in dropping it — it is one declaration and nothing else depends on it.
+
+**Nothing in §10 blocks review of the code.** The structure is right and the tests hold it. What is
+unverified is a set of *values* the stylesheet already parameterises as custom properties, so every
+answer above lands as a literal swap in one of §2.2's four blocks — no logic moves. That is the
+argument for merging #27 and closing §10 as a follow-up rather than holding the PR.
