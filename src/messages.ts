@@ -142,6 +142,23 @@ export interface GitConfig {
   hasToken: boolean;
 }
 
+/**
+ * What was lost reading the stored overlay, and where the raw blob went — `error-states.md` §4.
+ *
+ * `quarantineKey` is the `clientStorage` key the unreadable blob was copied to before anything could
+ * overwrite it. It is named in the message rather than reconstructed in the UI so that the rescue
+ * action ("copy the unreadable data") asks for exactly what was written, and so a failure to
+ * quarantine can be reported honestly as one.
+ */
+export interface OverlayRecovery {
+  outcome: "partial" | "unreadable";
+  kept: number;
+  dropped: number;
+  quarantineKey: string | null;
+  /** The quarantined blob, serialized — the clipboard payload for the rescue button. */
+  raw: string | null;
+}
+
 /** What one apply run did, per entry (ADR-0005 §6 — a report, never a rollback). */
 export interface ApplyReport {
   outcomes: WriteOutcome[];
@@ -272,7 +289,20 @@ export type PluginToUiMessage =
    * `storageError` is never swallowed (ADR-0004 §6): an edit that silently failed to persist is
    * worse than one that refused to, so the UI surfaces it and keeps pointing at "copy the tree".
    */
-  | { type: "overlay-state"; overlay: EditOverlay; storageError?: string }
+  | {
+      type: "overlay-state";
+      overlay: EditOverlay;
+      storageError?: string;
+      /**
+       * Present only when reading the stored overlay lost something — UX `error-states.md` §4.
+       *
+       * Sent once, with the first `overlay-state` of the session, and carried by the UI for the rest
+       * of it. The read side's answer to `storageError`: a write that failed and a read that failed
+       * are the two ways the user's only non-re-derivable data can go missing, and ADR-0004 §6
+       * refuses to let either happen quietly.
+       */
+      recovery?: OverlayRecovery;
+    }
   | { type: "tree-json"; json: string; files: number }
   /**
    * The apply report — ADR-0005 §6.
@@ -284,7 +314,25 @@ export type PluginToUiMessage =
   | { type: "apply-result"; report: ApplyReport }
   /** Layer counts for the delete confirmation's blast radius (UX §5.7). */
   | { type: "consumer-counts"; counts: ConsumerCount[] }
+  /**
+   * The scan failed — UX `error-states.md` §2.
+   *
+   * Emitted **only** for a failed `scan`, never as the catch-all it used to be. A pull that threw
+   * reporting itself as an import failure sent the user to the wrong tab with the wrong sentence;
+   * `plugin-error` is where those go now.
+   */
   | { type: "import-error"; message: string }
+  /**
+   * An exception the plugin sandbox did not expect — UX `error-states.md` §3.
+   *
+   * Every *expected* failure in the product has its own result message and its own designed notice.
+   * This is what is left: a throw from a handler for which nothing was designed, which means the
+   * operation's outcome is genuinely unknown and the panel says so rather than guessing.
+   *
+   * `source` is the message type being handled when it threw, so the crash screen can name the
+   * operation instead of inventing one.
+   */
+  | { type: "plugin-error"; message: string; source: string }
 
   // --- Phase 6 (ADR-0006) ---
 

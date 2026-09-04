@@ -10,7 +10,13 @@
 import type { ImportPayload, PluginToUiMessage, UiToPluginMessage } from "../messages";
 import { copy, el, toast } from "./dom";
 import { closeDetail, isDetailOpen, renderDetail, setNavigator } from "./detail";
-import { initImportView, setImportPayload, setImportScanning, showImportError } from "./importView";
+import {
+  initImportView,
+  setImportPayload,
+  setImportScanning,
+  setRetryHandler,
+  showImportError,
+} from "./importView";
 import { conflictedLines, driftedLines, getModel, onChange, send, setOverlay, setPayload } from "./state";
 import {
   closeChanges,
@@ -20,14 +26,16 @@ import {
   setChangesNavigator,
 } from "./changes";
 import { closeModal } from "./applyDialog";
-import { closeDeletePanel, isDeletePanelOpen, setConsumerCounts } from "./deleteFigma";
+import { closeDeletePanel, isDeletePanelOpen, reportDeleteResult, setConsumerCounts } from "./deleteFigma";
 import {
   initTokens,
   renderTokens,
   resetExpansion,
   revealPath,
+  setApplyFailure,
   setImportNavigator,
 } from "./tokens";
+import { crash, describeOperation, guard, installErrorBoundary } from "./errors";
 import { getGit, handleGitMessage, onGitChange, recomputeStatus } from "./git";
 import {
   connectionBroken,
@@ -268,12 +276,20 @@ tokensTab.addEventListener("click", () => showTab("tokens"));
 repoTab.addEventListener("click", () => showTab("repo"));
 gearButton.addEventListener("click", () => openSettings());
 
-scanButton.addEventListener("click", () => {
+function beginScan(): void {
   setImportScanning(true);
   scanButton.disabled = true;
   scanButton.textContent = "Scanning…";
+}
+
+scanButton.addEventListener("click", () => {
+  beginScan();
   send({ type: "scan" });
 });
+
+// `[ Try again ]` inside the scan-failure notice sends the `scan` itself; this puts the header
+// button into the same state, so there is one scanning state rather than two that can disagree.
+setRetryHandler(beginScan);
 
 /** The theme currently reported by the plugin, so a change can be told from a re-emit. */
 let lastReportedTheme: string | null | undefined;
@@ -311,7 +327,13 @@ function reportThemeChange(payload: ImportPayload): void {
 }
 
 window.onmessage = (event: MessageEvent) => {
-  const message = event.data.pluginMessage as PluginToUiMessage | undefined;
+  // Every message is handled inside the boundary: a render that throws mid-message used to leave a
+  // half-painted tree that no longer responded, which is indistinguishable from a hung plugin
+  // (UX `error-states.md` §3).
+  guard(() => handleMessage(event.data.pluginMessage as PluginToUiMessage | undefined));
+};
+
+function handleMessage(message: PluginToUiMessage | undefined): void {
   if (!message) return;
 
   // Git messages are routed first and consumed there — the credential reply in particular must not
@@ -382,7 +404,7 @@ window.onmessage = (event: MessageEvent) => {
   if (message.type === "overlay-state") {
     // Edits are applied optimistically in the UI; this is the confirmation, and the only place a
     // failed write can reach the user (ADR-0004 §6).
-    setOverlay(message.overlay, message.storageError);
+    setOverlay(message.overlay, message.storageError, message.recovery);
     tokensTab.disabled = hasImport === false && message.overlay.entries.length === 0;
     renderStateSlot();
     return;
@@ -395,6 +417,33 @@ window.onmessage = (event: MessageEvent) => {
     // toasts it already serves, and only those.
     const { report } = message;
     const verb = report.destructive ? "Deleted" : "Applied";
+
+    // The delete confirmation is still on screen and owns its own outcome (UX apply-and-drift §7):
+    // it closes on success and stays open with the refusal on it on failure.
+    if (report.destructive && reportDeleteResult(report.failed, firstFailure(message))) {
+      if (report.failed === 0) {
+        toast(`Deleted ${report.applied} item${report.applied === 1 ? "" : "s"} from Figma.`);
+      }
+      return;
+    }
+
+    // A value apply that failed leaves an `.entry` behind the toast, because the toast is gone in
+    // 1.8 seconds and the failure is still true afterwards (§7, amended 2026-09-04).
+    if (!report.destructive) {
+      if (report.failed === 0) setApplyFailure(null);
+      else if (report.applied === 0) {
+        setApplyFailure({
+          text: "Couldn't apply — nothing changed in Figma.",
+          reason: firstFailure(message),
+        });
+      } else {
+        setApplyFailure({
+          text: `Applied ${report.applied} of ${report.outcomes.length}. ${report.failed} failed — they're still in your local edits.`,
+          reason: firstFailure(message),
+        });
+      }
+    }
+
     if (report.outcomes.length === 0) {
       toast("Nothing to apply.");
     } else if (report.failed === 0) {
@@ -430,13 +479,42 @@ window.onmessage = (event: MessageEvent) => {
   }
 
   if (message.type === "import-error") {
+    // A scan that failed changed nothing (UX `error-states.md` §2.1), so the panel keeps whatever
+    // tree it had: the Tokens tab stays enabled, the button goes back to whichever verb is true,
+    // and the notice is added to the Import view rather than replacing it.
     setImportScanning(false);
     scanButton.disabled = false;
-    scanButton.textContent = "Scan file";
+    scanButton.textContent = hasImport ? "Rescan" : "Scan file";
     showTab("import");
     showImportError(message.message);
+    return;
+  }
+
+  if (message.type === "plugin-error") {
+    // Everything the product knows how to fail at has its own designed notice. This is what is
+    // left — see `error-states.md` §3.3, and the routing rule that keeps it rare.
+    crash({ message: message.message, context: describeOperation(message.source) });
   }
 };
+
+/**
+ * Re-runs the startup handshake — the crash screen's `[ Reload the panel ]` (§3.2).
+ *
+ * Not `location.reload()`: the plugin iframe's document is injected by Figma rather than served, so
+ * reloading it is unreliable, and this path re-derives everything the UI holds anyway. It is also
+ * the path exercised on every panel open, which makes it the one most likely to still work in the
+ * state a crash leaves behind.
+ */
+function recoverUi(): void {
+  closeDetail();
+  closeChanges();
+  closeDeletePanel();
+  closeModal();
+  setApplyFailure(null);
+  send({ type: "ui-ready" });
+}
+
+installErrorBoundary(recoverUi);
 
 /** The first failure's own words. Figma's message beats any sentence we could write over it. */
 function firstFailure(message: { report: { outcomes: Array<{ ok: boolean; message?: string }> } }): string {

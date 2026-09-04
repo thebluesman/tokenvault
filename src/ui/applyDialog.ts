@@ -16,9 +16,12 @@
 
 import type { ApplyEntry, ApplyPlan } from "../tokens/plan";
 import type { PlannedWrite } from "../figma/apply";
+import type { Cycle } from "../tokens/graph";
 import { button, clear, el } from "./dom";
 import { getModel, send } from "./state";
 import { diffRow } from "./diffRow";
+import { cycleBlock } from "./valueField";
+import { normalizePathKey } from "../tokens/paths";
 
 const modalEl = document.getElementById("modal") as HTMLElement;
 
@@ -254,11 +257,62 @@ function readyRow(entry: ApplyEntry, checked: Set<string>, recount: () => void):
   );
 }
 
+/** The two skip reasons that mean *this token is on a loop* — `plan.ts`'s slugs. */
+const CYCLE_REASONS = ["alias-cycle", "expression-cycle"];
+
 function blockedRow(entry: ApplyEntry): HTMLElement {
-  return diffRow({
+  const row = diffRow({
     path: entry.path,
     set: entry.set,
     state: "blocked",
     why: entry.message ?? entry.reason ?? "Can't be applied.",
   });
+
+  // UX references-math-themes §7.3c: a cycle row gets `[ Show the loop ]`, *"opening the block
+  // rather than repeating it inside a list row"*. The third of the block's three callers, and the
+  // one that was missing — a row that says "points into a circular reference" without showing which
+  // loop leaves the user hunting through 1,316 tokens for it.
+  if (entry.reason === undefined || CYCLE_REASONS.indexOf(entry.reason) === -1) return row;
+  const cycle = cycleFor(entry.path);
+  if (cycle === undefined) return row;
+
+  const wrap = el("div");
+  wrap.appendChild(row);
+
+  const show = button("Show the loop", "toast-action");
+  show.style.color = "var(--accent)";
+  show.style.marginLeft = "22px";
+  let open = false;
+  let block: HTMLElement | null = null;
+  show.addEventListener("click", () => {
+    open = !open;
+    show.textContent = open ? "Hide the loop" : "Show the loop";
+    if (open) {
+      block = cycleBlock(cycle, getModel().resolve, {});
+      wrap.appendChild(block);
+    } else if (block !== null) {
+      block.remove();
+      block = null;
+    }
+  });
+  wrap.appendChild(show);
+  return wrap;
+}
+
+/**
+ * The loop this path sits on, if any.
+ *
+ * Looked up by path rather than by node key: the dialog groups by Figma target and carries the set's
+ * *display* label, not its id, and the block is identical for every member of a loop anyway — which
+ * is §7.2's point, not a shortcut.
+ */
+function cycleFor(path: string): Cycle | undefined {
+  const context = getModel().resolve;
+  const needle = normalizePathKey(path);
+  for (const cycle of context.cycles.cycles) {
+    for (const node of cycle.nodes) {
+      if (normalizePathKey(context.graph.nodes.get(node)?.path ?? "") === needle) return cycle;
+    }
+  }
+  return undefined;
 }

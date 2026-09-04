@@ -356,9 +356,83 @@ function buildTypePopover(close: () => void): HTMLElement {
 // Notices — the rescan summary, orphans, storage failures (§5.5, §8)
 // ---------------------------------------------------------------------------
 
+/**
+ * The last apply that failed, until the next one — UX apply-and-drift §7.
+ *
+ * A failed apply used to be a toast and nothing else, which is the treatment for a success whose
+ * result isn't on screen. §7 asks for an `.entry`, and the reason is that the failure is *actionable*
+ * and the toast is gone in 1.8 seconds: the edits are still in the overlay and still in the tree, and
+ * the user has to be able to read what refused them after the toast has passed.
+ */
+let applyFailure: { text: string; reason: string } | null = null;
+
+export function setApplyFailure(failure: { text: string; reason: string } | null): void {
+  applyFailure = failure;
+  renderTokens();
+}
+
 function renderNotices(): void {
   clear(noticesEl);
   const model = getModel();
+
+  const recovery = model.overlayRecovery;
+  if (recovery !== undefined) {
+    // UX `error-states.md` §4.2. Non-blocking on purpose: the tree, the scan, the repo and every
+    // other feature are unaffected, and a modal over a working panel makes the user close the
+    // plugin — the one action that helps least.
+    // "Set aside", not "deleted" and not "saved": the blob is still in the sandbox's store under
+    // another key, which is neither of those two things (§4.2).
+    const box = el("div", "entry");
+    box.appendChild(
+      el(
+        "span",
+        "kind",
+        recovery.outcome === "partial"
+          ? "some local edits couldn't be read"
+          : "local edits couldn't be read"
+      )
+    );
+    box.appendChild(
+      el(
+        "div",
+        undefined,
+        recovery.outcome === "partial"
+          ? `${recovery.kept} of ${recovery.kept + recovery.dropped} were recovered; ${recovery.dropped} ${recovery.dropped === 1 ? "was" : "were"} unreadable and ${recovery.dropped === 1 ? "has" : "have"} been set aside. The recovered edits are live and everything else works normally.`
+          : "The stored data for this file is corrupt, so Tokenvault has started from a clean slate. Nothing in Figma or in the repo has changed, and the unreadable data has been set aside rather than deleted."
+      )
+    );
+    if (recovery.raw !== null) {
+      const actions = el("div", "toolbar");
+      actions.style.marginTop = "6px";
+      const rescue = button("Copy the unreadable data");
+      rescue.addEventListener("click", () => copy(recovery.raw ?? "", "the unreadable data"));
+      actions.appendChild(rescue);
+      box.appendChild(actions);
+    } else {
+      box.appendChild(
+        el(
+          "div",
+          "meta",
+          "The unreadable data couldn't be set aside either — plugin storage refused the write."
+        )
+      );
+    }
+    noticesEl.appendChild(box);
+  }
+
+  if (applyFailure !== null) {
+    const failure = applyFailure;
+    const box = el("div", "entry");
+    box.appendChild(el("span", "kind", "apply failed"));
+    box.appendChild(el("div", undefined, `${failure.text} ${failure.reason}`));
+    const actions = el("div", "toolbar");
+    actions.style.marginTop = "6px";
+    const dismiss = button("Dismiss");
+    dismiss.addEventListener("click", () => setApplyFailure(null));
+    actions.appendChild(dismiss);
+    box.appendChild(actions);
+    noticesEl.appendChild(box);
+  }
 
   if (model.storageError !== undefined) {
     const box = el("div", "entry");

@@ -135,9 +135,13 @@ A full-panel takeover, in front of every other surface:
   written to `clientStorage` on every change (ADR-0004 §1), not held in the UI. The screen says so in
   the same breath as the failure, because an unanswered version of that question sends people
   screenshotting their token values.
-- **Message, never a stack.** The `error.message` line is shown; the stack goes to the console and
-  onto the clipboard behind `[ Copy details ]`. A stack dump in an 11px panel teaches nothing and
-  makes a recoverable state look fatal.
+- **Message, never a stack.** The `error.message` line is shown; the stack goes onto the clipboard
+  behind `[ Copy details ]` and nowhere else. A stack dump in an 11px panel teaches nothing and makes
+  a recoverable state look fatal — and it does **not** go to the console, because ADR-0006 §1 forbids
+  the PAT reaching a log and `gitInvariant.test.ts` asserts that no module in the product calls
+  `console.*`. A crash handler that logs whatever was in flight is exactly how a credential ends up
+  in one. `[ Copy details ]` puts the same information one deliberate tap away, taken by the person
+  who owns the token.
 - **A context line where there is one.** `While applying an edit` — derived from which message the
   plugin was handling, not guessed. Absent rather than invented when the failure came from the iframe
   with no operation in flight.

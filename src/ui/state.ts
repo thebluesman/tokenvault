@@ -10,7 +10,13 @@
 //     has to know the referrer count before it is clicked in order to render disabled, and a scan
 //     per `⋯` menu open is a visible stall at 1,316 tokens.
 
-import type { ImportPayload, MergeSummary, SerializedFile, UiToPluginMessage } from "../messages";
+import type {
+  ImportPayload,
+  MergeSummary,
+  OverlayRecovery,
+  SerializedFile,
+  UiToPluginMessage,
+} from "../messages";
 import type { Manifest, ReportEntry, Token, TokenGroup, TokenType, TokenValue } from "../tokens/types";
 import type { EditOverlay, EntryRef, OverlayEntry, OverlayOp, OverlayTarget } from "../tokens/overlay";
 import type { FlatToken, PathRow, SetInfo, TreeNode } from "../tokens/view";
@@ -108,6 +114,14 @@ export interface EditorModel {
   deletions: OverlayEntry[];
   orphans: OverlayEntry[];
   storageError?: string;
+  /**
+   * What reading the stored overlay cost, when it cost something — UX `error-states.md` §4.
+   *
+   * The read-side twin of `storageError`, and carried for the whole session rather than shown once:
+   * the overlay is the only thing in the plugin that cannot be re-derived, so news that some of it
+   * failed to load has to survive a rescan, a pull and a tab switch.
+   */
+  overlayRecovery?: OverlayRecovery;
   /** Number/string tokens still carrying `subtypeSource: "default"`. */
   unconfirmed: number;
   flagged: number;
@@ -265,15 +279,25 @@ export function dismissDrift(keys: string[]): void {
   rebuild();
 }
 
-export function setOverlay(next: EditOverlay, storageError?: string): void {
+export function setOverlay(
+  next: EditOverlay,
+  storageError?: string,
+  recovery?: OverlayRecovery
+): void {
+  // Sticky: the plugin re-attaches it to every `overlay-state`, but a message that arrives without
+  // it (from a code path that predates it, or a future one) must not quietly cancel the notice.
+  if (recovery !== undefined) overlayRecovery = recovery;
   const changed = stableStringify(next) !== stableStringify(overlay);
   overlay = next;
   if (changed) rebuild(storageError);
   else {
-    model = { ...model, storageError };
+    model = { ...model, storageError, overlayRecovery };
     notify();
   }
 }
+
+/** Sticky for the session — see `setOverlay`. */
+let overlayRecovery: OverlayRecovery | undefined;
 
 /** Key for the flag index. A `set`-less entry applies to every line at that path. */
 function flagKey(path: string | undefined, set: string | undefined): string {
@@ -285,7 +309,7 @@ function rebuild(storageError?: string): void {
     // The overlay is durable and the import is not, so the panel can legitimately have edits and
     // no tree (ADR-0004 §1). Carrying the overlay into the blank model is what lets the Tokens
     // tab say "your 7 local edits are still here" instead of implying they were lost (UX §8).
-    model = { ...blankModel(), overlay, storageError };
+    model = { ...blankModel(), overlay, storageError, overlayRecovery };
     notify();
     return;
   }
@@ -403,6 +427,7 @@ function rebuild(storageError?: string): void {
     deletions: overlay.entries.filter((entry) => entry.op === "delete" && entry.orphaned !== true),
     orphans: overlay.entries.filter((entry) => entry.orphaned === true),
     storageError,
+    overlayRecovery,
     unconfirmed,
     flagged: payload.entries.filter((entry) => entry.path !== undefined).length,
     scannedAt: payload.importedAt,
