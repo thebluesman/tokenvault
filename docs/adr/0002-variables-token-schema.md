@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Date**: 2026-09-01
-**Revision**: 2 — amended 2026-09-01, see [Amendment 1](#amendment-1--2026-09-01-phase-2-implementation-feedback)
+**Revision**: 3 — amended 2026-09-01, see [Amendment 1](#amendment-1--2026-09-01-phase-2-implementation-feedback); amended 2026-09-04 (Proposed, not yet accepted), see [Amendment 2](#amendment-2--2026-09-04-proposed--configurable-path-transform-rules)
 **Owner**: @tech-lead
 
 ## Context
@@ -29,6 +29,8 @@ tokens/
 Path is always `tokens/<collection-slug>/<mode-slug>.json`, including single-mode collections — no rename churn when a second mode is added later. Slugs are lowercased with non-alphanumerics collapsed to `-`; original names live in the manifest.
 
 Inside a file, the `/`-delimited variable name splits directly into nested DTCG groups, segments verbatim from Figma — the token path is the round-trip identity, so it is never slugged, cased, or prefixed. A variable named `atlas/ref/palette/neutral/black` becomes `atlas.ref.palette.neutral.black` regardless of which collection or mode file it lands in.
+
+> **Amended by [Amendment 2](#amendment-2--2026-09-04-proposed--configurable-path-transform-rules) (Proposed, 2026-09-04).** "Verbatim" is narrowed to "verbatim, unless a declared path rule says otherwise". The token path becomes a pure function of the variable name *and* the committed rule set, rather than of the variable name alone. Everything this paragraph was protecting — no implicit slugging, no implicit casing, no implicit prefixing, one predictable answer per re-scan — still holds; what changes is that the function is now user-declarable and visible in the repo instead of being fixed at identity.
 
 The collection name is deliberately **not** prepended to the token path. Collection identity lives in the manifest and in each token's `$extensions.figma.collectionId`, not in its name. This means a token's reference string survives a variable moving between collections, matches Figma's own model (an alias points at a Variable, not at a variable-in-a-collection), and matches the shape the atlas pipeline already produces.
 
@@ -253,7 +255,7 @@ Note that the `tv` root here comes from the variable *names*, not from the colle
 
 - **Theme naming and composition UX** when multiple multi-mode collections exist — product/UX call for `@ux-designer` or Shyam, deferred to Phase 7.
 - **The flag/tag step's interaction design** (bulk-tag by name pattern? per-token?) — `@ux-designer`'s call; this ADR only fixes what that step writes.
-- **Name-prefix filtering and platform scoping.** The atlas pipeline treated only `atlas/`-prefixed variables as real tokens, excluded `*`-prefixed segments as design-tooling scaffolding, and parsed a `web`/`app`/`ios`/`android` segment out of the path. Issue #2 asks for none of this and Phase 2 imports every variable, but it is adjacent to collision handling and will resurface if a real file turns out to be full of non-token variables. Deferred, not designed for.
+- **Name-prefix filtering and platform scoping.** The atlas pipeline treated only `atlas/`-prefixed variables as real tokens, excluded `*`-prefixed segments as design-tooling scaffolding, and parsed a `web`/`app`/`ios`/`android` segment out of the path. Issue #2 asks for none of this and Phase 2 imports every variable, but it is adjacent to collision handling and will resurface if a real file turns out to be full of non-token variables. Deferred, not designed for. **Partly answered by Amendment 2 (2026-09-04)**: the *path-parsing* half of it is now a declared rule engine. The *filtering* half — excluding a variable from import entirely — is still deferred, and is Amendment 2's open question 1.
 
 ## Amendment 1 — 2026-09-01 (Phase 2 implementation feedback)
 
@@ -325,6 +327,120 @@ Figma stores FLOAT variable values as 32-bit floats, so a variable a designer ty
 ### Implementation deltas
 
 Against the Phase 2 branch as built, four things change: the `theme-composition` kind (§C), the synthesised `Default` theme (§D), the `dangling-reference` kind (§G), and the winner comparator plus `winnerRule` field (§F). §A, §B, §E and §H bless what is already there.
+
+## Amendment 2 — 2026-09-04 (Proposed) — configurable path transform rules
+
+**Status of this amendment**: Proposed. Phase 10 (PRD §9 item 10) asks for configurable token naming rules: a pattern match against a Figma variable's name that transforms the resulting token path — `xyz/base/color/bg/primary` → `base.color.bg.primary`, `semantic/typography/xyz/title` → `semantic.typography.title` — configured once and re-evaluated on every scan, never baked into a token's stored data.
+
+That contradicts §1 as written, so it is amended here rather than decided in code. ADR-0008 (multi-repo push routing) depends on §A's matcher and is a separate decision.
+
+### A. Source name and token path become two things; the matcher is shared
+
+| Term | Meaning | Stability |
+|---|---|---|
+| **Source name** | The Figma variable's `/`-delimited name, verbatim | Figma's; changes only when a designer renames |
+| **Token path** | `pathRules(sourceName)`, `/` → `.` | Derived, recomputed on every scan |
+
+The identity key is unchanged: it is still `$extensions.com.tokenvault.figma.variableId` (§3), never the path. Rules therefore cannot break re-import matching, drift detection or apply targeting, all of which key on the id.
+
+**A rule is never stored on a token.** Nothing in a token file records which rules produced its path — that is the "re-evaluated live" requirement, and it is also what keeps §7's determinism intact. Rename a variable in Figma so it still matches the same rule, and the next scan produces the same transformation.
+
+The matcher, used here and by ADR-0008:
+
+```jsonc
+{ "kind": "segment", "value": "xyz", "caseSensitive": false }   // any name containing that exact segment
+{ "kind": "name",    "pattern": "^semantic/.*/(ios|android)$" } // regex over the whole /-delimited name
+```
+
+`segment` is the common case and is not a regex, so a name containing `.` or `(` needs no escaping. `name` is the escape hatch. **The match text has no required relationship to what the action does** — that asymmetry is the point, and nothing in the engine assumes otherwise.
+
+### B. Three actions, applied as an ordered pipeline
+
+```jsonc
+{
+  "id": "strip-xyz",
+  "enabled": true,
+  "match":  { "kind": "segment", "value": "xyz" },
+  "action": { "kind": "drop-matched-segments" },
+  "note":   "xyz/ is a Figma-side grouping convention, not part of the token path"
+}
+```
+
+| Action | Effect |
+|---|---|
+| `drop-matched-segments` | Removes every segment the match selected, wherever it occurs |
+| `replace-segment` (`with`) | Rewrites every matched segment to a literal |
+| `rewrite` (`pattern`, `replacement`) | Regex replace over the whole `/`-delimited name, `$1` capture groups |
+
+**Rules are an ordered list and every enabled rule runs, in order, each on the previous rule's output.** A pipeline, not first-match-wins. Both of Shyam's examples are one rule applied at two positions, so position-independence is required; and a pipeline makes "two rules disagree" a non-question — the later rule operates on what the earlier one produced, and precedence is the array order. Order is meaningful data and is never sorted, per §7's array rule.
+
+The pipeline runs **once** per variable per scan. It is a pure function of the source name and the rule set, so re-scan determinism does not depend on any individual rule being idempotent.
+
+### C. Where it runs: before path splitting, therefore before collision detection
+
+```
+scan → sourceName → pathRules → tokenPath → split on "/" → §5 collision detection → build → serialize
+```
+
+Rules run at the one place a name becomes a path, inside the pure build layer, before §5. That ordering is required rather than convenient: **rules create collisions**, and they must arrive at the existing detector as ordinary collisions rather than as a new failure mode. Stripping `xyz/` from one variable when an un-prefixed twin already exists is a `cross-set` or `same-set-case` collision like any other, resolved by Amendment 1 §F's comparator, every participant reported, nothing renamed and nothing silently dropped.
+
+Two additions to the report, so a rule-induced collision explains itself:
+
+- Each collision participant gains `sourceName`, alongside the existing variable id and contested path. Without it a report saying two variables collided at `base.color.bg.primary` is unreadable when neither is *named* that.
+- New report kind **`path-rule`**, reason `invalid-result`: a rule pipeline that produces an empty path, an empty segment, or a leading/trailing separator. **The transform is not applied for that variable — the verbatim source name is used — and the entry records the rule id.** A mangled path is never written; §5's "no silent drop, no mangled name" rule applies to rules too.
+
+### D. References are transformed by the same function, or the feature is broken
+
+§2 resolves a `VARIABLE_ALIAS` to the target variable's dotted name. If paths are rewritten and reference strings are not, **every alias in the file dangles.** So the alias target's *source name* goes through the same pipeline: `{xyz.base.color.bg.primary}` is written as `{base.color.bg.primary}`.
+
+This is the load-bearing consequence of the whole amendment, and it is what keeps §2's claim ("a reference survives a variable moving between collections") true — a reference now also survives a rule change, because both ends move together.
+
+### E. The transform is one-way and is never inverted
+
+`drop-matched-segments` is not injective; nothing recovers `xyz/base/…` from `base.…`. That is acceptable because **Tokenvault never needs to compute a Figma variable name from a token path**: apply writes by `figma.variableId` (ADR-0005), and pull matches by set + path against tokens that already have provenance (ADR-0006 §5).
+
+One place is affected, and it is already deferred: ADR-0006 §11's `pull-unmatched` — creating a Figma Variable for a pulled token with no counterpart. Whoever builds that (PRD §9 Phase 11) **must ask for the Figma name rather than derive it from the path.** Recorded here so it is not rediscovered as a bug.
+
+### F. Rules are committed: `tokens/$rules.json`
+
+The rule set determines the shape of the committed tree. A second machine, or a teammate, that pulls without it computes different paths for the same variables and reads the entire tree as diverged. Phase 10 already carries one instance of exactly this bug (subtype confirmations not surviving a push/pull — PRD §9 item 10), so the precedent is established rather than hypothetical.
+
+`tokens/$rules.json` therefore commits, alongside `$manifest.json`. It is **not** in the class of `$import-report.json`, which ADR-0006 §5 keeps local because it is per-scan machine state; a rule set is authored configuration that the tree cannot be reproduced without.
+
+```jsonc
+{ "generatedBy": "tokenvault", "pathRules": [ /* ordered, per §B */ ], "version": 1 }
+```
+
+Serialized by §7's rules, with `pathRules` order preserved. `clientStorage` holds the working copy under `tokenvault:rules:<file-id>` — a few KB, the same relationship the edit overlay has to the committed tree (ADR-0004 §2), and negligible against ADR-0004 §1's 5MB budget.
+
+**A repo whose `$rules.json` differs from the local one blocks sync and says so**, resolved by ADR-0006 §6's per-file pick-a-side. Pulling under a mismatched rule set would mis-match every token by path, which is the silently-wrong class this project refuses everywhere.
+
+### G. A rule edit is a mass rename, and it is previewed rather than discovered
+
+Editing a rule can move every matching token's path at once. Left alone this surfaces as ADR-0006 §4 marking most files locally changed and §8's diff view showing hundreds of deletes and adds — technically correct, unreadable, and the user learns what they did after committing it.
+
+So: **a rule-set edit is never saved without a preview**, computed before the write:
+
+```
+PathRemap = { variableId, from, to }[]      // ids are stable across the change, §A
+```
+
+The preview reports how many tokens change path, how many references are rewritten (§D), and any new collisions or `path-rule` entries the change introduces. It can still be saved with collisions present — a second rule may be the fix, and §5 already reports rather than blocks — but it is never applied silently.
+
+**Reusable by Phase 11's manual path rename.** A manual rename is one `PathRemap` entry; a rule edit is many. The reference-rewriting pass and the preview are the same code for both, and this is the reference-rewriting work PRD §9 item 11 names as manual rename's blocker. The one thing a manual rename needs that rules do not is somewhere to *store* the rename (an ADR-0004 overlay op), because a rule set is its own store.
+
+### H. What this costs, and what it does not
+
+- **`build()` gains a third input.** It was a pure function of (scan, `userSubtypes`); it becomes a pure function of (scan, `userSubtypes`, `pathRules`). ADR-0004's statement that a build is reproducible from the Figma file plus `userSubtypes` needs that one word added. §7's byte-identical guarantee is unchanged — same three inputs, same bytes.
+- **Drift (ADR-0005 §7, ADR-0006 §7) is unaffected in mechanism and noisy on rule edits.** A re-pathed token reads as `drift-removed` plus `drift-added` against the old baseline. §G's preview is the mitigation; no drift-side change is made, because the drift comparator is correct and the confusion is entirely upstream of it.
+- **Excluding variables is still out of scope.** The engine could trivially carry an `exclude` action, which is the atlas name-prefix filtering this ADR's open questions deferred. Phase 10 did not ask for it, dropping tokens is a different risk from re-pathing them, and it stays deferred — noted here only because the engine makes it cheap, not because it is designed.
+- **Authoring UI is `@ux-designer`'s.** This amendment fixes the rule shape, the ordering semantics, the storage location and the preview requirement. What the rules editor looks like, how a rule is tested against the live file, and how the preview is presented are not decided here.
+
+### Open questions for Shyam (Amendment 2)
+
+1. **Should a rule set also be able to exclude variables from import?** Recommendation: no, keep it out of Phase 10 (§H). It is one action away and it is the atlas prefix-filter case, so it is worth an explicit yes/no rather than a silent omission.
+2. **Rule-set divergence between repo and local: block, or warn and proceed?** Recommendation: block (§F), because a pull under mismatched rules mis-matches every token. Warning-and-proceeding is defensible if rule edits turn out to be routine and always intentional.
+3. **`replace-segment` and `rewrite` — needed now, or is `drop-matched-segments` the whole Phase 10 requirement?** Both examples given are drops. The other two actions cost little and remove a future amendment, but if the answer is "only ever stripping", shipping one action is smaller and the rule shape stays open.
 
 ## Precedent checked
 

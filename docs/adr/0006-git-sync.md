@@ -4,6 +4,7 @@
 **Date**: 2026-09-02
 **Accepted**: 2026-09-02 — Shyam resolved every open question that was his to make; the one item still open is an API fact to verify during implementation, not a decision. See [Open questions](#open-questions-not-decided-here). Phase 6 built and merged against this ADR 2026-09-03 (PR #14, `8efe321`), unamended.
 **Owner**: @tech-lead
+**Extended by**: [ADR-0008 — Multi-repo push routing](0008-multi-repo-push-routing.md) (Proposed, 2026-09-04). This ADR remains the single-repo design and is unchanged except where ADR-0008 marks a section amended: §2's source-of-truth sentence is qualified to name a primary connection (ADR-0008 §1), §3's `tokenvault:sync:<file-id>` key gains a connection id (ADR-0008 §6), and §10's "no partial commit state" stays true per repo but not across repos (ADR-0008 §4).
 
 > Shyam resolved this ADR's six open questions on 2026-09-02, before acceptance. They are folded into the decision sections below and marked *(resolved 2026-09-02)*: divergence is per-file, whole-file pick-a-side and only the diverged file blocks (§6); first connect asks once whether to adopt the repo (§6); push and pull are manual, with no auto-pull (§5); the diff/commit view is its own surface (§8); Tokenvault is a sync client, not a git client (§9); and a bulk *Take Figma's* gets its own confirmation (§7).
 
