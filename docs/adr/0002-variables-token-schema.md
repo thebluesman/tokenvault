@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Date**: 2026-09-01
-**Revision**: 3 — amended 2026-09-01, see [Amendment 1](#amendment-1--2026-09-01-phase-2-implementation-feedback); amended 2026-09-04, see [Amendment 2](#amendment-2--2026-09-04--configurable-path-transform-rules)
+**Revision**: 4 — amended 2026-09-01, see [Amendment 1](#amendment-1--2026-09-01-phase-2-implementation-feedback); amended 2026-09-04, see [Amendment 2](#amendment-2--2026-09-04--configurable-path-transform-rules) and [Amendment 3](#amendment-3--2026-09-04--an-unresolvable-tree-does-not-push)
 **Owner**: @tech-lead
 
 ## Context
@@ -318,6 +318,8 @@ Blessed as implemented, with the entry kind corrected. When a token's `$value` a
 
 But it is not an `unmappable-value` — the token *was* mapped and written. New kind `dangling-reference`, reason `alias-target-skipped`, on the written token. `alias-target-unknown` (target not in the file and not nameable) stays `unmappable-value`, because there it genuinely blocks the token.
 
+> **Amended by [Amendment 3](#amendment-3--2026-09-04--an-unresolvable-tree-does-not-push) (2026-09-04).** Everything in this section about *import* stands: the reference is still written, the token is still imported, the entry is still filed, and import still never refuses. What changes is downstream — a tree containing an unresolved reference no longer **pushes**. §G's report entry acquires a consumer at the sync boundary.
+
 §F makes this rarer: the most-referenced variable now wins its collisions, so the common case no longer drops an alias target.
 
 ### H. Float32 normalisation (no decision needed, recorded so nobody rediscovers it)
@@ -330,7 +332,7 @@ Against the Phase 2 branch as built, four things change: the `theme-composition`
 
 ## Amendment 2 — 2026-09-04 — configurable path transform rules
 
-**Status of this amendment**: Accepted 2026-09-04, no open questions. Shyam resolved four, three of them against this amendment's own recommendation: **exclusion is in** (§I), **all four transform actions ship** rather than stripping alone (§B), and **an exclusion that leaves a reference dangling blocks the push** (§I). Rule-set mismatch **blocks** (§F), as recommended.
+**Status of this amendment**: Accepted 2026-09-04, no open questions. Shyam resolved four, three of them against this amendment's own recommendation: **exclusion is in** (§I), **all four transform actions ship** rather than stripping alone (§B), and **an exclusion that leaves a reference dangling blocks the push** (§I). Rule-set mismatch **blocks** (§F), as recommended. §I's scoping of that push gate to rule-induced dangles was subsequently overturned — see [Amendment 3](#amendment-3--2026-09-04--an-unresolvable-tree-does-not-push).
 
 Phase 10 (PRD §9 item 10) asks for configurable token naming rules: a pattern match against a Figma variable's name that transforms the resulting token path — `xyz/base/color/bg/primary` → `base.color.bg.primary`, `semantic/typography/xyz/title` → `semantic.typography.title` — configured once and re-evaluated on every scan, never baked into a token's stored data.
 
@@ -469,13 +471,67 @@ Exclusion is a content decision — it changes what the tree contains — so it 
 
 The reasoning, since this overrides the recommendation: a dangling reference fails a Phase 8 export build outright, so warning-and-committing breaks CI in every repo at once — the exact outcome the routing wall exists to prevent, and no less bad for arriving by a different route.
 
-**The gate is on rule-induced dangles only, and the boundary is deliberate.** A dangle caused by an exclusion (here) or by routing (ADR-0008 §3) is the direct result of a rule the user wrote, is visible in that rule's preview, and is fixed by editing it in the plugin. A dangle caused by Figma's own state — a collision loser, an unsupported type (Amendment 1 §G) — needs a rename in Figma, and blocking push on it would strand a user with an unfixable-from-here repo until they can get back into the file. Those keep §G's write-and-report treatment, unchanged.
+> **Widened by [Amendment 3](#amendment-3--2026-09-04--an-unresolvable-tree-does-not-push) (2026-09-04).** This section originally scoped the push gate to *rule-induced* dangles, leaving Amendment 1 §G's Figma-state ones to write-and-report. Shyam overturned that boundary: **any** unresolved reference blocks, whatever caused it, and so does a cycle. Amendment 3 §A carries the rule; the exclusion behaviour described here is unchanged and is now one case of it.
 
 ### Open questions (Amendment 2)
 
 **None.** All four questions were resolved by Shyam on 2026-09-04 and are folded into the sections above: **exclusion is in** (§I, overriding the recommendation to defer), **all four actions ship** (§B, overriding the recommendation to ship stripping alone), **rule-set mismatch blocks** (§F, as recommended), and **an exclusion dangle blocks the push** (§I, overriding the recommendation to warn).
 
-The one judgement this amendment made on its own rather than asking, recorded because it is a boundary someone will test: the push gate covers **rule-induced** dangling references only, not the Figma-state ones Amendment 1 §G writes and reports. §I says why.
+The one judgement this amendment made on its own rather than asking — scoping the push gate to rule-induced dangles — was flagged to Shyam and **overturned** the same day. Amendment 3 replaces it: any unresolved reference blocks a push, whatever caused it.
+
+## Amendment 3 — 2026-09-04 — an unresolvable tree does not push
+
+**Status of this amendment**: Accepted 2026-09-04, no open questions.
+
+Amendment 2 §I gated the push on *rule-induced* dangling references — one caused by an `exclude` rule, or by ADR-0008 §3's routing — while leaving Figma-state dangles (Amendment 1 §G's collision losers and unsupported types) to write-and-report as before. That boundary was this ADR's own judgement, flagged rather than asked. **Shyam overturned it: any dangling reference blocks the push.**
+
+### A. One predicate, at one boundary
+
+**A tree that does not resolve is not pushed.** The gate is over the built tree rather than over a list of report kinds:
+
+> Every reference in the tree resolves to a token that exists in the tree, and no reference chain closes on itself.
+
+Stating it as a property of the tree rather than as an enumeration of causes is what makes it stable. A future amendment that invents a new way to lose a reference target does not have to remember to add itself to a list, and the gate cannot drift out of step with the report kinds that happen to exist. Concretely it covers, with no special cases:
+
+| Cause | Report entry | Introduced by |
+|---|---|---|
+| Collision loser referenced by a survivor | `dangling-reference` / `alias-target-skipped` | Amendment 1 §G |
+| Unsupported type (EASING, TIMING) referenced | `dangling-reference` / `alias-target-skipped` | Amendment 1 §A, §G |
+| Target excluded by a rule | `dangling-reference` / `alias-target-excluded` | Amendment 2 §I |
+| Target routed to another repo | `routing-dangling-reference` / `cross-repo` | ADR-0008 §3 |
+| Target unknown and unnameable | `unmappable-value` / `alias-target-unknown` | Amendment 1 §G |
+| A reference or expression cycle | ADR-0007 §3's cycle | ADR-0007 |
+
+Cycles are included deliberately, and the reasoning is the same sentence as for dangles: Phase 8's export fails the whole build on a cycle exactly as it does on a dangling reference, so a tree with one is already unpublishable. ADR-0007 checks for cycles at three points — editor, build/merge, apply plan — and this makes push the fourth. It closes what would otherwise be an odd gap, where a tree that cannot build is refused for one reason and waved through for another.
+
+**Mechanics, identical to Amendment 2 §I's:** computed from the local tree before any network call, surfaced in the Review & push screen as a pre-push block, and reported through the entries that already exist rather than a new detector. It blocks **every connected repo**, because an unresolved reference in the local tree is unresolved in every projection of it. ADR-0008 §3's routing dangle remains the one variant that blocks only the affected repo — there the local tree is fine and only one projection is not.
+
+### B. Import is unchanged; §5 and §G compose with this rather than conflict
+
+Worth being explicit, because the two rules sound opposed and are not.
+
+§5 and Amendment 1 §G are about **what import does with a broken input**: a collision loser is not written and not renamed, the referring token *is* written with its reference intact, every participant is reported, and nothing is silently dropped or mangled. Amendment 3 is about **whether the resulting tree may be published**. Different stage, different question, and they compose because each is doing the thing its own stage is good at:
+
+- **Import stays lossless and non-refusing.** It always produces the most complete tree the Figma file allows, and always says what it could not do. If import refused instead, a user with one bad collision would have no tokens at all, and §G's cascade argument — excluding a referrer would dangle *its* referrers, so one junk variable could unwrite a whole branch — would be live again.
+- **Push refuses.** It is the boundary where the tree stops being a local working artifact and becomes something a build consumes.
+
+So §5's *"the fix is a rename in Figma"* is still the fix. Amendment 3 changes when the user is obliged to apply it: at the point of publishing, rather than whenever they happen to read the report.
+
+### C. The tradeoff, stated plainly
+
+**A Figma-state dangle can only be fixed in Figma, and it now blocks the whole push — including unrelated token edits.** Someone with a collision they have not resolved cannot push anything until they go back into the Figma file and rename a variable. That is real friction, it is not avoidable within this decision, and there is deliberately **no override** — a "push anyway" button would make the gate advisory, and an advisory gate is one users learn to click through.
+
+Three things make it a smaller cost than it first reads:
+
+- **A tree with a dangling reference or a cycle already failed Phase 8's export**, which fails the whole build and writes nothing. The tokens were not producing working output before this amendment either. What changes is *where* the failure appears: in the plugin, next to the report entry naming the participating variable ids, instead of in a CI log some time later. The friction moves earlier, to the one place it is actionable.
+- **The block is fully explained by data that already exists.** §5 records every collision participant with its variable id and contested path, and §G records the referring token. The message can name the variable to rename and the tokens that depend on it, rather than saying that something is wrong.
+- **It is visible before it is blocking.** The condition is in the import report immediately after a scan, and in Amendment 2 §G's rule preview before a rule is saved. A user meets it at push time only by ignoring both.
+
+**Migration consequence**, recorded so it is not a surprise: a repo already carrying a committed tree with a dangling reference — possible under Phases 6–8, which reported but did not gate — will refuse its next push until the Figma-side fix is made. This is the intended behaviour and not a regression, but it is a thing that can happen on the first run after Phase 10 lands, to a user who changed nothing.
+
+### D. Amendment 2 §I's scoping is withdrawn
+
+The "rule-induced only" boundary in Amendment 2 §I is replaced by §A, and its closing note about the boundary is removed. Nothing else in Amendment 2 changes: exclusion still reports in aggregate, still surfaces in the rule preview, and still lives in the committed `$rules.json`.
 
 ## Precedent checked
 

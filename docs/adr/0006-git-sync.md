@@ -13,6 +13,8 @@
 
 §1's per-repo PAT scoping is the one decision here that ADR-0008 reverses outright; the tradeoff is recorded in ADR-0008 §2 rather than edited away here.
 
+**Separately, §5's push gains a precondition** (ADR-0002 Amendment 3, 2026-09-04): a tree whose references do not all resolve, or that contains a cycle, does not push at all. Computed locally before any network call, so it surfaces as a pre-push block rather than a failure mid-sequence. Phase 6 pushed such a tree and reported it; Phase 10 refuses it, on the grounds that Phase 8's export fails the build on exactly those conditions anyway.
+
 > Shyam resolved this ADR's six open questions on 2026-09-02, before acceptance. They are folded into the decision sections below and marked *(resolved 2026-09-02)*: divergence is per-file, whole-file pick-a-side and only the diverged file blocks (§6); first connect asks once whether to adopt the repo (§6); push and pull are manual, with no auto-pull (§5); the diff/commit view is its own surface (§8); Tokenvault is a sync client, not a git client (§9); and a bulk *Take Figma's* gets its own confirmation (§7).
 
 ## Context

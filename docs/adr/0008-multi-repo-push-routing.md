@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Date**: 2026-09-04
-**Accepted**: 2026-09-04 — no open questions. Shyam resolved eight questions in a first pass, three against this ADR's own recommendation: cross-repo references **refuse** rather than widen (§3), the PAT is **shared across repos** rather than per repo (§2), and there is **no primary repo** (§1). A second pass closed the two items that first pass surfaced: drift measures Figma against the local tree with **per-repo status never collapsed** (§6a), and the shared PAT gains a **per-connection override** so repos outside its scope are supported rather than assumed away (§2). See [Open questions](#open-questions-not-decided-here).
+**Accepted**: 2026-09-04 — no open questions. Shyam resolved eight questions in a first pass, three against this ADR's own recommendation: cross-repo references **refuse** rather than widen (§3), the PAT is **shared across repos** rather than per repo (§2), and there is **no primary repo** (§1). A second pass closed the two items that first pass surfaced: drift measures Figma against the local tree with **per-repo status never collapsed** (§6a), and the shared PAT gains a **per-connection override** so repos outside its scope are supported rather than assumed away (§2). A third widened the push gate to **any unresolvable tree**, not only rule-induced dangles — carried in ADR-0002 Amendment 3, of which §3's routing wall is now one case. See [Open questions](#open-questions-not-decided-here).
 **Owner**: @tech-lead
 
 ## Context
@@ -114,6 +114,8 @@ Four properties of the block, each chosen to keep it recoverable:
 
 **This interacts with `repos: []`** (§5): routing a token nowhere, when something references it, dangles that reference in every repo holding the referrer, and blocks each of them. That is the wall working as specified, and it is the most likely way a user meets it.
 
+**It is one case of a general rule, not a special one.** ADR-0002 Amendment 3 gates every push on the tree resolving — any unresolved reference, and any cycle, whatever the cause. This section is the *routing-specific* variant, and the only one that blocks a single repo rather than all of them: here the local tree is intact and only one projection is not. Every other cause breaks the local tree itself, so it blocks every connection. Both are computed before any network call and both surface in the same pre-push block list (§7).
+
 ### 4. Push is per repo, sequential, and never all-or-nothing
 
 **There is no cross-repo transaction, and simulating one would be worse than not having it.** GitHub offers no multi-repo atomicity; rolling back a repo that already succeeded means a force-push, which ADR-0006 §8's `force: false` rules out and which rewrites history other people have.
@@ -124,7 +126,7 @@ So a four-repo push is four independent runs of ADR-0006 §8's Git Data sequence
 |---|---|
 | web | ✅ committed `a1b2c3d` — 4 files |
 | android | ✅ committed `e4f5a6b` — 2 files |
-| ios | ⛔ blocked — 2 references would dangle (§3) |
+| ios | ⛔ blocked — 2 references would dangle in this repo (§3) |
 | docs | ❌ 401 — GitHub rejected the token |
 
 **One repo failing does not stop the next.** Every connection is attempted, blocks from §3 and ADR-0002 Amendment 2 §F are resolved before the run rather than mid-flight, and failures are named per ADR-0006 §10's taxonomy. Retry is per repo and safe: blob-SHA comparison makes a re-push of an already-pushed repo a no-op, so "retry failed repos" needs no new state.
@@ -205,8 +207,9 @@ Code impact is small — `src/tokens/drift.ts` already takes its baseline as an 
 Presentation is `@ux-designer`'s, per this project's split. What this ADR fixes is the hierarchy and what it must show, because both follow from the commit model rather than from taste:
 
 - **Repo → file → token.** The repo is the top level because the repo is now the unit of the commit (§4). A token routed to three repos appears three times, which is truthful — it is three commits.
-- A pre-push summary: how many repos, files and tokens, and how many repos are **blocked** — by a diverged file (ADR-0006 §6), a rule-set mismatch (ADR-0002 Amendment 2 §F), or a cross-repo dangling reference (§3).
-- §3's blocks named per repo with the referring token, the missing target, and the rule that routed it away — a block whose cause is not on screen is a block the user cannot clear.
+- A pre-push summary: how many repos, files and tokens, and how many repos are **blocked** — by a diverged file (ADR-0006 §6), a rule-set mismatch (ADR-0002 Amendment 2 §F), a cross-repo dangling reference (§3), or an unresolvable local tree (ADR-0002 Amendment 3, which blocks all of them at once).
+- **Every block names its cause and its fix.** §3's blocks carry the referring token, the missing target, and the rule that routed it away. Amendment 3's carry the referring token and the variable that needs renaming in Figma — data §5 and Amendment 1 §G already record. A block whose cause is not on screen is a block the user cannot clear.
+- An unresolvable local tree blocks every repo, so it is one message above the per-repo list rather than the same message repeated ten times.
 - Tokens routed nowhere (§5) shown as *not pushed anywhere*, not as errors.
 - The per-repo result list (§4) after the push, in place, with retry per failed repo.
 
@@ -231,6 +234,7 @@ Presentation is `@ux-designer`'s, per this project's split. What this ADR fixes 
 - **Repos under a second account or organisation are supported, not excluded** (§2). The cost is one settings concept — a per-connection credential — that most users never see, and one sentence of copy explaining when they would.
 - Push stops having a single outcome. Anything that renders "pushed ✅" has to render a list instead, and any code that treats a push as one promise needs to treat it as N.
 - **Routing rules can block a push, and that is the design working.** A user who routes a referenced token narrowly will meet §3's wall, and the fix is always a rule edit. The preview is what keeps this from being discovered at push time.
+- **A tree that does not resolve blocks every repo** (ADR-0002 Amendment 3), including for causes that predate Phase 10 and can only be fixed in Figma. That amendment states the tradeoff; the consequence here is that the Review & push screen must be able to explain a block whose fix is not in the plugin at all.
 - **No repo is authoritative, so every repo has to be pulled from deliberately** (§6). A user with four repos has four separate "is this one current?" answers to hold, which is a real cognitive cost of the model Shyam chose — mitigated by the status chip aggregating to the worst case, not by pretending there is one answer.
 - **ADR-0006 §7's drift baseline is retired and replaced** (§6a). `src/tokens/drift.ts` needs a different argument, not different logic, and `docs/ux/apply-and-drift.md` §6.4 needs a pass from `@ux-designer` carrying the per-repo-visibility requirement onto the screen.
 - `@ux-designer` gains three surfaces: the connections list in settings (including the PAT override and the copy explaining when it is needed), the routing-rules editor with its blocking preview, and the repo-grouped Review & push screen with per-repo results and per-repo blocks — plus the §6.4 rewrite above. Together with ADR-0002 Amendment 2's rules editor and preview, Phase 10 is a larger UX phase than its "polish" title suggests.
@@ -265,7 +269,7 @@ Nothing here has a cost floor above $0. Worth noting what *would*: a fan-out orc
 
 ## Open questions (not decided here)
 
-**None.** Ten questions were resolved by Shyam across two passes on 2026-09-04 and are folded into the sections above: **refuse, don't widen** (§3), **shared PAT** (§2), **cap 10** (§1), **rule-set mismatch blocks** (ADR-0002 Amendment 2 §F), **exclusion in the rule engine** (Amendment 2 §I), **all transform actions** (Amendment 2 §B), **no primary** (§1), **zero-repo routing allowed** (§5), **drift measured against the local tree with per-repo status never collapsed** (§6a), and **a per-connection PAT override** (§2).
+**None.** Eleven questions were resolved by Shyam across three passes on 2026-09-04 — the eleventh widening the push gate to any unresolvable tree (ADR-0002 Amendment 3), which overturned a boundary this ADR and Amendment 2 had drawn on their own and flagged for exactly that reason. The other ten and are folded into the sections above: **refuse, don't widen** (§3), **shared PAT** (§2), **cap 10** (§1), **rule-set mismatch blocks** (ADR-0002 Amendment 2 §F), **exclusion in the rule engine** (Amendment 2 §I), **all transform actions** (Amendment 2 §B), **no primary** (§1), **zero-repo routing allowed** (§5), **drift measured against the local tree with per-repo status never collapsed** (§6a), and **a per-connection PAT override** (§2).
 
 **Carried into other people's documents, not open here:**
 
@@ -276,7 +280,7 @@ Nothing here has a cost floor above $0. Worth noting what *would*: a fan-out orc
 
 ## References
 
-- ADR-0002 (`docs/adr/0002-variables-token-schema.md`) — §1 set ordering and last-wins, §7 determinism and `stableStringify`; **Amendment 2** §A the shared matcher, §B the four actions, §F `$rules.json` committed and mismatch blocking, §G the rule preview, §I exclusion — a prerequisite for this ADR
+- ADR-0002 (`docs/adr/0002-variables-token-schema.md`) — §1 set ordering and last-wins, §5 collisions and the participants a block message names, §7 determinism and `stableStringify`; **Amendment 1** §G dangling references at import; **Amendment 2** §A the shared matcher, §B the four actions, §F `$rules.json` committed and mismatch blocking, §G the rule preview, §I exclusion; **Amendment 3** the general push gate §3 here is one case of — all three a prerequisite for this ADR
 - ADR-0004 (`docs/adr/0004-local-edit-persistence.md`) — §1 the 5MB `clientStorage` budget and `resolveStorageKey`, §2 the overlay entry shape, §6 quota policy
 - ADR-0005 (`docs/adr/0005-figma-apply-and-drift.md`) — §1 the `ApplyPlan` seam pull rides, §7–§8 drift baselines and the post-apply behaviour §6a depends on
 - ADR-0006 (`docs/adr/0006-git-sync.md`) — §1 the PAT handling rules and the per-repo scoping §2 here reverses, §2 the source-of-truth model §1 here generalises, §3 the storage keys §2 here re-keys, §4 the SHA table §6 here extends, §5 push/pull semantics, §6 divergence, §7 the drift baseline §6a here leaves undefined, §8 the Git Data sequence §4 here runs per repo, §10 the failure taxonomy and the partial-commit claim §4 here amends, §11 `pull-unmatched`
