@@ -581,6 +581,37 @@ export interface DeletePlan {
  * delete already uses: those referrers are going away in the same operation, so nothing is
  * stranded.
  */
+/**
+ * The same plan with the entries that actually got deleted taken out — UX apply-and-drift §7.
+ *
+ * Phase 9 made the delete confirmation **stay open** on a failure, which is what §7 asks for and
+ * which creates a case Phase 5 never had: a *retry*. The plan the screen was opened with still
+ * listed every entry, so the second tap would resend writes for Variables the first tap had already
+ * removed — either no-ops against a dead node id or fresh failures that displace the real reason the
+ * user is standing there reading.
+ *
+ * So a partial failure narrows the plan to what is genuinely still pending. Blocked entries are
+ * kept: they were never sent, they are still true, and the screen lists them.
+ *
+ * Pure, and here rather than in the UI, because "what is left to delete" is plan arithmetic and this
+ * is where the plan is built.
+ */
+export function withoutDeleted(plan: DeletePlan, deletedKeys: Iterable<string>): DeletePlan {
+  const gone = new Set(deletedKeys);
+  if (gone.size === 0) return plan;
+  const entries = plan.entries.filter((entry) => !gone.has(entry.key));
+  return {
+    entries,
+    ready: entries.filter((entry) => entry.status === "ready").length,
+    blocked: entries.filter((entry) => entry.status === "blocked").length,
+    // Recomputed from what is left: a referrer list that still names the deleted token's referrers
+    // would be describing a block that no longer exists.
+    referrers: plan.referrers.filter((referrer) =>
+      entries.some((entry) => entry.referrers.indexOf(referrer) !== -1)
+    ),
+  };
+}
+
 export function buildDeletePlan(
   lines: Array<{ path: string; setId: string; token: Token }>,
   inbound: InboundIndex

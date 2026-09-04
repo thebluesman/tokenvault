@@ -741,26 +741,85 @@ export function dropEntry(overlay: EditOverlay, target: OverlayTarget, op: Overl
 // ---------------------------------------------------------------------------
 
 /**
- * Parses whatever `clientStorage` handed back.
+ * What reading the stored overlay actually produced — UX `error-states.md` §4.
  *
- * `clientStorage` is user-clearable and version-blind, so a malformed or unrecognised payload is
- * treated as "no edits" rather than throwing the Tokens tab into an error state. Entries that
- * cannot produce a target key are dropped: they could never match a token again.
+ * `outcome` is the distinction Phase 4 could not make, because it had one return type and no
+ * counters:
+ *
+ * | `outcome`      | Meaning                                                            |
+ * |----------------|--------------------------------------------------------------------|
+ * | `"empty"`      | Nothing stored. A first run, or a file that has never been edited.  |
+ * | `"ok"`         | Every stored entry was readable.                                    |
+ * | `"partial"`    | The blob is an overlay; `dropped` of its entries were not readable. |
+ * | `"unreadable"` | The blob is not an overlay at all. Nothing could be recovered.      |
+ *
+ * `"empty"` and `"unreadable"` both yield an empty overlay and are emphatically not the same event:
+ * the first is the normal case and the second is the user's work failing to load. Collapsing them is
+ * the bug this type exists to make unrepresentable.
  */
-export function parseOverlay(stored: unknown): EditOverlay {
-  if (stored === null || typeof stored !== "object") return emptyOverlay();
+export interface OverlayRead {
+  overlay: EditOverlay;
+  outcome: "empty" | "ok" | "partial" | "unreadable";
+  /** Entries recovered. */
+  kept: number;
+  /** Entries present in the blob that could not be read. Always 0 unless `outcome` is `partial`. */
+  dropped: number;
+}
+
+/**
+ * Reads whatever `clientStorage` handed back, and says how well it went.
+ *
+ * `clientStorage` is user-clearable and version-blind, so a malformed payload never throws — but it
+ * is no longer silent either (`error-states.md` §4.1). Phase 4 returned `emptyOverlay()` for a
+ * corrupt blob and for an empty store alike, so a file whose edits failed to load opened looking
+ * exactly like a file that had none, and the next edit overwrote the evidence. The recovery policy
+ * is ADR-0004 §1 and §6 applied to the read side: recover every entry that parses, report the rest,
+ * and let the caller quarantine the raw blob before anything can overwrite it.
+ *
+ * Entries that cannot produce a target key are dropped for the same reason as before — they could
+ * never match a token again — but they are now *counted* rather than skipped past.
+ */
+export function readOverlay(stored: unknown): OverlayRead {
+  const nothing: OverlayRead = { overlay: emptyOverlay(), outcome: "empty", kept: 0, dropped: 0 };
+  const unreadable: OverlayRead = { ...nothing, overlay: emptyOverlay(), outcome: "unreadable" };
+
+  // `undefined` is what `getAsync` returns for a key that was never written. `null` is a value
+  // someone stored; it isn't an overlay, but it also isn't a corruption worth alarming about.
+  if (stored === undefined || stored === null) return nothing;
+  if (typeof stored !== "object") return unreadable;
   const record = stored as { version?: unknown; entries?: unknown };
-  if (record.version !== 1 || !Array.isArray(record.entries)) return emptyOverlay();
+  if (record.version !== 1 || !Array.isArray(record.entries)) return unreadable;
 
   const entries: OverlayEntry[] = [];
+  let dropped = 0;
   for (const raw of record.entries) {
-    if (raw === null || typeof raw !== "object") continue;
-    const candidate = raw as OverlayEntry;
-    if (candidate.op !== "set-value" && candidate.op !== "set-description" && candidate.op !== "delete") {
+    if (raw === null || typeof raw !== "object") {
+      dropped += 1;
       continue;
     }
-    if (targetKey(candidate.target ?? {}) === null) continue;
+    const candidate = raw as OverlayEntry;
+    if (candidate.op !== "set-value" && candidate.op !== "set-description" && candidate.op !== "delete") {
+      dropped += 1;
+      continue;
+    }
+    if (targetKey(candidate.target ?? {}) === null) {
+      dropped += 1;
+      continue;
+    }
     entries.push(candidate);
   }
-  return { version: 1, entries };
+
+  return {
+    overlay: { version: 1, entries },
+    // A well-formed overlay that happens to hold no entries is `"ok"`, not `"empty"`: it was read
+    // correctly, and there is nothing to report either way.
+    outcome: dropped > 0 ? "partial" : "ok",
+    kept: entries.length,
+    dropped,
+  };
+}
+
+/** The Phase 4 signature, kept for callers that only want the overlay. */
+export function parseOverlay(stored: unknown): EditOverlay {
+  return readOverlay(stored).overlay;
 }

@@ -871,6 +871,32 @@
         gap: 6px;
         margin-top: 6px;
       }
+      /* ---------------- Crash screen (Phase 9, UX error-states.md §3) ---------------- */
+
+      #crash {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        background: #fff;
+        padding: 16px;
+        overflow: auto;
+      }
+      .crash-card h2 {
+        margin: 4px 0 8px;
+        font-size: 13px;
+      }
+      .crash-card p {
+        margin: 0 0 10px;
+      }
+      .crash-card .entry {
+        /* Deliberately the same .entry as every notice in the panel: this is a bigger surface, not
+           a new visual language, and the phase adds no colour (UX §1). */
+        margin-bottom: 12px;
+      }
+      .crash-card .entry > div {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        word-break: break-word;
+      }
       #toast {
         position: fixed;
         left: 50%;
@@ -1139,6 +1165,10 @@
            the header is what tells you where you still are. -->
       <div id="modal" class="hidden"></div>
     </div>
+    <!-- The crash screen (UX error-states.md §3). Outside #views, and the only surface that covers
+         the header: once the panel can't be trusted to render a notice inside itself, the tab strip
+         and the state chip are claims it can no longer make. -->
+    <div id="crash" class="hidden"></div>
     <div id="toast"></div>
     <textarea id="clipboard"></textarea>
     <script>

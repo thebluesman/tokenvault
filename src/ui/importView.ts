@@ -39,27 +39,113 @@ export function setImportPayload(next: ImportPayload): void {
   renderImport();
 }
 
+/** The scan that failed, until the next one starts — UX `error-states.md` §2. */
+let scanError: string | null = null;
+
+/** Timer behind §2.3's "still reading" line, so a slow scan is legible rather than mute. */
+let slowScanTimer = 0;
+let slowScan = false;
+
+/** How long a scan runs before the panel admits it is taking a while (§2.3). */
+const SLOW_SCAN_MS = 20000;
+
 export function setImportScanning(next: boolean): void {
   scanning = next;
-  if (payload !== null) renderImport();
+  window.clearTimeout(slowScanTimer);
+  if (next) {
+    // A new scan clears the previous failure: the old message describes a read that is no longer
+    // the current answer, and leaving it up alongside `Scanning…` reads as a failure of this one.
+    scanError = null;
+    slowScan = false;
+    slowScanTimer = window.setTimeout(() => {
+      slowScan = true;
+      renderImport();
+    }, SLOW_SCAN_MS);
+  } else {
+    slowScan = false;
+  }
+  renderImport();
 }
 
+/**
+ * The scan-failure notice — UX `error-states.md` §2.
+ *
+ * **Does not wipe the view.** The Phase 2 version cleared `#content` first, so a failed *rescan*
+ * took the previous report off the screen with it — which is backwards: a scan is read-only, so a
+ * failed one changes nothing about the tree the panel is already holding (§2.1).
+ */
 export function showImportError(message: string): void {
-  contentEl.textContent = "";
-  const box = el("div", "entry");
-  box.appendChild(el("span", "kind", "import failed"));
-  box.appendChild(el("div", undefined, message));
-  contentEl.appendChild(box);
+  scanError = message;
+  renderImport();
 }
 
 export function renderImport(): void {
   contentEl.textContent = "";
+
+  if (scanError !== null) contentEl.appendChild(renderScanError(scanError));
+  else if (scanning && slowScan) contentEl.appendChild(renderSlowScan());
+
   if (!payload) return;
 
   contentEl.appendChild(renderCounts(payload));
   contentEl.appendChild(renderSubtypes(payload.candidates));
   contentEl.appendChild(renderReport(payload.entries));
   contentEl.appendChild(renderFiles(payload));
+}
+
+function renderScanError(message: string): HTMLElement {
+  const box = el("div", "entry");
+  box.appendChild(el("span", "kind", "couldn't read this file"));
+  box.appendChild(
+    el(
+      "div",
+      undefined,
+      // Blast radius before cause (§2.2). A scan is read-only, so this sentence is always true and
+      // is stated flatly rather than hedged — it is also the sentence the user actually needs.
+      "Tokenvault couldn't finish reading this file's Variables and Styles. Nothing was changed — not in Figma, and not in your local edits."
+    )
+  );
+  // Figma's own words, attributed and unrewritten: it is the only diagnostic there is.
+  const said = el("div", "meta");
+  said.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, monospace";
+  said.textContent = `Figma said: ${message}`;
+  box.appendChild(said);
+
+  const actions = el("div", "toolbar");
+  actions.style.marginTop = "6px";
+  const retry = el("button", "primary", "Try again");
+  retry.addEventListener("click", () => {
+    // The same message the header button sends. Transient Figma failures are real, and making the
+    // user go find that button again is a small insult on top of the failure.
+    onRetry();
+    send({ type: "scan" });
+  });
+  actions.appendChild(retry);
+
+  const details = el("button", undefined, "Copy details");
+  details.addEventListener("click", () => copy(`Tokenvault scan failed\n\n${message}`, "the details"));
+  actions.appendChild(details);
+  box.appendChild(actions);
+
+  return box;
+}
+
+/**
+ * §2.3 — a scan that hasn't come back yet. Grey, not amber: waiting is not a warning, and the plugin
+ * genuinely does not know whether this is a large file or a wedged one.
+ */
+function renderSlowScan(): HTMLElement {
+  const line = el("p", "empty");
+  line.textContent =
+    "Still reading this file — large files can take a while. Figma can't interrupt a read once it has started, so there's nothing to cancel.";
+  return line;
+}
+
+/** Set by `main.ts`, which owns the scan button's label and disabled state. */
+let onRetry: () => void = () => undefined;
+
+export function setRetryHandler(handler: () => void): void {
+  onRetry = handler;
 }
 
 function renderCounts(data: ImportPayload): HTMLElement {

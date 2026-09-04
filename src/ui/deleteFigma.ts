@@ -19,10 +19,10 @@
 // counts are the screen*. So the panel opens in a counting state and fills in when the plugin
 // answers, rather than rendering a number it does not have yet.
 
-import type { ConsumerCount } from "../figma/apply";
+import type { ConsumerCount, WriteOutcome } from "../figma/apply";
 import type { DeletePlan } from "../tokens/plan";
 import type { Line } from "./state";
-import { buildDeletePlan } from "../tokens/plan";
+import { buildDeletePlan, withoutDeleted } from "../tokens/plan";
 import { getModel, send } from "./state";
 import { button, el } from "./dom";
 import { describeValue } from "../tokens/format";
@@ -30,18 +30,52 @@ import { describeValue } from "../tokens/format";
 const panelEl = document.getElementById("panel") as HTMLElement;
 
 interface Pending {
+  /** Reassigned on a partial failure, so a retry resends only what is still pending. */
   plan: DeletePlan;
   counts: Map<string, ConsumerCount>;
   counting: boolean;
   alsoRemoveTokens: boolean;
   navigate: (path: string) => void;
   onClose: () => void;
+  /** Between the confirming tap and the plugin's report — UX apply-and-drift §7, Phase 9. */
+  submitting: boolean;
+  /** Figma's refusal, when the delete came back failed. The screen stays open to show it. */
+  failure: string | null;
 }
 
 let pending: Pending | null = null;
 
 export function isDeletePanelOpen(): boolean {
   return pending !== null;
+}
+
+/**
+ * The plugin's answer to a `delete-in-figma` — UX apply-and-drift §7.
+ *
+ * Success closes the screen, which is what the confirming tap was always going to do. A failure
+ * keeps it open and puts Figma's own refusal in an `.entry` on it, because the user is standing in
+ * front of a destructive action that did not happen and needs to know that before anything else.
+ * Returns whether the confirmation consumed the report, so `main.ts` can leave its toast alone.
+ */
+export function reportDeleteResult(outcomes: WriteOutcome[], reason: string): boolean {
+  if (pending === null || !pending.submitting) return false;
+  pending.submitting = false;
+
+  const deleted = outcomes.filter((outcome) => outcome.ok).map((outcome) => outcome.key);
+  if (deleted.length === outcomes.length) {
+    closeDeletePanel();
+    return true;
+  }
+
+  // **The plan narrows to what is still pending.** The screen now survives its own failure, so it
+  // can be tapped a second time — and a plan that still listed the Variables the first tap removed
+  // would resend writes against dead node ids, whose failures would then displace the real reason
+  // the user is standing here reading (`plan.ts`'s `withoutDeleted`).
+  pending.plan = withoutDeleted(pending.plan, deleted);
+  for (const key of deleted) pending.counts.delete(key);
+  pending.failure = reason;
+  render();
+  return true;
 }
 
 /** The plugin's answer to `count-consumers`, which is what the screen was waiting for. */
@@ -86,6 +120,8 @@ export function openDeleteInFigma(
     alsoRemoveTokens: true,
     navigate: options.navigate,
     onClose: options.onClose,
+    submitting: false,
+    failure: null,
   };
 
   if (plan.ready > 0) {
@@ -130,6 +166,21 @@ function render(): void {
 
   const body = el("div", "panel-body");
   const blocked = plan.ready === 0;
+
+  // The failure sits at the top of the screen it belongs to, above the rows it did not delete
+  // (UX apply-and-drift §7). Figma's own words, for the same reason the scan notice keeps them.
+  if (pending.failure !== null) {
+    const box = el("div", "entry");
+    box.appendChild(el("span", "kind", "couldn't delete"));
+    box.appendChild(
+      el(
+        "div",
+        undefined,
+        `Couldn't delete — ${plan.ready === 1 ? `the ${noun(plan)} is` : "they are"} still in the file. ${pending.failure}`
+      )
+    );
+    body.appendChild(box);
+  }
 
   body.appendChild(
     el(
@@ -284,10 +335,16 @@ function renderBlastRadius(body: HTMLElement): void {
   // Named for the object, not the verb alone, so the button says what's about to be gone even if
   // the user reads nothing else.
   const confirm = button(
-    plan.ready === 1 ? `Delete ${noun(plan)}` : `Delete ${plan.ready} ${noun(plan)}`,
+    state.submitting
+      ? "Deleting…"
+      : plan.ready === 1
+        ? `Delete ${noun(plan)}`
+        : `Delete ${plan.ready} ${noun(plan)}`,
     "danger"
   );
-  confirm.disabled = state.counting;
+  // Disabled while the write is in flight: a second tap would issue a second delete of things the
+  // first one may already have removed, and this is the one screen where that is not recoverable.
+  confirm.disabled = state.counting || state.submitting;
   confirm.addEventListener("click", () => {
     const writes = plan.entries
       .filter((entry) => entry.status === "ready" && entry.write !== undefined)
@@ -299,7 +356,14 @@ function renderBlastRadius(body: HTMLElement): void {
     const clearOverlayFor = state.alsoRemoveTokens
       ? plan.entries.filter((entry) => entry.status === "ready").map((entry) => entry.target)
       : [];
-    closeDeletePanel();
+    // **The screen stays open until the plugin answers** — UX apply-and-drift §7: *"Delete in Figma
+    // failed → `.entry` block on the confirmation, which stays open"*. It used to close here and
+    // report a failure in a toast, which is the treatment for a success whose result isn't on
+    // screen; for a failed destructive action it is the wrong level, and it also threw away the
+    // blast radius the user would immediately want to look at again.
+    state.submitting = true;
+    state.failure = null;
+    render();
     // Its own message, never an op in the apply batch (UX §10).
     send({ type: "delete-in-figma", writes, clearOverlayFor });
   });

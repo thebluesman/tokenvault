@@ -10,7 +10,8 @@ fixtures in `test/fixtures/`, not against a hypothetical schema.
 | [`local-editor.md`](local-editor.md) | 4 — Local editor | Implemented |
 | [`apply-and-drift.md`](apply-and-drift.md) | 5 — Figma application + drift | Implemented, except §5.4 (bind); §6.4 amended by Phase 6 |
 | [`git-sync.md`](git-sync.md) | 6 — Git sync, diff, settings | Settled — ready to build |
-| [`references-math-themes.md`](references-math-themes.md) | 7 — Reference authoring, math, theme selection | Provisional — §11 has four questions for Shyam |
+| [`references-math-themes.md`](references-math-themes.md) | 7 — Reference authoring, math, theme selection | Implemented — §11's four questions all closed 2026-09-03 |
+| [`error-states.md`](error-states.md) | 9 — Scan failure, crash, unreadable overlay | Implemented |
 
 **Status vocabulary.** *Provisional* — written ahead of the build, open questions still in the doc.
 *Settled* — every open question closed and the design is ready to build, but nothing has shipped yet,
@@ -40,7 +41,16 @@ because a warning on every correct use of a feature is how `⚑` stops meaning a
 `references-math-themes.md` §6.5 argues it.
 
 Phase 7 also amends `local-editor.md` §5.3 (reference values were read-only — the field becomes editable)
-and §7's delete-blocking copy, and makes `apply-and-drift.md` §5.6's expression row reachable for the first
-time. `references-math-themes.md` §12 lists all four amendments; make them when Phase 7 ships, not before.
+and §7's delete-blocking copy, adds the composite sub-key refusal copy to §5.2, and makes
+`apply-and-drift.md` §5.6's expression row reachable for the first time. `references-math-themes.md` §12
+lists all four. **All four were applied on 2026-09-04, in the Phase 9 polish pass** — each amended section
+carries its own dated note, so this instruction is spent.
 
-Not yet written: the export pipeline (Phase 8).
+Phase 9 adds [`error-states.md`](error-states.md): the three failure classes no phase doc had a treatment
+for (a scan that throws, an uncaught exception, an unreadable `clientStorage` overlay), plus the audit of
+every other async operation against the error table its own phase doc already owns. It is a cross-phase
+doc by construction — the per-phase error tables stay where they are and stay authoritative, and §5 records
+the two places implementation and doc were reconciled.
+
+Not yet written: the export pipeline (Phase 8 — **scope locked, work parked**; PR #18 is open and unmerged,
+issue #17 stays open).

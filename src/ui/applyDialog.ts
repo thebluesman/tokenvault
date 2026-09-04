@@ -16,9 +16,13 @@
 
 import type { ApplyEntry, ApplyPlan } from "../tokens/plan";
 import type { PlannedWrite } from "../figma/apply";
+import type { Cycle } from "../tokens/graph";
 import { button, clear, el } from "./dom";
 import { getModel, send } from "./state";
 import { diffRow } from "./diffRow";
+import { cycleBlock } from "./valueField";
+import { cycleContaining } from "../tokens/graph";
+import { cycleNodeKey } from "../tokens/plan";
 
 const modalEl = document.getElementById("modal") as HTMLElement;
 
@@ -254,11 +258,59 @@ function readyRow(entry: ApplyEntry, checked: Set<string>, recount: () => void):
   );
 }
 
+/** The two skip reasons that mean *this token is on a loop* — `plan.ts`'s slugs. */
+const CYCLE_REASONS = ["alias-cycle", "expression-cycle"];
+
 function blockedRow(entry: ApplyEntry): HTMLElement {
-  return diffRow({
+  const row = diffRow({
     path: entry.path,
     set: entry.set,
     state: "blocked",
     why: entry.message ?? entry.reason ?? "Can't be applied.",
   });
+
+  // UX references-math-themes §7.3c: a cycle row gets `[ Show the loop ]`, *"opening the block
+  // rather than repeating it inside a list row"*. The third of the block's three callers, and the
+  // one that was missing — a row that says "points into a circular reference" without showing which
+  // loop leaves the user hunting through 1,316 tokens for it.
+  if (entry.reason === undefined || CYCLE_REASONS.indexOf(entry.reason) === -1) return row;
+  const cycle = cycleFor(entry.set, entry.path);
+  if (cycle === undefined) return row;
+
+  const wrap = el("div");
+  wrap.appendChild(row);
+
+  const show = button("Show the loop", "toast-action");
+  show.style.color = "var(--accent)";
+  show.style.marginLeft = "22px";
+  let open = false;
+  let block: HTMLElement | null = null;
+  show.addEventListener("click", () => {
+    open = !open;
+    show.textContent = open ? "Hide the loop" : "Show the loop";
+    if (open) {
+      block = cycleBlock(cycle, getModel().resolve, {});
+      wrap.appendChild(block);
+    } else if (block !== null) {
+      block.remove();
+      block = null;
+    }
+  });
+  wrap.appendChild(show);
+  return wrap;
+}
+
+/**
+ * The loop this row's token sits on, if any.
+ *
+ * **Keyed by `(setId, path)`, never by path alone.** `ApplyEntry.set` is the token's `setId`
+ * (`plan.ts` fills it from the flattened token, not from a display label), and the graph's node
+ * identity is per *instance* — ADR-0007 §3, and the reason `graphNodeKey` takes both. A path held by
+ * `Theme/Light` and `Theme/Dark` is two nodes, and each can sit on a different loop or on none, so a
+ * path-only scan can show one set's loop against the other set's row. Cycles are theme-scoped for
+ * the same underlying reason (UX §7.4), which makes this the exact case that produces two.
+ */
+function cycleFor(setId: string, path: string): Cycle | undefined {
+  const context = getModel().resolve;
+  return cycleContaining(context.cycles, cycleNodeKey(setId, path));
 }

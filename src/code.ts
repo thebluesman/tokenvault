@@ -1,6 +1,7 @@
 import type {
   ApplyReport,
   GitConfig,
+  OverlayRecovery,
   ImportPayload,
   MergeSummary,
   PluginToUiMessage,
@@ -35,7 +36,7 @@ import {
   keepMine,
   mergeEvaluator,
   mergeOverlay,
-  parseOverlay,
+  readOverlay,
   recordEdit,
   removeEntries,
   targetKey,
@@ -88,6 +89,17 @@ const SUBTYPE_STORAGE_PREFIX = "tokenvault:user-subtypes:";
  */
 const EDIT_PREFIX = "tokenvault:edits:";
 const IMPORT_CACHE_PREFIX = "tokenvault:last-import:";
+
+/**
+ * Where an unreadable overlay blob is set aside — UX `error-states.md` §4.1.
+ *
+ * The overlay is the one thing in the plugin that cannot be re-derived (ADR-0004's opening
+ * constraint), so a read that fails must not be followed by a write that destroys the evidence.
+ * The blob is copied here *before* the session's first `setAsync` can overwrite the live key, and it
+ * is never written to twice for the same file: a second corruption would otherwise bury the first
+ * one's quarantine, which is the same silent-loss failure one layer down.
+ */
+const EDIT_QUARANTINE_PREFIX = "tokenvault:edits-unreadable:";
 
 /**
  * The active theme, per file — ADR-0007 §7(a).
@@ -225,6 +237,16 @@ function post(message: PluginToUiMessage): void {
 }
 
 /**
+ * The one place `overlay-state` goes out, so the session's read-recovery rides every emit.
+ *
+ * Carried on every message rather than sent once: the UI's notice has to survive a rescan, a pull
+ * and a tab switch, and re-attaching a small object is cheaper than a second lifecycle for it.
+ */
+function postOverlayState(storageError?: string): void {
+  post({ type: "overlay-state", overlay, storageError, recovery: overlayRecovery });
+}
+
+/**
  * A stable per-file identifier.
  *
  * `figma.fileKey` is the right answer and is available to plugins imported from a manifest
@@ -263,6 +285,60 @@ function importCacheKey(): string {
 
 function activeThemeKey(): string {
   return ACTIVE_THEME_PREFIX + resolveFileIdentity();
+}
+
+function quarantineKey(): string {
+  return EDIT_QUARANTINE_PREFIX + resolveFileIdentity();
+}
+
+/**
+ * What the session's overlay read cost, if anything — carried so the UI can be told once and keep
+ * saying it. `undefined` for the overwhelmingly common case of a clean read.
+ */
+let overlayRecovery: OverlayRecovery | undefined;
+
+/**
+ * Reads the stored overlay, recovering what parses and setting aside what doesn't.
+ *
+ * The three-step order is the decision (`error-states.md` §4.1): recover, quarantine, *then* report.
+ * Quarantining before the first write is what makes the report safe to be non-blocking — the user
+ * can keep working, and the unreadable bytes are still there afterwards.
+ */
+async function loadOverlay(): Promise<EditOverlay> {
+  const stored = await figma.clientStorage.getAsync(editStorageKey());
+  const read = readOverlay(stored);
+  if (read.outcome === "empty" || read.outcome === "ok") return read.overlay;
+
+  let raw: string | null = null;
+  try {
+    raw = JSON.stringify(stored) ?? String(stored);
+  } catch {
+    // A blob that cannot even be serialized still has to be reported; it just can't be handed back.
+    raw = null;
+  }
+
+  let stored_at: string | null = null;
+  try {
+    const existing = await figma.clientStorage.getAsync(quarantineKey());
+    // Never overwrite an earlier quarantine — see the prefix's comment.
+    if (existing === undefined || existing === null) {
+      await figma.clientStorage.setAsync(quarantineKey(), stored);
+    }
+    stored_at = quarantineKey();
+  } catch {
+    // Quota, most likely. The report is the part that matters and it still goes out; it just says
+    // the data could not be set aside, which is worse news honestly delivered.
+    stored_at = null;
+  }
+
+  overlayRecovery = {
+    outcome: read.outcome,
+    kept: read.kept,
+    dropped: read.dropped,
+    quarantineKey: stored_at,
+    raw,
+  };
+  return read.overlay;
 }
 
 async function loadUserSubtypes(): Promise<Record<string, SubtypeSelection>> {
@@ -582,7 +658,7 @@ async function rebuild(fromScan: boolean, refresh = false): Promise<void> {
   if (fromScan) await persistImportCache(result);
   if (changed) {
     const storageError = await persistOverlay();
-    if (storageError !== undefined) post({ type: "overlay-state", overlay, storageError });
+    if (storageError !== undefined) postOverlayState(storageError);
   }
 
   emitImport(snapshot.variables.fileName, refresh);
@@ -638,7 +714,7 @@ async function handleSetSubtypes(subtypes: Record<string, SubtypeSelection | nul
 async function commitOverlay(next: EditOverlay, resolvedFlag = false): Promise<void> {
   overlay = next;
   const storageError = await persistOverlay();
-  post({ type: "overlay-state", overlay, storageError });
+  postOverlayState(storageError);
 
   // A conflict or orphan flag lives on the *import report*, not on the overlay, so clearing the
   // entry alone leaves the row's `⚑ conflict` badge and the Import tab's Flagged count claiming an
@@ -750,7 +826,7 @@ async function handleDeleteInFigma(
     for (const target of clearOverlayFor) next = removeEntries(next, target);
     overlay = next;
     const storageError = await persistOverlay();
-    post({ type: "overlay-state", overlay, storageError });
+    postOverlayState(storageError);
   }
   await handleApply(writes, true);
 }
@@ -879,7 +955,7 @@ async function handleGitPull(entries: Array<Omit<OverlayEntry, "at">>): Promise<
   const merged = applyPull(overlay, entries, new Date().toISOString());
   overlay = merged.overlay;
   const storageError = await persistOverlay();
-  post({ type: "overlay-state", overlay, storageError });
+  postOverlayState(storageError);
   post({ type: "git-pull-result", applied: merged.applied, conflicts: merged.conflicts });
   // A conflict flag lives on the import report, so the report has to be re-derived for the badge to
   // appear on the same interaction rather than after the next scan — same reason `commitOverlay`
@@ -970,7 +1046,7 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
   const run = async (): Promise<void> => {
     if (message.type === "ui-ready") {
       userSubtypes = await loadUserSubtypes();
-      overlay = parseOverlay(await figma.clientStorage.getAsync(editStorageKey()));
+      overlay = await loadOverlay();
       const storedTheme = await figma.clientStorage.getAsync(activeThemeKey());
       activeThemeName = typeof storedTheme === "string" && storedTheme.length > 0 ? storedTheme : null;
       post({ type: "plugin-ready", fileName: figma.root.name });
@@ -992,8 +1068,14 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
         cachedGuards = cached.styleGuards;
         cachedNonLocal = cached.nonLocalPaths;
         emitImport(cached.fileName);
-      } else if (overlay.entries.length > 0) {
-        post({ type: "overlay-state", overlay });
+        // `import-result` carries the overlay but not how it was read, so a bad read still needs its
+        // own message even when the tree arrived fine.
+        if (overlayRecovery !== undefined) postOverlayState();
+      } else if (overlay.entries.length > 0 || overlayRecovery !== undefined) {
+        // A failed read is worth an emit on its own: with no cache and no surviving entries there is
+        // otherwise no message on which the recovery notice could ride, and the one session that
+        // most needs to hear about it is the one where nothing was recovered.
+        postOverlayState();
       }
       return;
     }
@@ -1100,7 +1182,14 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
   queue = queue.then(() =>
     run().catch((error: unknown) => {
       scanning = false;
-      post({ type: "import-error", message: error instanceof Error ? error.message : String(error) });
+      const detail = error instanceof Error ? error.message : String(error);
+      // Two destinations, not one — UX `error-states.md` §3.3. A failed *scan* is a named, expected,
+      // retryable failure of one operation and gets §2's notice on the Import tab. Anything else
+      // that threw is by definition unexpected: nothing designed a state for it, the operation's
+      // outcome is unknown, and reporting it as "import failed" sent the user to the wrong tab with
+      // a sentence about the wrong thing.
+      if (message.type === "scan") post({ type: "import-error", message: detail });
+      else post({ type: "plugin-error", message: detail, source: message.type });
     })
   );
 };

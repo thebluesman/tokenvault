@@ -542,7 +542,7 @@ Phase 6 §6.1 set the precedence: **diverged → conflicts → repo counts → F
 | Reference would close a loop | Refuse, cycle block below the field | §7.3a |
 | Reference dangles in some themes | **Commit**, grey note, then `⚑ unresolved` on the line | `Isn't in Dark or Brand, so this token has no value there.` §5.4 |
 | Token on a cycle, in the tree | Value preview is `—`, `⚑ cycle` on the value line, block in the overlay | §7.3b |
-| Token on a cycle, at apply | Blocked row, unchecked, `[ Show the loop ]` | §7.3c |
+| Token on a cycle, at apply | Blocked row, unchecked, `[ Show the loop ]` | §7.3c *(the button shipped 2026-09-04, in the Phase 9 audit — Phase 7 left the row carrying only the message. `error-states.md` §5.3.)* |
 | Expression with a unit | Refuse, amber below | `Units don't go in expressions.` §6.4 |
 | Expression, unfinished / bad operator / function call / ÷0 | Refuse, amber below | §6.4's table |
 | Expression with a non-numeric operand | Refuse when typed; **blocked row** when it arrived by pull | `folio.color.accent is a color. Expressions only work with numbers.` |
