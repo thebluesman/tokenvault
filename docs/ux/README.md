@@ -12,6 +12,7 @@ fixtures in `test/fixtures/`, not against a hypothetical schema.
 | [`git-sync.md`](git-sync.md) | 6 — Git sync, diff, settings | Settled — ready to build |
 | [`references-math-themes.md`](references-math-themes.md) | 7 — Reference authoring, math, theme selection | Implemented — §11's four questions all closed 2026-09-03 |
 | [`error-states.md`](error-states.md) | 9 — Scan failure, crash, unreadable overlay | Implemented |
+| [`dark-mode.md`](dark-mode.md) | Plugin UI — Figma dark theme support | Provisional — §9's five questions are open |
 | [`user-journeys.md`](user-journeys.md) | 1–9 — Narrative survey | Published (not a spec; informs Phase 10 scoping) |
 
 **Status vocabulary.** *Provisional* — written ahead of the build, open questions still in the doc.
