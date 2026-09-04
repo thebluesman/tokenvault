@@ -19,10 +19,10 @@
 // counts are the screen*. So the panel opens in a counting state and fills in when the plugin
 // answers, rather than rendering a number it does not have yet.
 
-import type { ConsumerCount } from "../figma/apply";
+import type { ConsumerCount, WriteOutcome } from "../figma/apply";
 import type { DeletePlan } from "../tokens/plan";
 import type { Line } from "./state";
-import { buildDeletePlan } from "../tokens/plan";
+import { buildDeletePlan, withoutDeleted } from "../tokens/plan";
 import { getModel, send } from "./state";
 import { button, el } from "./dom";
 import { describeValue } from "../tokens/format";
@@ -30,6 +30,7 @@ import { describeValue } from "../tokens/format";
 const panelEl = document.getElementById("panel") as HTMLElement;
 
 interface Pending {
+  /** Reassigned on a partial failure, so a retry resends only what is still pending. */
   plan: DeletePlan;
   counts: Map<string, ConsumerCount>;
   counting: boolean;
@@ -56,13 +57,22 @@ export function isDeletePanelOpen(): boolean {
  * front of a destructive action that did not happen and needs to know that before anything else.
  * Returns whether the confirmation consumed the report, so `main.ts` can leave its toast alone.
  */
-export function reportDeleteResult(failed: number, reason: string): boolean {
+export function reportDeleteResult(outcomes: WriteOutcome[], reason: string): boolean {
   if (pending === null || !pending.submitting) return false;
   pending.submitting = false;
-  if (failed === 0) {
+
+  const deleted = outcomes.filter((outcome) => outcome.ok).map((outcome) => outcome.key);
+  if (deleted.length === outcomes.length) {
     closeDeletePanel();
     return true;
   }
+
+  // **The plan narrows to what is still pending.** The screen now survives its own failure, so it
+  // can be tapped a second time — and a plan that still listed the Variables the first tap removed
+  // would resend writes against dead node ids, whose failures would then displace the real reason
+  // the user is standing here reading (`plan.ts`'s `withoutDeleted`).
+  pending.plan = withoutDeleted(pending.plan, deleted);
+  for (const key of deleted) pending.counts.delete(key);
   pending.failure = reason;
   render();
   return true;

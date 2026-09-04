@@ -420,7 +420,7 @@ function handleMessage(message: PluginToUiMessage | undefined): void {
 
     // The delete confirmation is still on screen and owns its own outcome (UX apply-and-drift §7):
     // it closes on success and stays open with the refusal on it on failure.
-    if (report.destructive && reportDeleteResult(report.failed, firstFailure(message))) {
+    if (report.destructive && reportDeleteResult(report.outcomes, firstFailure(message))) {
       if (report.failed === 0) {
         toast(`Deleted ${report.applied} item${report.applied === 1 ? "" : "s"} from Figma.`);
       }

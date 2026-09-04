@@ -257,6 +257,12 @@ user would want to look at again.
 **Fixed in the implementation, not the doc.** The panel now stays open in a submitting state, and on
 failure renders the §7 notice inside itself with Figma's message. On success it closes as before.
 
+A screen that survives its own failure can be tapped again, which is a state Phase 5 never had, so
+**a partial failure narrows the plan to what is still pending**: the entries Figma actually removed
+are dropped, and a retry resends only the rest. Without that, the second tap fires writes at node ids
+that no longer exist, and their failures displace the message the user is standing there reading.
+Blocked entries are kept — they were never sent, and they are still true.
+
 ### 5.2 Apply failure — doc amended
 
 `apply-and-drift.md` §7 asks for two things after a failed apply: an `.entry` block when it failed
@@ -282,6 +288,11 @@ else, which leaves the user hunting a 1,316-token tree for a loop the plugin had
 **Fixed in the implementation.** A blocked row whose reason is `alias-cycle` or `expression-cycle`
 now carries `[ Show the loop ]`, and it opens the same `cycleBlock` component the other two callers
 use. §7.2's "one component, three callers" is now literally true.
+
+The lookup is keyed by `(setId, path)`, not by path: graph node identity is per *instance*
+(ADR-0007 §3), a theme's sets hold the same paths by construction, and within one resolution scope
+only the instance a path resolves *to* can sit on a loop. A path-only lookup therefore answers a
+sibling row — one that is on no loop at all — with another set's tokens, confidently.
 
 ### 5.4 Verified with no change needed
 

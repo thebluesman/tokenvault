@@ -12,6 +12,7 @@ import type { ApplyEntry } from "../src/tokens/plan";
 import {
   buildApplyPlan,
   buildDeletePlan,
+  withoutDeleted,
   cycleEdgeKey,
   cycleNodeKey,
   findReferenceCycles,
@@ -456,6 +457,75 @@ test("an unreferenced target plans a remove op for its own provenance half", () 
   assert.equal(variable.entries[0].write?.kind, "variable-remove");
   const style = buildDeletePlan([{ path: "brand", setId: "S", token: styleToken("color", "#000000") }], inbound);
   assert.equal(style.entries[0].write?.kind, "style-remove");
+});
+
+test("a partial delete failure leaves only what still needs deleting", () => {
+  // Phase 9 made the confirmation stay open on a failure (UX apply-and-drift §7), which creates a
+  // case Phase 5 never had: a retry. The plan the screen was opened with listed every entry, so the
+  // second tap would resend writes for Variables the first tap had already removed — no-ops against
+  // dead node ids, or fresh failures displacing the real reason the user is reading.
+  const inbound = buildInboundIndex([]);
+  const plan = buildDeletePlan(
+    [
+      { path: "a.one", setId: "S", token: varToken("color", "#000000", { variableId: "VariableID:1:1" }) },
+      { path: "a.two", setId: "S", token: varToken("color", "#111111", { variableId: "VariableID:1:2" }) },
+      { path: "a.three", setId: "S", token: varToken("color", "#222222", { variableId: "VariableID:1:3" }) },
+    ],
+    inbound
+  );
+  assert.equal(plan.ready, 3);
+
+  // Figma removed the first two and refused the third.
+  const deleted = [plan.entries[0].key, plan.entries[1].key];
+  const retry = withoutDeleted(plan, deleted);
+
+  assert.equal(retry.ready, 1);
+  assert.deepEqual(
+    retry.entries.map((entry) => entry.path),
+    ["a.three"]
+  );
+  // The retry's writes — built the way the confirmation builds them — touch only the survivor.
+  const writes = retry.entries
+    .filter((entry) => entry.status === "ready" && entry.write !== undefined)
+    .map((entry) => entry.key);
+  assert.deepEqual(writes, [plan.entries[2].key]);
+  for (const key of deleted) assert.equal(writes.indexOf(key), -1);
+});
+
+test("narrowing a delete plan keeps blocked entries and drops their stale referrers", () => {
+  // Blocked entries were never sent, so they are still true and the screen still lists them. A
+  // referrer belonging to an entry that *was* deleted describes a block that no longer exists.
+  const target = varToken("color", "#c33a2e");
+  const referrer = varToken("color", "{a.b}", { variableId: "VariableID:2:2" });
+  const free = varToken("color", "#111111", { variableId: "VariableID:3:3" });
+  const inbound = buildInboundIndex([
+    { path: "a.b", setId: "S", token: target },
+    { path: "c.d", setId: "S", token: referrer },
+  ]);
+  const plan = buildDeletePlan(
+    [
+      { path: "a.b", setId: "S", token: target },
+      { path: "e.f", setId: "S", token: free },
+    ],
+    inbound
+  );
+  assert.equal(plan.blocked, 1);
+  assert.equal(plan.referrers.length, 1);
+
+  // The free one deleted, the blocked one untouched — the blocked entry and its referrer stay.
+  const afterFree = withoutDeleted(plan, [plan.entries[1].key]);
+  assert.equal(afterFree.blocked, 1);
+  assert.equal(afterFree.referrers.length, 1);
+
+  // And if the blocked entry itself ever left the plan, its referrer goes with it.
+  const afterBlocked = withoutDeleted(plan, [plan.entries[0].key]);
+  assert.deepEqual(afterBlocked.referrers, []);
+});
+
+test("nothing deleted narrows nothing — the same plan comes back", () => {
+  const inbound = buildInboundIndex([]);
+  const plan = buildDeletePlan([{ path: "a.b", setId: "S", token: varToken("color", "#000000") }], inbound);
+  assert.equal(withoutDeleted(plan, []), plan);
 });
 
 // ---------------------------------------------------------------------------

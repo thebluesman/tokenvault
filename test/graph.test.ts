@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 
 import {
   buildReferenceGraph,
+  cycleContaining,
   cycleFromCandidate,
   cycleFromEdge,
   cycleSummary,
@@ -232,4 +233,60 @@ test("the block's rows run round the loop with the closing edge marked", () => {
   // The last row closes back onto the first row's source — that is what makes three lines read as
   // a loop rather than a chain (UX §7.2).
   assert.equal(steps[steps.length - 1].to.path, steps[0].from.path);
+});
+
+// ---------------------------------------------------------------------------
+// Which loop a row shows — UX references-math-themes §7.3c, fixed 2026-09-04
+// ---------------------------------------------------------------------------
+
+test("a node gets its own loop, never a sibling instance's", () => {
+  // The apply dialog's `[ Show the loop ]` used to find a row's cycle by path alone. `Theme/Light`
+  // and `Theme/Dark` hold the same paths by construction — that is what a theme *is* — and within
+  // one resolution scope only the instance a path resolves *to* can sit on a loop. So the sibling
+  // instance at that same path is exactly the row a path-only lookup answers wrongly: it is on no
+  // loop at all, and it would be shown one, drawn from another set's tokens.
+  const both = graph([
+    // Light: a → b → a.
+    ["a", "Light", "{b}"],
+    ["b", "Light", "{a}"],
+    // Dark: its own, separate loop over different paths.
+    ["p", "Dark", "{q}"],
+    ["q", "Dark", "{p}"],
+    // And the same path as Light's loop, in Dark. Its reference resolves to Light's `b`, so it
+    // points *into* the loop without being on it.
+    ["a", "Dark", "{b}"],
+  ]);
+  const cycles = findCycles(both);
+  assert.equal(cycles.cycles.length, 2);
+
+  const light = cycleContaining(cycles, n("Light", "a"));
+  const dark = cycleContaining(cycles, n("Dark", "p"));
+  assert.notEqual(light, undefined);
+  assert.notEqual(dark, undefined);
+  assert.notEqual(light, dark);
+
+  assert.deepEqual(
+    describeCycle(both, light as NonNullable<typeof light>).map((step) => `${step.from.setId}:${step.from.path}`),
+    ["Light:a", "Light:b"]
+  );
+  assert.deepEqual(
+    describeCycle(both, dark as NonNullable<typeof dark>).map((step) => `${step.from.setId}:${step.from.path}`),
+    ["Dark:p", "Dark:q"]
+  );
+
+  // The bug, stated as an assertion: `Dark`'s `a` is on no loop, and must be told so rather than
+  // handed `Light`'s.
+  assert.equal(cycleContaining(cycles, n("Dark", "a")), undefined);
+});
+
+test("a path on a loop in one set only answers for that set", () => {
+  const one = graph([
+    ["x", "Light", "{y}"],
+    ["y", "Light", "{x}"],
+    ["x", "Dark", 8],
+    ["y", "Dark", 12],
+  ]);
+  const cycles = findCycles(one);
+  assert.notEqual(cycleContaining(cycles, n("Light", "x")), undefined);
+  assert.equal(cycleContaining(cycles, n("Dark", "x")), undefined);
 });

@@ -115,13 +115,16 @@ test("the delete confirmation stays open until the plugin answers", () => {
     "the confirming tap must not close the screen — the result does"
   );
   assert.equal(/export function reportDeleteResult\(/.test(panel), true);
+  // And a retry after a partial failure resends only what is still pending: the plan narrows to
+  // drop what Figma actually deleted, so the second tap can't fire writes at dead node ids.
+  assert.equal(/pending\.plan = withoutDeleted\(pending\.plan, deleted\)/.test(panel), true);
 });
 
 test("an apply failure outlives its toast", () => {
   // §7, amended 2026-09-04: the toast is gone in 1.8 seconds and the failure is still true after it.
   const main = read("src/ui/main.ts");
   assert.equal(/setApplyFailure\(\{\s*text: "Couldn't apply — nothing changed in Figma\."/.test(main), true);
-  assert.equal(/reportDeleteResult\(report\.failed, firstFailure\(message\)\)/.test(main), true);
+  assert.equal(/reportDeleteResult\(report\.outcomes, firstFailure\(message\)\)/.test(main), true);
 
   const tokens = read("src/ui/tokens.ts");
   assert.equal(/export function setApplyFailure\(/.test(tokens), true);
@@ -162,6 +165,10 @@ test("a blocked cycle row can open the loop", () => {
   // Same block, not a second rendering of a loop — §7.2 is one component, three callers.
   assert.equal(/function cycleBlock/.test(dialog), false);
   assert.equal(/CYCLE_REASONS = \["alias-cycle", "expression-cycle"\]/.test(dialog), true);
+  // Keyed by `(setId, path)`, never by path alone — a sibling instance at the same path in another
+  // set is on its own loop or on none, and must never be handed this row's.
+  assert.equal(/cycleContaining\(context\.cycles, cycleNodeKey\(setId, path\)\)/.test(dialog), true);
+  assert.equal(/cycleFor\(entry\.set, entry\.path\)/.test(dialog), true);
 });
 
 test("the crash screen carries the sentence about the user's edits", () => {

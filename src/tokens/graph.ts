@@ -337,6 +337,24 @@ export interface CycleStep {
 }
 
 /**
+ * The loop one token instance sits on — the lookup behind `[ Show the loop ]` (UX §7.3c).
+ *
+ * **Keyed by node, never by path.** Node identity is per instance (`graphNodeKey`), so a path held
+ * by `Theme/Light` and `Theme/Dark` is two nodes that can sit on two different loops, or on one and
+ * none — and cycles are theme-scoped (UX §7.4), which is what routinely produces that pair. A
+ * path-only lookup would show one set's loop against the other set's row, confidently and wrongly.
+ *
+ * The `nodes` set answers the common case (no cycle) without walking any loop's members.
+ */
+export function cycleContaining(index: CycleIndex, node: string): Cycle | undefined {
+  if (!index.nodes.has(node)) return undefined;
+  for (const cycle of index.cycles) {
+    if (cycle.nodes.indexOf(node) !== -1) return cycle;
+  }
+  return undefined;
+}
+
+/**
  * A cycle as the block renders it.
  *
  * Nodes that are no longer in the graph are dropped rather than rendered as their raw key: a key

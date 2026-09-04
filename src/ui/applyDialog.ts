@@ -21,7 +21,8 @@ import { button, clear, el } from "./dom";
 import { getModel, send } from "./state";
 import { diffRow } from "./diffRow";
 import { cycleBlock } from "./valueField";
-import { normalizePathKey } from "../tokens/paths";
+import { cycleContaining } from "../tokens/graph";
+import { cycleNodeKey } from "../tokens/plan";
 
 const modalEl = document.getElementById("modal") as HTMLElement;
 
@@ -273,7 +274,7 @@ function blockedRow(entry: ApplyEntry): HTMLElement {
   // one that was missing — a row that says "points into a circular reference" without showing which
   // loop leaves the user hunting through 1,316 tokens for it.
   if (entry.reason === undefined || CYCLE_REASONS.indexOf(entry.reason) === -1) return row;
-  const cycle = cycleFor(entry.path);
+  const cycle = cycleFor(entry.set, entry.path);
   if (cycle === undefined) return row;
 
   const wrap = el("div");
@@ -300,19 +301,16 @@ function blockedRow(entry: ApplyEntry): HTMLElement {
 }
 
 /**
- * The loop this path sits on, if any.
+ * The loop this row's token sits on, if any.
  *
- * Looked up by path rather than by node key: the dialog groups by Figma target and carries the set's
- * *display* label, not its id, and the block is identical for every member of a loop anyway — which
- * is §7.2's point, not a shortcut.
+ * **Keyed by `(setId, path)`, never by path alone.** `ApplyEntry.set` is the token's `setId`
+ * (`plan.ts` fills it from the flattened token, not from a display label), and the graph's node
+ * identity is per *instance* — ADR-0007 §3, and the reason `graphNodeKey` takes both. A path held by
+ * `Theme/Light` and `Theme/Dark` is two nodes, and each can sit on a different loop or on none, so a
+ * path-only scan can show one set's loop against the other set's row. Cycles are theme-scoped for
+ * the same underlying reason (UX §7.4), which makes this the exact case that produces two.
  */
-function cycleFor(path: string): Cycle | undefined {
+function cycleFor(setId: string, path: string): Cycle | undefined {
   const context = getModel().resolve;
-  const needle = normalizePathKey(path);
-  for (const cycle of context.cycles.cycles) {
-    for (const node of cycle.nodes) {
-      if (normalizePathKey(context.graph.nodes.get(node)?.path ?? "") === needle) return cycle;
-    }
-  }
-  return undefined;
+  return cycleContaining(context.cycles, cycleNodeKey(setId, path));
 }
