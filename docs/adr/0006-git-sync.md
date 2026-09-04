@@ -7,8 +7,8 @@
 **Extended by**: [ADR-0008 — Multi-repo push routing](0008-multi-repo-push-routing.md) (Accepted, 2026-09-04). This ADR remains the single-repo design and behaves exactly as written whenever one repo is connected. Four sections are generalised there:
 
 - **§2 — scope note, editorial.** *"The repo is the source of truth"* was written for the single-repo case. With N repos there is no primary: the **local tree** (`build(scan, userSubtypes, pathRules) + overlay`) is the authored truth, and each repo is an independently-tracked sync target (ADR-0008 §1). The overlay's demotion to uncommitted work survives unchanged, and strengthens — it is uncommitted with respect to every connection.
-- **§3 — `tokenvault:sync:<file-id>` gains a connection id** (ADR-0008 §2, §6). The PAT key is unchanged: one shared token, by Shyam's decision, reversing §1's per-repo scoping (ADR-0008 §2).
-- **§7 — the drift baseline is left undefined by the removal of a primary repo, and is not yet re-settled.** ADR-0008 §6a recommends measuring drift against the local tree with no repo involved, and flags it back to Shyam because it is a semantics change rather than an editorial one. **Until that is answered, §7 stands as written for the single-repo case.**
+- **§3 — `tokenvault:sync:<file-id>` gains a connection id** (ADR-0008 §2, §6). The shared PAT key is unchanged: one token for all connections by default, reversing §1's per-repo scoping, plus an optional `tokenvault:github-pat:<connection-id>` override for a repo outside that token's resource owner (ADR-0008 §2).
+- **§7 — the drift baseline is retired and replaced** (ADR-0008 §6a). Drift now measures Figma against the **local tree**, with no repo involved, and each repo's own agreement status is tracked and shown **per repo**, never collapsed into one signal. See the note in §7 below.
 - **§10 — "no partial commit state"** stays true per repo and is false across repos; a fan-out push has a per-repo result list (ADR-0008 §4).
 
 §1's per-repo PAT scoping is the one decision here that ADR-0008 reverses outright; the tradeoff is recorded in ADR-0008 §2 rather than edited away here.
@@ -170,6 +170,17 @@ ADR-0005 §8 recorded the limit and the exit: *"True drift becomes definable at 
 |---|---|---|
 | File connected to a repo, sync state present | the last-pulled repo value | **Divergence from the source of truth** — PRD §6.5.3's actual sense |
 | Not connected, or no sync state | the import cache (ADR-0005 §7) | Changelog against a local watermark — Phase 5's behaviour, unchanged |
+
+> **Superseded by ADR-0008 §6a (2026-09-04).** This table's first row assumed one repo, and there is now no privileged repo to take a baseline from (ADR-0008 §1). It is replaced by two separate measures rather than one whose baseline swaps:
+>
+> | Axis | Question | Baseline | Cardinality |
+> |---|---|---|---|
+> | **Drift** | Has Figma changed away from what the tokens say? | the local tree — `build(scan, userSubtypes, pathRules) + overlay` | **one**, project-wide |
+> | **Divergence** | Does repo R agree with the tokens? | R's `blobShas`, per file (§4, §6) | **one per (repo, file)** |
+>
+> §7's *intent* survives — drift still means "Figma disagrees with what the tokens are", not "Figma changed since I last looked" — because pulled repo content reaches the local tree through the overlay (§5). What goes is the mode change, where connecting a repo silently altered what the drift list meant.
+>
+> **Per-repo status is guaranteed, not incidental** (Shyam, 2026-09-04: *"flag discrepancies for each repo"*). Every enabled connection's state stays individually inspectable, the header chip is a worst-case summary that must never stand in for the breakdown, and every block — divergence (§6), rule-set mismatch, a cross-repo dangling reference — names its repo rather than reporting "the push failed". This is a **UI** requirement as well as a data-model one; §6.4 of `docs/ux/apply-and-drift.md` carries it.
 
 `src/tokens/drift.ts` takes a baseline tree as an argument today; it needs no new logic, only a different argument. The three entry kinds (`drift-value`, `drift-added`, `drift-removed`) are unchanged.
 

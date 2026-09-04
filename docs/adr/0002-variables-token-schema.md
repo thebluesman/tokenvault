@@ -330,7 +330,7 @@ Against the Phase 2 branch as built, four things change: the `theme-composition`
 
 ## Amendment 2 — 2026-09-04 — configurable path transform rules
 
-**Status of this amendment**: Accepted 2026-09-04. Shyam resolved all three of its open questions, two of them against this amendment's own recommendation: **exclusion is in** (§B), and **all three transform actions ship**, not just stripping (§B). Rule-set mismatch **blocks** (§F), as recommended. One residual question is recorded at the end.
+**Status of this amendment**: Accepted 2026-09-04, no open questions. Shyam resolved four, three of them against this amendment's own recommendation: **exclusion is in** (§I), **all four transform actions ship** rather than stripping alone (§B), and **an exclusion that leaves a reference dangling blocks the push** (§I). Rule-set mismatch **blocks** (§F), as recommended.
 
 Phase 10 (PRD §9 item 10) asks for configurable token naming rules: a pattern match against a Figma variable's name that transforms the resulting token path — `xyz/base/color/bg/primary` → `base.color.bg.primary`, `semantic/typography/xyz/title` → `semantic.typography.title` — configured once and re-evaluated on every scan, never baked into a token's stored data.
 
@@ -455,20 +455,27 @@ Shyam's call, over this amendment's recommendation to defer it. An `exclude` act
 Excluding is a bigger act than re-pathing, so three guards, none of them new machinery:
 
 - **Exclusions are reported in aggregate, not per variable.** §5's "no silent drop" rule applies, but a file that excludes 400 scaffolding variables must not produce 400 report entries — that is how a report stops being read. One entry per rule: kind `path-rule`, reason `excluded`, carrying `ruleId` and `count`. Attributable, countable, and one line.
-- **A reference to an excluded variable dangles, and Amendment 1 §G already covers it.** The reference is still written, the token is still imported, and the report gains a new reason on the existing `dangling-reference` kind: `alias-target-excluded`. No new kind, no new behaviour — the same treatment a collision loser's referrers already get.
+- **A reference to an excluded variable dangles.** At *import* time Amendment 1 §G already covers it and is unchanged: the reference is still written, the token is still imported, and the report gains one new reason on the existing `dangling-reference` kind, `alias-target-excluded`. Import stays lossless and stays a report, not a refusal.
 - **§G's preview counts exclusions before the rule is saved.** "This rule excludes 412 variables and leaves 6 references dangling" is the number that has to be visible *before* the write, because after it those variables are simply absent and the mistake is invisible.
 
 Exclusion is a content decision — it changes what the tree contains — so it lives in the committed `$rules.json` like every other rule (§F).
 
-**Not decided here, and flagged below**: whether an exclusion that leaves a reference dangling should *block* a push, the way ADR-0008 §3 blocks a routing-induced dangle. This amendment says no — it warns and reports — and the reasoning is in the residual question.
+**An exclusion that leaves a reference dangling blocks the push** *(resolved 2026-09-04 — Shyam, over this amendment's recommendation to warn instead)*. Symmetric with ADR-0008 §3's routing wall, and mechanically identical to it:
 
-### Open questions for Shyam (Amendment 2)
+- Computed **before any network call**, from the local tree, and surfaced in the Review & push screen as a pre-push block — never a failure discovered after a repo has already committed.
+- Reported as `dangling-reference` / `alias-target-excluded`, the same entry the import already files. The push gate reads that entry; it does not need its own detector.
+- **It blocks every connected repo**, because unlike a routing dangle the breakage is in the local tree itself and is therefore identical in every projection. There is no repo for which the tree is intact.
+- Caught earlier still in §G's rule preview, which is where the user should meet it.
 
-All three original questions were resolved on 2026-09-04 and are folded into the sections above: **exclusion is in** (§I, overriding the recommendation to defer), **all four actions ship** (§B, overriding the recommendation to ship stripping alone), and **rule-set mismatch blocks** (§F, as recommended).
+The reasoning, since this overrides the recommendation: a dangling reference fails a Phase 8 export build outright, so warning-and-committing breaks CI in every repo at once — the exact outcome the routing wall exists to prevent, and no less bad for arriving by a different route.
 
-**One residual, surfaced by the first two answers rather than left over from them:**
+**The gate is on rule-induced dangles only, and the boundary is deliberate.** A dangle caused by an exclusion (here) or by routing (ADR-0008 §3) is the direct result of a rule the user wrote, is visible in that rule's preview, and is fixed by editing it in the plugin. A dangle caused by Figma's own state — a collision loser, an unsupported type (Amendment 1 §G) — needs a rename in Figma, and blocking push on it would strand a user with an unfixable-from-here repo until they can get back into the file. Those keep §G's write-and-report treatment, unchanged.
 
-1. **Should an `exclude` rule that leaves a reference dangling block a push, for symmetry with ADR-0008 §3's routing wall?** This amendment says **no** — it warns in §G's preview and reports via `dangling-reference` / `alias-target-excluded` — on the grounds that an exclusion dangle is uniform across every repo (so there is no "correct in repo A, broken in repo B" asymmetry to protect against), it is caught before the rule is saved, and blocking it would relitigate Amendment 1 §G, which deliberately writes-and-reports dangling references rather than refusing them. The counter-argument is real and is Shyam's to weigh: a dangling reference fails a Phase 8 export build outright, so a warned-and-committed exclusion dangle breaks CI in every repo at once, which is exactly the outcome the routing wall exists to prevent. If he wants symmetry, the change is small — the preview already computes the number.
+### Open questions (Amendment 2)
+
+**None.** All four questions were resolved by Shyam on 2026-09-04 and are folded into the sections above: **exclusion is in** (§I, overriding the recommendation to defer), **all four actions ship** (§B, overriding the recommendation to ship stripping alone), **rule-set mismatch blocks** (§F, as recommended), and **an exclusion dangle blocks the push** (§I, overriding the recommendation to warn).
+
+The one judgement this amendment made on its own rather than asking, recorded because it is a boundary someone will test: the push gate covers **rule-induced** dangling references only, not the Figma-state ones Amendment 1 §G writes and reports. §I says why.
 
 ## Precedent checked
 

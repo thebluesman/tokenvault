@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Date**: 2026-09-04
-**Accepted**: 2026-09-04 — Shyam resolved all eight open questions, three of them against this ADR's own recommendation: cross-repo references **refuse** rather than widen (§3), the PAT is **shared across repos** rather than per repo (§2), and there is **no primary repo** (§1). Two items go back to him: the drift baseline that the no-primary decision leaves undefined (§6a), and a GitHub constraint on shared fine-grained PATs that may not have been visible when he chose the shared model (§2). See [Open questions](#open-questions-not-decided-here).
+**Accepted**: 2026-09-04 — no open questions. Shyam resolved eight questions in a first pass, three against this ADR's own recommendation: cross-repo references **refuse** rather than widen (§3), the PAT is **shared across repos** rather than per repo (§2), and there is **no primary repo** (§1). A second pass closed the two items that first pass surfaced: drift measures Figma against the local tree with **per-repo status never collapsed** (§6a), and the shared PAT gains a **per-connection override** so repos outside its scope are supported rather than assumed away (§2). See [Open questions](#open-questions-not-decided-here).
 **Owner**: @tech-lead
 
 ## Context
@@ -23,10 +23,10 @@ A **connection** is what ADR-0006 §3 already stored, given an id and multiplied
 
 ```jsonc
 { "id": "c_android", "owner": "…", "repo": "…", "branch": "main",
-  "tokensDir": "tokens", "enabled": true }
+  "tokensDir": "tokens", "enabled": true, "auth": { "mode": "shared" } }
 ```
 
-Branch and `tokensDir` are per connection, not global — repos genuinely differ on both, and ADR-0006 §9's correction (`cb086ee`) already made both part of what invalidates a sync base.
+Branch, `tokensDir` and credential (§2) are per connection, not global — repos genuinely differ on both, and ADR-0006 §9's correction (`cb086ee`) already made both part of what invalidates a sync base.
 
 **No connection is privileged.** This ADR originally proposed marking one `primary`, to keep ADR-0006 §2's sentence — *"the repo is the source of truth"* — grammatical in a world with N repos. Shyam rejected both the fixed and the changeable version of that, and the reasoning is better than the proposal: *"No primary, Figma is actually the source of truth at this stage."*
 
@@ -46,23 +46,39 @@ One thing is *not* editorial: ADR-0006 §2's second act was demoting the overlay
 
 **Cap: 10 enabled connections** *(resolved 2026-09-04, as recommended)*. Not a technical limit — the constraint is that a status refresh costs one tree read per repo (§6) and the Review & push screen has to stay legible with a diff per repo. Ten keeps a refresh at ten calls against a 5,000/hr budget and a review screen at ten top-level groups.
 
-### 2. One shared PAT across every connection *(resolved 2026-09-04)*
+### 2. One shared PAT by default, with a per-connection override *(resolved 2026-09-04)*
 
 Shyam's call, reversing this ADR's recommendation of a token per repo. Setup simplicity wins over blast-radius isolation: connecting a fourth repo should not mean a fourth trip through GitHub's token UI, and a model that makes adding a repo expensive is a model that discourages using the feature it was built for.
 
-Storage is therefore ADR-0006 §3's, with one key becoming a list and nothing else changing:
+**One shared PAT cannot always reach every repo, so the override is part of the model rather than an escape hatch bolted on later.** A GitHub *fine-grained* PAT is scoped to a single resource owner — one personal account or one organisation — so a shared fine-grained token covers many repos only while they all sit under the same owner. Two orgs, or a personal repo plus an org repo, cannot be covered by one fine-grained token at all. The alternative of telling the user to reach for a classic PAT would answer a scoping problem by widening the blast radius across their entire account, which is the wrong direction. So: **the user gets to say, per connection.**
+
+```jsonc
+{ "id": "c_android", "owner": "…", "repo": "…", "branch": "main",
+  "tokensDir": "tokens", "enabled": true,
+  "auth": { "mode": "shared" } }          // or { "mode": "own", "patLastFour": "9f2a" }
+```
+
+Resolution is one rule with no ambiguity: **a connection uses its own PAT if `mode` is `own`, and the shared PAT otherwise.** Most connections say `shared` and the settings panel shows them as such; a connection outside the shared token's reach says `own` and carries its own credential.
 
 | Key | Scope | Size |
 |---|---|---|
 | `tokenvault:github` | `{ connections: [...], routingRules: [...], patLastFour }` | ~2 KB at 10 repos |
-| `tokenvault:github-pat` | the PAT, alone, exactly as ADR-0006 §3 | < 1 KB |
+| `tokenvault:github-pat` | the shared PAT, alone, exactly as ADR-0006 §3 | < 1 KB |
+| `tokenvault:github-pat:<connection-id>` | an override PAT — **written only for `mode: "own"` connections** | < 1 KB each |
 | `tokenvault:sync:<file-id>:<connection-id>` | ADR-0006 §3's record, per repo | ~1 KB per repo per file |
 
-Against ADR-0004 §1's 5MB, shared with a ~700KB import cache and the overlay: **~3KB of settings and ~10KB of sync state per synced Figma file at the cap.** The quota story is unchanged, and unchanged for ADR-0006's own reason — no tree is persisted, only SHAs.
+Four handling rules, all of them consequences of the resolution rule rather than new policy:
 
-**The tradeoff, recorded because it is a deliberate reversal of ADR-0006 §1's argument and should not be rediscovered as an oversight.** ADR-0006 §1 specified a fine-grained PAT scoped to a single repo *because* the blast radius of a leak is then one repository rather than an account. A shared token across ten repos is a leak that exposes ten repositories. Shyam has weighed that against setup friction and chosen friction-free. The three handling rules from ADR-0006 §1 — never rendered, never logged, held in a closure for the duration of one operation — carry over unchanged and now matter more, not less, because there is one secret rather than ten and it is worth more.
+- **Rotating the shared PAT does not touch overrides**, and replacing an override does not touch the shared one. Each key is written and cleared independently, which is the whole reason they are separate keys.
+- **Switching a connection from `own` back to `shared` deletes its override key**, and so does deleting the connection. An orphaned credential in `clientStorage` is a secret nobody can see to revoke.
+- **Every failure names which token was used.** ADR-0006 §10 already requires 401 and 404 to be named rather than guessed; with two possible credentials, *"GitHub rejected the token"* has to say *which* — the shared one, or this repo's own — or the user checks the wrong thing in GitHub's UI. `patLastFour` on the connection is what makes that message concrete.
+- **ADR-0006 §1's three rules apply to every token equally** — never rendered, never logged, held in a closure for one operation. A fan-out push may now resolve two or three distinct credentials in a single operation; each goes through the same redacting helper.
 
-**A constraint that may complicate this, flagged rather than designed around** (open question 2): a GitHub *fine-grained* PAT is scoped to a single resource owner — one personal account or one organisation. A shared fine-grained token covers many repos only while they all sit under the same owner. Repos spanning two orgs would need either a classic PAT (broader again) or a per-connection override this ADR does not build. Treated as an API fact to confirm at implementation, per project convention, and as a question for Shyam because it may change what "shared" can mean in his actual setup.
+**Settings copy must explain when the override is needed, or it reads as redundant complexity** next to a field labelled "your GitHub token". Wording is `@ux-designer`'s; the substance it has to carry is: *a fine-grained token only covers repos under one account or organisation, so a repo somewhere else needs its own.* Without that sentence the option looks like a duplicate of the field above it, and the user meets the real reason as a 404 instead. **The default must stay invisible** — adding a repo under the same owner should never surface the override at all.
+
+Against ADR-0004 §1's 5MB, shared with a ~700KB import cache and the overlay: **~3KB of settings, under 1KB per override, and ~10KB of sync state per synced Figma file at the cap.** The quota story is unchanged, and unchanged for ADR-0006's own reason — no tree is persisted, only SHAs.
+
+**The tradeoff, recorded because it is a deliberate reversal of ADR-0006 §1's argument and should not be rediscovered as an oversight.** ADR-0006 §1 specified a fine-grained PAT scoped to a single repo *because* the blast radius of a leak is then one repository rather than an account. A shared token across ten repos is a leak that exposes ten repositories. Shyam has weighed that against setup friction and chosen friction-free. Worth noting that the override cuts the other way when it is used: a connection on `own` is isolated from the shared token's blast radius, so a user who wants ADR-0006 §1's original posture for a sensitive repo can have it, per repo, without imposing it on the other nine.
 
 ### 3. Each repo receives a *projection*, and a routing rule is a hard wall *(resolved 2026-09-04)*
 
@@ -154,28 +170,35 @@ Not-routed is not diverged and not out of sync; there is nothing to compare. The
 
 **Pull is from one repo at a time, and the user picks which — with no default** *(follows from §1)*. Pulling from several at once and reconciling them is a multi-way merge of token JSON, which is the merge ADR-0006 §6 refused for two sides and refuses harder for four. With no primary there is no repo to preselect, so the choice is always explicit; that is a small cost and an honest one. A pull from repo A considers **only the paths that route to A**: absence of a token in A's tree is not evidence of a delete when the router never sent it there. Everything else about pull is unchanged — it materialises as overlay entries with `origin: "pulled"`, and Phase 5's apply flow does the writing.
 
-### 6a. Drift has no repo baseline any more — recommendation, and the one thing going back to Shyam
+### 6a. Drift has no repo baseline; per-repo status is never collapsed *(resolved 2026-09-04)*
 
 ADR-0006 §7 swapped drift's baseline from Phase 5's import cache onto *"the last-pulled repo value"*, on the strength of §2's claim that the repo is the source of truth. §1 removes that claim's subject. With N co-equal repos, "the last-pulled repo value" has N answers — legitimately different ones, since routing means repos hold different subsets pushed at different times — so the swap no longer resolves.
 
-**Recommendation: drift's baseline becomes the local tree — `build(scan, userSubtypes, pathRules) + overlay` — and no repo is involved in drift at all.**
+**Decision, per Shyam 2026-09-04 — "flag discrepancies for each repo":** drift's baseline becomes the local tree — `build(scan, userSubtypes, pathRules) + overlay` — and **no repo is involved in drift at all**; separately and non-negotiably, **each repo's own agreement status stays visible per repo and is never collapsed into a single combined signal.**
 
 Two axes, cleanly separated, which is the shape §1's model implies:
 
-| Axis | Question | Baseline |
-|---|---|---|
-| **Drift** | Has Figma changed away from what the tokens say? | The local tree |
-| **Divergence** | Does repo R agree with the tokens? | R's `blobShas`, per file (§6) |
+| Axis | Question | Baseline | Cardinality |
+|---|---|---|---|
+| **Drift** | Has Figma changed away from what the tokens say? | The local tree | **One**, project-wide |
+| **Divergence** | Does repo R agree with the tokens? | R's `blobShas`, per file (§6) | **One per (repo, file)** |
+
+Drift becomes one measure because it asks about Figma, and there is one Figma file. Divergence stays N measures because it asks about repos, and there are N of them. Collapsing either into the other is what the old repo-baseline drift was quietly doing.
 
 This keeps ADR-0006 §7's *intent* — drift means "Figma disagrees with what the tokens are", not merely "Figma changed since I last looked" — while needing no repo to be authoritative, because pulled repo content reaches the local tree through the overlay anyway (ADR-0006 §5). And it removes a mode change nobody would track: under ADR-0006 as written, connecting a repo silently altered what the drift list meant.
 
-**Why this goes back to Shyam rather than being settled here.** It is a change to a landed, Accepted ADR whose behaviour shipped in Phase 6 and is user-visible, and it is not editorial:
+**Per-repo status is a guarantee, not a data-model detail.** §6's per-(repo, file) tracking already satisfies it mechanically — every connection keeps its own `baseCommitSha` and `blobShas`, and nothing in the design has ever compared repos to each other or merged their answers. This section states it as a requirement so it cannot be optimised away later:
 
-- ADR-0006 §7 explicitly framed the repo baseline as *"PRD §6.5.3's actual sense"* of drift. Retiring it needs to be an intentional read of the PRD, not a side effect of removing the primary.
-- The recommended baseline is *not* exactly equivalent to ADR-0006 §7's in the single-repo case. A pulled-then-applied token retires its overlay entry, and whether the local tree and the import cache agree at that moment depends on Phase 5's post-apply rescan behaviour — which `docs/ux/apply-and-drift.md` had amended once already during Phase 9. That equivalence should be checked against the code, not asserted in an ADR.
-- `docs/ux/apply-and-drift.md` §6.4's copy was rewritten in Phase 6 *because* of §7's swap. If the swap is retired, that copy needs another pass from `@ux-designer`.
+- **Every enabled connection's state is individually inspectable at all times**, including `not routed` and each of ADR-0006 §4's four states, per file.
+- **The header chip is a summary, never a substitute.** It shows the worst state across connections because a chip has room for one word; the per-repo breakdown must always be one interaction away, and a chip reading *in sync* must not be reachable while any connection is diverged.
+- **A block names its repo.** Divergence (ADR-0006 §6), rule-set mismatch (ADR-0002 Amendment 2 §F) and a cross-repo dangling reference (§3) are all per-repo conditions and are reported per repo, never as "the push failed".
 
-Code impact is small either way — `src/tokens/drift.ts` already takes its baseline as an argument (ADR-0006 §7) — so this is a semantics decision, not an implementation cost.
+**Two consequences for other documents**, neither of which this ADR owns:
+
+- **`docs/ux/apply-and-drift.md` §6.4 needs another pass from `@ux-designer`.** Its copy was rewritten in Phase 6 *because* of §7's repo-baseline swap, and the swap is now retired. The pass must carry the per-repo requirement above as an explicit **UI** requirement: the drift surface shows one drift list, and the sync surface shows a repo-by-repo breakdown that a user can always open. Not implied by the data model — stated on screen.
+- **One equivalence to check in code, not to assert here.** The new baseline is not obviously identical to ADR-0006 §7's in the single-repo case: a pulled-then-applied token retires its overlay entry, and whether the local tree and the import cache agree at that moment depends on Phase 5's post-apply rescan behaviour, which `apply-and-drift.md` had already amended once during Phase 9. Worth a test rather than a paragraph. Flagged for `@frontend-engineer` at implementation; it changes nothing about the decision.
+
+Code impact is small — `src/tokens/drift.ts` already takes its baseline as an argument (ADR-0006 §7) — so this is a semantics change, not an implementation cost.
 
 ### 7. The Review & push screen groups by repo first
 
@@ -193,7 +216,7 @@ Presentation is `@ux-designer`'s, per this project's split. What this ADR fixes 
 - **Cross-repo atomicity** — decided against (§4). No mechanism exists that does not involve force-pushing shared history.
 - **Multi-repo pull, or reconciling two repos against each other** — decided against (§6). It is the merge ADR-0006 §6 refused.
 - **A primary or otherwise privileged repo** — decided against by Shyam (§1). Not deferred: the model is that no repo is authoritative, and a future phase wanting one would be re-opening this.
-- **A per-connection PAT override** — not built (§2). It becomes necessary only if connections span GitHub resource owners; open question 2.
+- **An account-wide classic PAT as the answer to multi-org** — decided against (§2). The per-connection override solves the same problem without widening the blast radius across everything the user owns.
 - **Routing on anything other than a name pattern** — by `$type`, by set, by subtype, by theme. Not asked for; the rule shape can grow a match kind later without touching anything else.
 - **Per-repo naming rules** — one file, one rule set, one set of paths. Per-repo path shapes would mean the same token has different identities in different repos, which breaks §3's projection model and pull matching at once.
 - **Non-GitHub providers** — PRD §4, unchanged.
@@ -202,14 +225,15 @@ Presentation is `@ux-designer`'s, per this project's split. What this ADR fixes 
 ## Consequences
 
 - ADR-0006's design survives multiplication almost intact: the module boundary, the SHA comparison, the commit sequence and the failure taxonomy all run per repo unmodified. The genuinely new code is the router, the projection (including manifest projection and reference validation), and per-repo result handling.
-- **Storage cost is ~3KB of settings plus ~1KB per repo per file.** ADR-0004 §1's quota story is unchanged, and the shared PAT (§2) makes it smaller than the per-repo model would have.
-- **Rate limit is unchanged in kind and linear in repos.** A status refresh at the cap is 10 calls; a 10-repo push is ~10 × (4 + changed files). Three orders of magnitude inside 5,000/hr. One shared PAT means one shared quota — which is the same 5,000/hr, since GitHub's authenticated limit is per user rather than per token.
-- **One leaked secret now exposes every connected repo** (§2). Deliberate, and the reason ADR-0006 §1's three handling rules stay non-negotiable.
+- **Storage cost is ~3KB of settings, under 1KB per PAT override, plus ~1KB per repo per file.** ADR-0004 §1's quota story is unchanged, and the shared PAT (§2) makes it smaller than the per-repo model would have.
+- **Rate limit is unchanged in kind and linear in repos.** A status refresh at the cap is 10 calls; a 10-repo push is ~10 × (4 + changed files). Three orders of magnitude inside 5,000/hr, and unaffected by how many distinct PATs are in play — GitHub's authenticated limit is per user, not per token.
+- **One leaked shared secret exposes every connection using it** (§2). Deliberate, and the reason ADR-0006 §1's three handling rules stay non-negotiable. A connection on `mode: "own"` is outside that radius, so the original per-repo posture remains available where a specific repo warrants it.
+- **Repos under a second account or organisation are supported, not excluded** (§2). The cost is one settings concept — a per-connection credential — that most users never see, and one sentence of copy explaining when they would.
 - Push stops having a single outcome. Anything that renders "pushed ✅" has to render a list instead, and any code that treats a push as one promise needs to treat it as N.
 - **Routing rules can block a push, and that is the design working.** A user who routes a referenced token narrowly will meet §3's wall, and the fix is always a rule edit. The preview is what keeps this from being discovered at push time.
 - **No repo is authoritative, so every repo has to be pulled from deliberately** (§6). A user with four repos has four separate "is this one current?" answers to hold, which is a real cognitive cost of the model Shyam chose — mitigated by the status chip aggregating to the worst case, not by pretending there is one answer.
-- ADR-0006 §7's drift baseline is left undefined by the no-primary decision, and §6a's recommendation needs Shyam's sign-off before drift work starts. Nothing else in Phase 10 blocks on it.
-- `@ux-designer` gains three surfaces: the connections list in settings, the routing-rules editor with its blocking preview, and the repo-grouped Review & push screen with per-repo results and per-repo blocks. Together with ADR-0002 Amendment 2's rules editor and preview, Phase 10 is a larger UX phase than its "polish" title suggests.
+- **ADR-0006 §7's drift baseline is retired and replaced** (§6a). `src/tokens/drift.ts` needs a different argument, not different logic, and `docs/ux/apply-and-drift.md` §6.4 needs a pass from `@ux-designer` carrying the per-repo-visibility requirement onto the screen.
+- `@ux-designer` gains three surfaces: the connections list in settings (including the PAT override and the copy explaining when it is needed), the routing-rules editor with its blocking preview, and the repo-grouped Review & push screen with per-repo results and per-repo blocks — plus the §6.4 rewrite above. Together with ADR-0002 Amendment 2's rules editor and preview, Phase 10 is a larger UX phase than its "polish" title suggests.
 
 ## Zero-recurring-cost check (PRD §8)
 
@@ -229,7 +253,9 @@ Nothing here has a cost floor above $0. Worth noting what *would*: a fan-out orc
 - **Transitive reference closure — widen a projection to include tokens it references.** Rejected by Shyam (§3), over this ADR's own recommendation. It produces a correct tree in every repo, which is why it was recommended; but it makes routing rules describe something other than what happens, and the widening is invisible unless the user reads a diff closely. A named, pre-push block is louder and keeps the rules literally true.
 - **Route per file rather than per token.** Rejected. Simpler — no projection, no manifest filtering, no cross-repo reference check — but it cannot express what was asked. Shyam's rules match token names, which cut across set files.
 - **All-or-nothing push across repos.** Rejected (§4). It requires undoing commits on repos that succeeded, which means force-pushing shared history.
-- **A PAT per connection.** Rejected by Shyam (§2), over this ADR's own recommendation. Smaller blast radius, but it makes adding a repo a trip through GitHub's token UI, and a feature that is expensive to extend is a feature that does not get extended.
+- **A PAT per connection, mandatory.** Rejected by Shyam (§2), over this ADR's own recommendation. Smaller blast radius, but it makes adding a repo a trip through GitHub's token UI, and a feature that is expensive to extend is a feature that does not get extended. It survives as the opt-in `mode: "own"` override.
+- **Telling the user to use a classic PAT when their repos span two organisations.** Rejected (§2). It answers a scoping problem by granting access to everything the user owns, and it would be the *default* advice rather than an exception, since the plugin cannot know in advance whether a future connection stays under one owner.
+- **Inferring the override automatically — try the shared PAT, fall back on 404.** Rejected (§2). GitHub returns an indistinguishable 404 for "missing" and "no access" (ADR-0006 §10 says so), so the fallback would silently retry a second credential against a repo that may simply not exist, and the user would never learn which token their repo is actually using.
 - **Naming a primary repo, fixed or changeable.** Rejected by Shyam (§1), who rejected the premise rather than the options: Figma and the local tree are where tokens are authored, and no connected repo has earned the title. The mechanics turned out not to need one (§6); only the drift baseline did (§6a).
 - **Commit the routing rules alongside the naming rules.** Rejected (§5). They do not affect a tree's content, and each repo would carry a document naming every other repo it fans out to.
 - **First-match-wins for routing rules.** Rejected (§5). Last-wins matches ADR-0002 §1's existing set-ordering convention, and with an explicit `repos` replacement there is no case where the earlier rule's answer is the one wanted.
@@ -239,14 +265,14 @@ Nothing here has a cost floor above $0. Worth noting what *would*: a fan-out orc
 
 ## Open questions (not decided here)
 
-All eight questions from the Proposed draft were resolved by Shyam on 2026-09-04 and are folded into the sections above: **refuse, don't widen** (§3), **shared PAT** (§2), **cap 10** (§1), **rule-set mismatch blocks** (ADR-0002 Amendment 2 §F), **exclusion in the rule engine** (ADR-0002 Amendment 2 §I), **all transform actions** (Amendment 2 §B), **no primary** (§1), and **zero-repo routing allowed** (§5).
+**None.** Ten questions were resolved by Shyam across two passes on 2026-09-04 and are folded into the sections above: **refuse, don't widen** (§3), **shared PAT** (§2), **cap 10** (§1), **rule-set mismatch blocks** (ADR-0002 Amendment 2 §F), **exclusion in the rule engine** (Amendment 2 §I), **all transform actions** (Amendment 2 §B), **no primary** (§1), **zero-repo routing allowed** (§5), **drift measured against the local tree with per-repo status never collapsed** (§6a), and **a per-connection PAT override** (§2).
 
-**Two go back to him. Neither blocks starting on §1–§5, §7.**
+**Carried into other people's documents, not open here:**
 
-1. **The drift baseline, left undefined by the no-primary decision — §6a.** Recommendation: drift measures Figma against the local tree, and no repo participates. This is a semantics change to a landed ADR (ADR-0006 §7), it touches copy `@ux-designer` wrote in Phase 6 (`docs/ux/apply-and-drift.md` §6.4), and its equivalence to current behaviour in the single-repo case depends on a post-apply rescan detail that should be checked in code rather than asserted. **This is the item flagged as not purely editorial**; the rest of the §1 reconciliation is.
-2. **Shared PAT versus GitHub's fine-grained token scoping — §2.** A fine-grained PAT is scoped to one resource owner, so one shared fine-grained token covers many repos only while they share an owner. If Shyam's repos span two orgs, the shared model needs either a classic PAT (broader still) or a per-connection override this ADR deliberately does not build. Worth an answer before settings UI copy is written, since it changes what the plugin should tell the user to create.
+- `@ux-designer` — `docs/ux/apply-and-drift.md` §6.4 needs a pass (§6a), and the per-repo breakdown is an explicit **UI** requirement in it, not merely a data-model property. Settings copy must explain when a PAT override is needed (§2).
+- `@frontend-engineer` — one equivalence to confirm by test rather than argument: whether the new drift baseline matches Phase 6's behaviour in the single-repo case, given Phase 5's post-apply rescan (§6a). It changes no decision either way.
 
-**API facts to verify during implementation, not decisions**: the fine-grained-PAT resource-owner constraint above; whether ADR-0006's outstanding ETag/rate-limit-header question behaves the same across N connections; and that `x-ratelimit-remaining` is per user rather than per token, which is what makes one shared PAT cost no more budget than ten separate ones.
+**API facts to verify during implementation, not decisions**: that a fine-grained PAT is scoped to a single resource owner, which is the premise §2's override rests on; whether ADR-0006's outstanding ETag/rate-limit-header question behaves the same across N connections; and that `x-ratelimit-remaining` is per user rather than per token, which is what makes several PATs cost no more budget than one.
 
 ## References
 
