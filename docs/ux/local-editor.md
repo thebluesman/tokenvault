@@ -228,6 +228,12 @@ Tokens Studio puts everything in a modal. We diverge for scalars because the dom
 
 - **Source** — `Variable · Theme/Light` or `Style · TEXT`, with the id available on hover/copy. Every Phase 4 token has one, since every token came from import; there is no provenance-less `Local` state until token creation ships (§2).
 - **`boundVariables`** — for style-derived tokens, listed as `fontSize → {folio.typography.font-size.70}`. This is why a text style's numbers look "already aliased"; hiding it makes the value editor look broken.
+
+  > **Amended 2026-09-04 — the composite sub-key refusal, from `references-math-themes.md` §12.** Phase 7 made whole-value references authorable but left composite **sub-key** references out (ADR-0007 §10). A typography editor's `fontSize` field that silently rejects `{folio.typography.font-size.70}` while the row above it *displays* `fontSize → {…}` from `boundVariables` reads as broken, so the sub-field says which it is rather than failing mutely:
+  >
+  > > Pointing one field of a typography token at another token isn't in this version. The `fontSize → {…}` line above comes from Figma and still works.
+  >
+  > Shipped as `refuseSubKeyReference` in `src/tokens/edit.ts`, which generalises the copy to any composite type.
 - **`text` extras** — collapsed behind *"11 Figma text properties"*, expandable. They round-trip but have no DTCG home.
 
 ### 5.3 Editing a reference value
@@ -374,7 +380,8 @@ Undo lives in the toast for 10 seconds; after that, the way back is *Undo all* o
 | `edit-conflict` | `⚑ conflict` badge on the row; both values in the expanded row, local value shown as live | `Both you and Figma changed this. Your value is being used.` |
 | `orphaned-edit` | `⚠`, in the pinned "orphaned edits" section, not the tree | `The Variable this edit changed was deleted in Figma.` |
 | Overlay write failed (storage full) | `.entry` amber block, edit stays applied in-session | `Couldn't save your edits — plugin storage is full. Copy the tree as JSON before closing.` |
-| Editing a reference | Disabled field + chip | see §5.3 |
+| Overlay **read** failed (corrupt blob) | `.entry` block on the Tokens tab, session-persistent; readable entries recovered, the raw blob quarantined | *Added 2026-09-04, Phase 9 — copy and reasoning in `error-states.md` §4.* |
+| ~~Editing a reference~~ Disabled field + chip | ~~see §5.3~~ | **Superseded 2026-09-03 by Phase 7** — the field is editable; `references-math-themes.md` §10's table owns reference, expression and cycle errors now. |
 | Delete blocked by inbound references | `⋯ → Delete` greyed with the count inline; explanation panel listing the referrers, no destructive button on it | `7 tokens still reference it. Phase 4 can't edit a reference — delete those tokens first.` see §7 |
 | Two sets disagree on `$type` at one path | Per-line type glyphs, no shared glyph on the name line. No badge — not a report kind. | — |
 | Tree too large to render | Never surfaced — virtualize instead | — |
