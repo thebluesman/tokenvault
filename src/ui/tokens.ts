@@ -455,7 +455,7 @@ function renderNotices(): void {
     line.style.marginBottom = "6px";
     line.appendChild(document.createTextNode(`${scannedAgo(model.scannedAt)} · `));
     const rescan = el("button", "toast-action", "Rescan");
-    rescan.style.color = "var(--accent)";
+    rescan.style.color = "var(--accent-text)";
     rescan.addEventListener("click", () => send({ type: "scan" }));
     line.appendChild(rescan);
     noticesEl.appendChild(line);
@@ -505,7 +505,7 @@ function renderNotices(): void {
       )
     );
     const show = el("button", "toast-action", "show all sets");
-    show.style.color = "var(--accent)";
+    show.style.color = "var(--accent-text)";
     show.addEventListener("click", () => {
       filters.sets = null;
       renderTokens();

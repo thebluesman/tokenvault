@@ -1,4 +1,5 @@
 import type {
+  Appearance,
   ApplyReport,
   GitConfig,
   OverlayRecovery,
@@ -116,7 +117,21 @@ const IMPORT_CACHE_OWNER_KEY = "tokenvault:last-import-owner";
 /** Fallback file identity, stored on the document only when `figma.fileKey` is unavailable. */
 const FILE_ID_PLUGIN_DATA_KEY = "tokenvault:file-id";
 
-figma.showUI(__html__, { width: 460, height: 640 });
+/**
+ * The panel's Appearance setting (UX `dark-mode.md` §2.3) — its own key, not per file, and not in
+ * the tokens overlay: a personal display preference must never travel to someone else's checkout.
+ * Absence means `"auto"`, which is why there is nothing to migrate for existing installs.
+ */
+const APPEARANCE_KEY = "tokenvault:appearance";
+
+/**
+ * `themeColors: true` is what makes dark mode possible at all (UX `dark-mode.md` §2): Figma stamps
+ * a `figma-light` / `figma-dark` class on the iframe's `<html>` and injects a `<style>` block of
+ * `--figma-color-*` variables, both updating live when the editor theme changes with the panel
+ * open. There is no other supported way for a plugin to learn Figma's theme. It changes nothing
+ * else — not sizing, not messaging, not the `ui-ready` handshake.
+ */
+figma.showUI(__html__, { width: 460, height: 640, themeColors: true });
 
 let snapshot: FileScan | null = null;
 let userSubtypes: Record<string, SubtypeSelection> = {};
@@ -848,6 +863,18 @@ function describeSelection(result: { selected: number; found: number; pages: num
   return `${selected} on this page. ${elsewhere} more ${elsewhere === 1 ? "is" : "are"} on ${others} other page${others === 1 ? "" : "s"} — Figma can only select one page at a time.`;
 }
 
+/**
+ * The stored Appearance setting, defaulting to Auto — UX `dark-mode.md` §2.3.
+ *
+ * Anything unrecognised in the store reads as Auto rather than throwing: the worst outcome of a
+ * corrupt display preference is that the panel follows Figma, which is the behaviour the user would
+ * have got by never opening this setting.
+ */
+async function loadAppearance(): Promise<Appearance> {
+  const stored = await figma.clientStorage.getAsync(APPEARANCE_KEY);
+  return stored === "light" || stored === "dark" ? stored : "auto";
+}
+
 // ---------------------------------------------------------------------------
 // Git sync — ADR-0006 §1, §3, §5, §7
 // ---------------------------------------------------------------------------
@@ -1049,7 +1076,7 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
       overlay = await loadOverlay();
       const storedTheme = await figma.clientStorage.getAsync(activeThemeKey());
       activeThemeName = typeof storedTheme === "string" && storedTheme.length > 0 ? storedTheme : null;
-      post({ type: "plugin-ready", fileName: figma.root.name });
+      post({ type: "plugin-ready", fileName: figma.root.name, appearance: await loadAppearance() });
       // The connection, before the tree: the header chip's repo half and the Repo tab both have to
       // know whether this file is connected at all before they render anything (UX §6.1).
       post({ type: "git-config", config: await loadGitConfig() });
@@ -1077,6 +1104,14 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
         // most needs to hear about it is the one where nothing was recovered.
         postOverlayState();
       }
+      return;
+    }
+    if (message.type === "set-appearance") {
+      // Written and forgotten: the class is stamped by the UI the moment the control is tapped, so
+      // this is durability only and nothing waits on it (UX `dark-mode.md` §2.3, "live, not on
+      // next open").
+      if (message.appearance === "auto") await figma.clientStorage.deleteAsync(APPEARANCE_KEY);
+      else await figma.clientStorage.setAsync(APPEARANCE_KEY, message.appearance);
       return;
     }
     if (message.type === "scan") {

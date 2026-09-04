@@ -281,7 +281,7 @@ function blockedRow(entry: ApplyEntry): HTMLElement {
   wrap.appendChild(row);
 
   const show = button("Show the loop", "toast-action");
-  show.style.color = "var(--accent)";
+  show.style.color = "var(--accent-text)";
   show.style.marginLeft = "22px";
   let open = false;
   let block: HTMLElement | null = null;

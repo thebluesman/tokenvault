@@ -276,10 +276,31 @@ export type UiToPluginMessage =
    * apply dialog, and gets no plugin-side undo. ⌘Z is the undo, and the write is bracketed with
    * `commitUndo` so it is its own step.
    */
-  | { type: "switch-page-theme"; name: string };
+  | { type: "switch-page-theme"; name: string }
+  /**
+   * The panel's Appearance setting — UX `dark-mode.md` §2.3.
+   *
+   * A **personal display preference**, so it goes into `clientStorage` under its own key beside the
+   * repo settings and the PAT, never into the tokens overlay: the overlay is document content that
+   * syncs to a repo, and one person's choice of a light panel must not travel to anyone else's
+   * checkout. Not per Figma file either — a user who wants a light panel wants it in every file.
+   */
+  | { type: "set-appearance"; appearance: Appearance };
+
+/**
+ * `"auto"` follows Figma's own editor theme and is the default; the absence of a stored value *is*
+ * `"auto"`, so existing installs need no migration.
+ */
+export type Appearance = "auto" | "light" | "dark";
 
 export type PluginToUiMessage =
-  | { type: "plugin-ready"; fileName: string }
+  /**
+   * `appearance` rides along in the handshake's first reply rather than arriving in a later
+   * message, because `clientStorage` is main-thread-only and asynchronous: the panel holds its
+   * first paint until this lands, so an overriding user never sees a frame of the other theme
+   * (`dark-mode.md` §2.4).
+   */
+  | { type: "plugin-ready"; fileName: string; appearance: Appearance }
   | { type: "import-result"; payload: ImportPayload }
   /** The serialized `FileScan` requested by `copy-scan`; `null` before the first scan. */
   | { type: "scan-snapshot"; json: string | null }
