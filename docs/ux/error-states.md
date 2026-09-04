@@ -271,7 +271,19 @@ showing a plan built against a tree that no longer exists — the exact stale-st
 why, with the failed edits still in the overlay and still visible in the tree, where the user
 re-applies them through the ordinary dialog.
 
-### 5.3 Verified with no change needed
+### 5.3 A blocked cycle row couldn't show its loop — implementation fixed
+
+`references-math-themes.md` §7.3c gives the cycle block three callers: the value field while
+authoring, the detail overlay for a cycle that arrived by scan or pull, and the apply dialog's
+blocked row, *"with `[ Show the loop ]` opening the block rather than repeating it inside a list
+row"*. The first two shipped in Phase 7; the third did not — the row carried the message and nothing
+else, which leaves the user hunting a 1,316-token tree for a loop the plugin had already found.
+
+**Fixed in the implementation.** A blocked row whose reason is `alias-cycle` or `expression-cycle`
+now carries `[ Show the loop ]`, and it opens the same `cycleBlock` component the other two callers
+use. §7.2's "one component, three callers" is now literally true.
+
+### 5.4 Verified with no change needed
 
 - **Scan / import** against `local-editor.md` §8 — every listed state present (the quota notice,
   `edit-conflict`, `orphaned-edit`, dangling references, partial tokens, the empty states). §8's
@@ -279,15 +291,15 @@ re-applies them through the ordinary dialog.
 - **Push, pull, connect / branch fetch** against `git-sync.md` §11 — all thirteen rows reachable,
   each carrying §11's copy verbatim, and the named-not-numbered rule of ADR-0006 §10 holds: the panel
   reports no bare status codes.
-- **References, expressions, themes** against `references-math-themes.md` §10 — all sixteen rows
-  present, including the two the round-1 review of Phase 7 fixed.
+- **References, expressions, themes** against `references-math-themes.md` §10 — every row present
+  except one, fixed above (§5.3), including the two the round-1 review of Phase 7 caught.
 - **The sync status chip** against `git-sync.md` §6.1 and PRD §6.7 — two halves, five-rung
   precedence, all three PRD states reachable. `main.ts`'s `renderStateSlot` / `repoHalf` match the
   doc as written.
 - **The settings panel** against `git-sync.md` §5.1–5.2 — gear, repo, branch, tokens folder, PAT with
   last-four masking, test connection, disconnect. Covers PRD §6.7's repo URL, branch and auth token.
 
-### 5.4 Not built, and why
+### 5.5 Not built, and why
 
 The **freshness affordance** issue #19 offers as a nice-to-have is not built: the Tokens tab already
 carries `scanned 12 minutes ago · [ Rescan ]` and the Repo tab already carries its own freshness line,
