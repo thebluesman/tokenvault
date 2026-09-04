@@ -12,5 +12,9 @@
     "skipLibCheck": true,
     "types": ["@figma/plugin-typings"]
   },
-  "include": ["src"]
+  // The plugin bundle. `src/export/` is Node code that never ships inside the plugin (issue #17),
+  // and it needs Node's globals rather than Figma's, so it is typechecked by
+  // `tsconfig.export.json` instead — `npm run typecheck` runs both.
+  "include": ["src"],
+  "exclude": ["src/export"]
 }

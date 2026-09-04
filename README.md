@@ -6,7 +6,7 @@ Built incrementally with Claude Code, running entirely on free infrastructure. Z
 
 ## Status
 
-**Phase 6 (Git sync) landed 2026-09-03.** Phases 1–6 — scaffold, Variables import, Styles import, the local editor, applying to Figma with drift detection, and git sync over a PAT — are done. See [`docs/prd.md` §9](docs/prd.md#9-build-plan-phased-for-claude-code-sessions) for the phased build plan and [`CLAUDE.md`](CLAUDE.md) for current phase status.
+**Phase 8 (Style Dictionary export) landed 2026-09-03.** Phases 1–8 — scaffold, Variables import, Styles import, the local editor, applying to Figma with drift detection, git sync over a PAT, themes/references/math, and the repo-side CSS export — are done. See [`docs/prd.md` §9](docs/prd.md#9-build-plan-phased-for-claude-code-sessions) for the phased build plan and [`CLAUDE.md`](CLAUDE.md) for current phase status.
 
 ### Running the plugin locally
 
@@ -15,6 +15,7 @@ npm install
 npm run build       # or: npm run watch
 npm run typecheck
 npm test
+npm run build:tokens   # the Style Dictionary export — see "Exporting to code" below
 ```
 
 In Figma desktop: **Plugins → Development → Import plugin from manifest…**, select `manifest.json` at the repo root, then run it from the same menu.
@@ -142,6 +143,65 @@ one request and is never stored on the iframe side; `fetch` only exists in the i
 `clientStorage` only in the sandbox. It follows
 [`docs/ux/git-sync.md`](docs/ux/git-sync.md) and [ADR-0006](docs/adr/0006-git-sync.md).
 
+### Exporting to code
+
+`npm run build:tokens` turns the committed token tree into CSS custom properties, one stylesheet
+per theme. It is **repo-side only** — no Figma, no plugin, no export button — and it runs from a
+clean checkout (PRD §6.6, §7).
+
+```
+npm run build:tokens                          # tokens/  ->  exports/css/<theme>.css
+npm run build:tokens -- --tokens-dir design   # a different token folder
+npm run build:tokens -- --out build           # a different output folder
+npm run build:tokens -- --check               # build and compare; writes nothing, fails if stale
+```
+
+**Output paths.** `exports/css/<theme-slug>.css`, one file per theme in `$manifest.json`. Themes
+are enumerated from the manifest, never configured: adding one in Figma and pushing is enough to
+get it built. A manifest with no themes at all — the `theme-composition` case, where two or more
+multi-mode collections defeat theme derivation — still builds, as a single `default.css` resolved
+through every set in `tokenSetOrder`.
+
+**`exports/` is deliberately outside the token folder, and must stay outside it.** Phase 6 tracks
+sync as a blob SHA per file under `tokensDir` ([ADR-0006](docs/adr/0006-git-sync.md) §3, §4), so a
+generated file written inside it would be read as repo-side drift on the next status check and
+every token file would misread as diverged. The build refuses an `--out` inside `--tokens-dir`
+rather than leaving that to care at the call site.
+
+**References pass through; expressions are flattened first.** `{core.space.4}` is byte-identical to
+Style Dictionary's own reference syntax, so it is handed over untouched. `{core.space.4} * 2` is a
+literal string Style Dictionary does not understand, so it is evaluated by the plugin's own
+evaluator (`src/tokens/expr.ts`, [ADR-0007](docs/adr/0007-references-math-themes.md)) before
+Style Dictionary sees anything. That happens **per theme, after theme selection** — an expression's
+operands resolve through the active theme's set stack, so the same expression is a different number
+in `Light` than in `Dark`, and flattening once up front would emit one of them into both.
+
+**A broken tree fails the build and writes nothing.** A reference cycle, an expression error, or a
+reference to a path the theme does not define is named in the output with its token and its theme,
+and the run exits non-zero. ADR-0007 §3's rule is that a cycle produces no value at all — never a
+zero, never the last good number — and the stylesheet-shaped version of that is not shipping a
+stylesheet.
+
+**What CSS does and does not get.** Colours, numbers, booleans, strings and shadows are emitted;
+`shadow` becomes a `box-shadow` value. `typography` and `grid` are skipped — they are several CSS
+properties rather than one value, and the naming convention for splitting them has no consumer yet
+to validate against — and the count is printed rather than silently dropped. Numbers stay
+**unitless**: a `number` token carries no unit ([ADR-0002](docs/adr/0002-variables-token-schema.md)
+§3 puts unit handling in Style Dictionary transforms), and emitting `4px` would invent one that is
+wrong for line heights, opacities and ratios alike. iOS/Android targets are a later ticket (PRD
+§6.6 names one additional platform as a stretch goal).
+
+**CI.** [`.github/workflows/export-tokens.yml`](.github/workflows/export-tokens.yml) runs on a push
+to `main` that touches the token folder, builds, and commits the result back as
+`chore: regenerate token export`. Because the job writes only to `exports/`, its own commit cannot
+match the workflow's path filter — the filter *is* the loop guard.
+
+> **If you change the tokens folder in the plugin's settings, change it in the workflow too.**
+> `tokensDir` is a user setting stored in `tokenvault:github` (ADR-0006 §3), not the constant
+> `tokens/`. GitHub does not allow expressions in a `paths:` filter, so the folder appears twice in
+> the workflow — in `paths:` and in `TOKENS_DIR` — and both need editing together. The failure mode
+> is a build that stops triggering, not a wrong stylesheet.
+
 ### Layout
 
 | Path | What lives there |
@@ -158,8 +218,9 @@ one request and is never stored on the iframe side; `fetch` only exists in the i
 | `src/figma/scanStyles.ts` | The only module that calls the Figma Styles API; same boundary, four style kinds. |
 | `src/figma/apply.ts` | The only module that writes to Figma Variables/Styles — executes an `ApplyPlan` (ADR-0005). |
 | `src/git/` | Pure git-sync logic (ADR-0006) — `state.ts` (settings/sync-state shapes and validity), `api.ts` (GitHub REST client), `diff.ts`/`filediff.ts` (status and per-row diff), `commit.ts`/`pull.ts` (push and pull plan builders), `blob.ts` (git blob SHA), `paths.ts` (repo-path ↔ token-path mapping). No `fetch` or `figma` global. |
+| `src/export/` | The Style Dictionary export (issue #17) — `read.ts` (repo tree → tokens), `themes.ts` (theme enumeration), `flatten.ts` (expression flattening and the SD input tree), `css.ts` (transforms and the SD build), `pipeline.ts`, `cli.ts`. Node-only; never shipped inside the plugin, and typechecked by `tsconfig.export.json`. |
 | `src/ui/` | The plugin iframe — `importView.ts` (Import tab), `tokens.ts` + `detail.ts` (Tokens tab), `applyDialog.ts` + `deleteFigma.ts` (apply/delete flows), `repo.ts` + `git.ts` (Repo tab and sync orchestration — the one place `fetch` is called), `settings.ts` (connection settings), `state.ts` (view model). |
-| `test/` | Unit tests over `src/tokens/` and `src/git/`, run with `node --test` via esbuild (no test framework dependency). |
+| `test/` | Unit tests over `src/tokens/`, `src/git/` and `src/export/`, run with `node --test` via esbuild (no test framework dependency). |
 
 ## Why
 

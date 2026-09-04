@@ -1,0 +1,92 @@
+# Style Dictionary export — PRD §6.6, §7; issue #17.
+#
+# Runs on every push that touches the token folder, rebuilds the CSS custom properties, and commits
+# the result back to the repo. Free-tier GitHub Actions on the standard `ubuntu-latest` runner:
+# nothing here is billable at solo/small-team volume (PRD §8).
+#
+# TOKEN FOLDER — read this before changing anything.
+#
+#   `tokensDir` is a *user setting* stored in `tokenvault:github` (ADR-0006 §3); it is not the
+#   constant `tokens/`, and `cb086ee` already cost one bug from assuming otherwise. GitHub does not
+#   allow expressions in a `paths:` filter, so the folder appears twice below — in the filter and in
+#   `TOKENS_DIR` — and both must be changed together if the plugin is pointed somewhere else. The
+#   default is `tokens/`, which is what the plugin's own settings panel defaults to, and a mismatch
+#   shows up as a build that never triggers rather than as a wrong stylesheet. The README says the
+#   same thing where someone changing the setting will actually be standing.
+#
+# THE LOOP GUARD.
+#
+#   This job writes to `exports/`, which is deliberately outside the token folder — both so Phase
+#   6's blob-SHA drift check never sees the bot's own commit as user drift (ADR-0006 §3, §4), and so
+#   the `paths:` filter below cannot match what the job itself just committed. The filter *is* the
+#   loop guard; `paths-ignore` is not needed and would not help if the filter were ever widened.
+
+name: Export tokens
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tokens/**"
+      - ".github/workflows/export-tokens.yml"
+      - "src/export/**"
+  workflow_dispatch:
+
+# One run at a time per branch. Two overlapping runs would race on the same commit.
+concurrency:
+  group: export-tokens-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  TOKENS_DIR: tokens
+  OUT_DIR: exports
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      # A repo whose plugin has never pushed has no token folder yet, and `src/export/**` in the
+      # filter above means this job also runs on a change to the pipeline itself. Neither is a
+      # failure; there is simply nothing to build.
+      - name: Look for a token tree
+        id: tree
+        run: |
+          if [ -f "$TOKENS_DIR/\$manifest.json" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No manifest at $TOKENS_DIR/\$manifest.json — nothing to export."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Fails loudly on a reference cycle, an expression error or a dangling reference, and writes
+      # nothing when it does (ADR-0007 §3 — no value at all is the honest answer, and a stylesheet
+      # with a hole in it is not).
+      - name: Build tokens
+        if: steps.tree.outputs.found == 'true'
+        run: npm run build:tokens -- --tokens-dir "$TOKENS_DIR" --out "$OUT_DIR"
+
+      - name: Commit generated output
+        if: steps.tree.outputs.found == 'true'
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain -- "$OUT_DIR")" ]; then
+            echo "No change to generated output."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$OUT_DIR"
+          git commit -m "chore: regenerate token export [skip ci]"
+          git push
