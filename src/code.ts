@@ -55,7 +55,8 @@ import { buildResolveContext, graphReport, themePathSet } from "./tokens/resolve
 import { currentPageModes, switchPageToModes } from "./figma/modes";
 import { buildMergedImport } from "./tokens/merge";
 import { makeRuleSetFile, parseRuleSet, type PathRule } from "./tokens/rules";
-import { stableStringify } from "./tokens/serialize";
+import { compareKeys, stableStringify } from "./tokens/serialize";
+import { adoptUserSubtypes, extractUserSubtypesFromFiles } from "./tokens/subtype";
 import { detectDrift, emptyDrift } from "./tokens/drift";
 import { styleGuards } from "./tokens/toFigma";
 import { normalizePathKey, toDottedPath } from "./tokens/paths";
@@ -64,12 +65,13 @@ import { scanStyles } from "./figma/scanStyles";
 import { applyWrites, countConsumers, selectNodes } from "./figma/apply";
 
 /**
- * Where user subtype tags live until Phase 6 gives us a git working copy.
+ * Where this device's user subtype tags live.
  *
- * ADR-0002 §3 makes the committed token files the authority for `subtypeSource: "user"` tags on
- * re-import; with no sync path yet, `clientStorage` is the stand-in. `extractUserSubtypes` in
- * src/tokens/subtype.ts is the function Phase 6 will point at the real `tokens/` tree, at which
- * point this becomes a local cache rather than the source.
+ * ADR-0002 §3 makes the committed token files the authority for `subtypeSource: "user"` tags, and
+ * as of issue #23 that is literally true: `adoptRepoSubtypes` reads them back out of every repo
+ * tree that reaches the sandbox, so a tag confirmed on one machine reaches the next one through
+ * git. This store is what the build reads from — the per-device working copy of an answer whose
+ * durable home is the repo.
  *
  * The key is namespaced per Figma file. `clientStorage` is scoped to the plugin and shared
  * across every file it runs in, but Figma variable ids (`VariableID:1:4`) are only unique
@@ -978,17 +980,22 @@ async function handleGitSaveSync(state: SyncState | null): Promise<void> {
   post({ type: "git-config", config: await loadGitConfig() });
 }
 
-/** Swaps the drift baseline — ADR-0006 §7. `null` reverts to Phase 5's scan watermark. */
-function setRepoBaseline(files: SerializedFile[] | null): void {
+/**
+ * Swaps the drift baseline — ADR-0006 §7. `null` reverts to Phase 5's scan watermark.
+ *
+ * Returns the repo trees it parsed, because they are also the only copy of the repo's *confirmed
+ * subtypes* the sandbox ever sees — see `adoptRepoSubtypes`. Parsed once, read twice.
+ */
+function setRepoBaseline(files: SerializedFile[] | null): TokenGroup[] {
   if (files === null) {
-    if (repoBaseline === null) return;
+    if (repoBaseline === null) return [];
     repoBaseline = null;
     driftDirty = true;
-    return;
+    return [];
   }
   // A baseline fetch that resolves after the user disconnected must not silently re-point drift at
   // a repo this file is no longer connected to — the disconnect prompt promised the opposite (§7).
-  if (importResult === null || !repoConnected) return;
+  if (importResult === null || !repoConnected) return [];
 
   const trees = new Map<string, TokenGroup>();
   for (const file of files) {
@@ -1002,6 +1009,45 @@ function setRepoBaseline(files: SerializedFile[] | null): void {
   }
   repoBaseline = flattenImport(trees, importResult.manifest);
   driftDirty = true;
+
+  // Sorted by path so `extractUserSubtypesFromFiles`'s later-file-wins rule is deterministic rather
+  // than dependent on the order the UI happened to fetch the blobs in.
+  return Array.from(trees.keys())
+    .sort(compareKeys)
+    .map((path) => trees.get(path) as TokenGroup);
+}
+
+/**
+ * Takes the repo's confirmed subtypes for variables this device has no answer for — issue #23.
+ *
+ * The gap this closes: a subtype confirmation is build metadata, so it is committed into
+ * `$extensions."com.tokenvault"` by `build.ts` and travels to the repo on every push — but until
+ * now nothing read it back, so a second machine pulling the same tree rebuilt every one of those
+ * tokens as `subtypeSource: "default"` and re-asked for all of them. Two costs, not one: the
+ * confirmation work is repeated, and the rebuilt tree differs from the repo's in `$extensions`, so
+ * an untouched tree reads as a file to push.
+ *
+ * This is the read half, and it runs wherever a repo tree reaches the sandbox — a connect that
+ * adopts the repo, and every pull. It writes `clientStorage` and rebuilds; it does not touch the
+ * Figma document, and it produces no overlay entry, because a subtype is not a value. Pulled values
+ * are unaffected and still arrive as pending entries via `git-pull` (ADR-0006 §5).
+ *
+ * Returns whether anything changed, so the caller knows whether a rebuild is owed.
+ */
+async function adoptRepoSubtypes(trees: TokenGroup[]): Promise<boolean> {
+  if (trees.length === 0) return false;
+
+  const adoption = adoptUserSubtypes(userSubtypes, extractUserSubtypesFromFiles(trees));
+  if (adoption.adopted.length === 0) return false;
+
+  userSubtypes = adoption.subtypes;
+  try {
+    await figma.clientStorage.setAsync(resolveStorageKey(), userSubtypes);
+  } catch {
+    // In memory either way, and the tags are re-derivable from the repo on the next connect or
+    // pull — losing this write costs them surviving a reopen, not this session.
+  }
+  return true;
 }
 
 /**
@@ -1217,11 +1263,14 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
       return;
     }
     if (message.type === "git-repo-baseline") {
-      setRepoBaseline(message.files);
+      const repoTrees = setRepoBaseline(message.files);
+      // Before the rebuild, not after: the adopted tags are a build input (ADR-0004 §3), so a
+      // rebuild that ran first would emit the tree without them and then need a second one.
+      const adopted = await adoptRepoSubtypes(repoTrees);
       // `driftDirty` survives if there is nothing to rebuild against yet, so the next rebuild
       // honours it. Reporting a baseline the panel has not actually compared against would be
       // exactly the "unknown read as none" lie ADR-0005 §8 spends a section refusing.
-      if (driftDirty && snapshot !== null && !scanning) await rebuild(false, true);
+      if ((driftDirty || adopted) && snapshot !== null && !scanning) await rebuild(false, true);
       return;
     }
     if (message.type === "git-pull") {
