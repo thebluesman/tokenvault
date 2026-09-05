@@ -23,6 +23,15 @@ export interface RepoSettings {
    * *is this the token I think it is* — which is the whole job a masked credential should do.
    */
   patLastFour?: string;
+  /**
+   * When the stored token expires, ISO 8601 — UX `onboarding-polish.md` §4.4.
+   *
+   * Metadata about the credential, never the credential: a date is safe to hold and safe to render,
+   * and holding it is what turns the one failure in the product that arrives with **no user action
+   * at all** — a token quietly lapsing overnight — into something the panel can warn about a week
+   * ahead. Absent when the token never expires, or when GitHub didn't say.
+   */
+  patExpiresAt?: string;
 }
 
 /**

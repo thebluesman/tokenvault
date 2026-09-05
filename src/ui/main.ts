@@ -39,7 +39,7 @@ import { crash, describeOperation, guard, installErrorBoundary } from "./errors"
 import { applyAppearance, installFirstPaintFailsafe, releaseFirstPaint } from "./appearance";
 import { getGit, handleGitMessage, onGitChange, recomputeStatus } from "./git";
 import {
-  connectionBroken,
+  connectionNeedsYou,
   openSettings,
   renderSettings,
   setSettingsCloseHandler,
@@ -217,7 +217,7 @@ function repoHalf(): { label: string; tone: "on" | "warn" } | null {
 /** The Repo tab's label and the gear's one state mark, both recomputed on every git change. */
 function renderRepoChrome(): void {
   repoTab.textContent = repoTabLabel();
-  gearButton.classList.toggle("needs", connectionBroken());
+  gearButton.classList.toggle("needs", connectionNeedsYou());
 }
 
 // ---------------------------------------------------------------------------
