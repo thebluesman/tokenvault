@@ -1,3 +1,5 @@
+import type { PathRule, RuleSetFile } from "./rules";
+
 // Types for the Variables → token JSON import (ADR-0002) and the Styles → token JSON import
 // (ADR-0003).
 //
@@ -417,7 +419,26 @@ export type ReportEntryKind =
    * normal thing to want. Refusing it would make the theme feature and the reference feature
    * mutually exclusive, so it warns, the edit is written, and the badge is theme-sensitive.
    */
-  | "unresolved-in-theme";
+  | "unresolved-in-theme"
+  /**
+   * Something about the configurable path rules — ADR-0002 Amendment 2 §C, §I.
+   *
+   * Three reasons, deliberately on one kind because they are all "a rule did this":
+   * `invalid-result` (a rule produced an unusable path, so it was not applied to that variable),
+   * `excluded` (a rule dropped variables from import — **aggregated**, one entry per rule with a
+   * `count`, because a file that excludes 400 scaffolding variables must not file 400 entries),
+   * and the `validateRules` reasons for a rule that cannot run at all.
+   */
+  | "path-rule"
+  /**
+   * A reference that resolves locally but would dangle in one repo's projection, because a routing
+   * rule sent its target elsewhere — ADR-0008 §3, reason `cross-repo`.
+   *
+   * Its own kind rather than a `dangling-reference`, because it is a property of a *projection*
+   * and not of the local tree: it blocks one repo, where every other unresolvable-tree cause
+   * blocks all of them.
+   */
+  | "routing-dangling-reference";
 
 /**
  * Which criterion decided a collision, so the report can justify itself (Amendment 1 §F).
@@ -446,6 +467,13 @@ export type WinnerRule =
 export interface ReportParticipant {
   variableId: string;
   variableName: string;
+  /**
+   * The Figma variable's name before the path rules ran (Amendment 2 §C).
+   *
+   * Optional and additive: absent where it would equal `variableName`, which keeps the bytes of a
+   * report from a rule-free file exactly as Phase 2 wrote them.
+   */
+  sourceName?: string;
   collectionId: string;
   collectionName: string;
   styleId?: string;
@@ -469,6 +497,12 @@ export interface ReportEntry {
   omitted?: string[];
   /** Absent on file-scoped entries — `theme-composition` has no participants (Amendment 1 §C). */
   participants?: ReportParticipant[];
+  /** `path-rule` only: which rule did it (Amendment 2 §C, §I). */
+  ruleId?: string;
+  /** `path-rule` / `excluded` only: how many variables the rule dropped (Amendment 2 §I). */
+  count?: number;
+  /** `routing-dangling-reference` only: the connection whose projection the reference breaks. */
+  connectionId?: string;
 }
 
 /**
@@ -530,6 +564,14 @@ export interface SubtypeCandidate {
 export interface BuildOptions {
   /** Explicit user choices, keyed by Figma variable id. Produce `subtypeSource: "user"`. */
   userSubtypes?: Record<string, SubtypeSelection>;
+  /**
+   * The committed path rules — ADR-0002 Amendment 2 §A, §H.
+   *
+   * A build was a pure function of (scan, `userSubtypes`); it is now a pure function of (scan,
+   * `userSubtypes`, `pathRules`). §7's byte-identical guarantee is unchanged — same three inputs,
+   * same bytes — and an absent or empty rule set reproduces Phase 2's output exactly.
+   */
+  pathRules?: PathRule[];
   /** ISO timestamp stamped into `$import-report.json`. Injected so builds are reproducible in tests. */
   importedAt: string;
 }
@@ -538,7 +580,7 @@ export interface TokenFileOutput {
   /** Repo-relative path, e.g. `tokens/theme/light.json`. */
   path: string;
   /** The parsed JSON body. Serialize with `stableStringify` for the on-disk form. */
-  content: TokenGroup | Manifest | ImportReport;
+  content: TokenGroup | Manifest | ImportReport | RuleSetFile;
 }
 
 /** What the UI shows above the report. Styles-side keys are absent on a Variables-only build. */

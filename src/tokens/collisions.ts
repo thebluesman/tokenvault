@@ -22,7 +22,7 @@ import type {
   WinnerRule,
 } from "./types";
 import { compareKeys } from "./serialize";
-import { isStrictPathPrefix } from "./paths";
+import { isStrictPathPrefix, toDottedPath } from "./paths";
 import { isAlias } from "./values";
 
 export interface PreparedVariable {
@@ -33,6 +33,14 @@ export interface PreparedVariable {
   segments: string[];
   /** Case-folded `path`, the collision key. */
   normalizedPath: string;
+  /**
+   * The Figma name the path was derived from, when the path rules changed it (Amendment 2 §C).
+   *
+   * Rules *create* collisions — stripping `xyz/` from one variable when an unprefixed twin already
+   * exists is an ordinary `cross-set` clash — and a report saying two variables collided at a path
+   * neither of them is named is unreadable without this.
+   */
+  sourceName?: string;
 }
 
 export type CandidateSource = "variable" | "style";
@@ -51,6 +59,8 @@ export interface CollisionItem {
   id: string;
   /** `/`-delimited Figma name. */
   name: string;
+  /** The pre-transform Figma name, when path rules changed it (Amendment 2 §C). */
+  sourceName?: string;
   containerId: string;
   containerName: string;
   path: string;
@@ -207,13 +217,15 @@ export function participantOfItem(
       outcome,
     };
   }
-  return {
+  const participant: ReportParticipant = {
     variableId: item.id,
     variableName: item.name,
     collectionId: item.containerId,
     collectionName: item.containerName,
     outcome,
   };
+  if (item.sourceName !== undefined) participant.sourceName = item.sourceName;
+  return participant;
 }
 
 export interface ItemCollisionOutcome {
@@ -376,6 +388,12 @@ export function itemOfVariable(prepared: PreparedVariable, inboundAliases: numbe
     source: "variable",
     id: prepared.variable.id,
     name: prepared.variable.name,
+    // Set only when the rules actually moved the variable. On a rule-free file it stays absent,
+    // which keeps the report's bytes exactly as Phase 2 wrote them (§7).
+    sourceName:
+      toDottedPath(prepared.sourceName ?? prepared.variable.name) === prepared.path
+        ? undefined
+        : prepared.sourceName ?? prepared.variable.name,
     containerId: prepared.collection.id,
     containerName: prepared.collection.name,
     path: prepared.path,

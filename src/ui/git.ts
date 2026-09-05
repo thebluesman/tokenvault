@@ -39,6 +39,7 @@ import { buildPull } from "../git/pull";
 import { DEFAULT_TOKENS_DIR } from "../git/state";
 import { fromRepoPath, isTokenFilePath, toRepoPath } from "../git/paths";
 import { flattenTree } from "../git/filediff";
+import { localTreeBlocksFromTrees, type PushBlock } from "../git/pushGate";
 import { getModel, importedFiles, importedManifest, send } from "./state";
 
 // ---------------------------------------------------------------------------
@@ -72,6 +73,13 @@ export interface GitView {
   unreadable: string[];
   /** True when GitHub truncated the recursive tree listing — a repo too big to answer in one call. */
   truncated: boolean;
+  /**
+   * Why the push is refused, if it is — ADR-0002 Amendment 3, ADR-0008 §3.
+   *
+   * Computed from the local tree before any network call, so a block is met on the Review & push
+   * screen rather than after a repo has already committed. Empty is the normal state.
+   */
+  blocks: PushBlock[];
 }
 
 let view: GitView = {
@@ -89,6 +97,7 @@ let view: GitView = {
   lastPullMerge: null,
   unreadable: [],
   truncated: false,
+  blocks: [],
 };
 
 /** The fetched tree, in memory for this session only. §3: the pulled tree is never persisted. */
@@ -536,6 +545,17 @@ export async function push(
   const sync = view.sync;
   if (tree === null || settings === null || sync === null) return null;
 
+  // ADR-0002 Amendment 3: a tree that does not resolve is not pushed, whatever caused it — and
+  // there is deliberately no override, because a "push anyway" button makes the gate advisory and
+  // an advisory gate is one users learn to click through. Recomputed here rather than trusted from
+  // the screen: this is the last point before bytes leave, and the tree can have changed since the
+  // review screen opened.
+  const blocks = pushBlocks();
+  if (blocks.length > 0) {
+    update({ blocks });
+    return null;
+  }
+
   const request = buildCommit({
     selected,
     local: localFiles(),
@@ -745,6 +765,30 @@ export function localParsedTrees(): Map<string, TokenGroup> {
     out.set(toRepoPath(buildPath, dir), tree);
   }
   return out;
+}
+
+/**
+ * Everything refusing this push, from the local tree alone — ADR-0002 Amendment 3 §A.
+ *
+ * Build-shaped rather than repo-shaped, because a block names the *set* a token lives in and the
+ * manifest keys sets by build path. Cheap enough to run on render: it is one walk of the tree plus
+ * one cycle pass, the same pass the editor already runs per keystroke.
+ */
+export function pushBlocks(): PushBlock[] {
+  const model = getModel();
+  if (!model.ready) return [];
+
+  const trees = localTrees(importedFiles(), model.overlay);
+  const manifest = importedManifest();
+  const setOfFile = new Map<string, string>();
+  if (manifest !== null) {
+    for (const collection of manifest.collections) {
+      for (const mode of collection.modes) setOfFile.set(`tokens/${mode.file}`, mode.set);
+    }
+    for (const style of manifest.styleSets ?? []) setOfFile.set(`tokens/${style.file}`, style.set);
+  }
+
+  return localTreeBlocksFromTrees(trees, setOfFile);
 }
 
 /** The repo's parsed version of one file, for the commit diff and the compare view. */

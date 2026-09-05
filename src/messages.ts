@@ -13,6 +13,7 @@ import type { Refusal } from "./tokens/toFigma";
 import type { ConsumerCount, PlannedWrite, WriteOutcome } from "./figma/apply";
 import type { RepoSettings, SyncState } from "./git/types";
 import type { EffectiveTheme } from "./tokens/themes";
+import type { PathRule } from "./tokens/rules";
 
 /** One generated file, already serialized deterministically, ready to display or copy. */
 export interface SerializedFile {
@@ -107,6 +108,16 @@ export interface ImportPayload {
    * (§3 never persists the pulled tree). The labels follow this field, never a feature flag (UX §14).
    */
   driftBaseline: "repo" | "scan";
+
+  // --- Phase 10 (ADR-0002 Amendment 2) ---
+
+  /**
+   * The path rules the build ran with — ADR-0002 Amendment 2 §A.
+   *
+   * Not stored on any token (§A: *"a rule is never stored on a token"*), so this is the only way
+   * the panel knows which rules produced the paths it is showing.
+   */
+  pathRules: PathRule[];
 
   // --- Phase 7 (ADR-0007) ---
 
@@ -267,6 +278,17 @@ export type UiToPluginMessage =
    * canvas is a separate, explicitly labelled action (UX §11 resolution 1, and the two must not be
    * merged).
    */
+  | {
+      /**
+       * Save the path rule set — ADR-0002 Amendment 2 §F, §G.
+       *
+       * The preview (§G) happens in the panel before this is sent: a rule edit is a mass rename and
+       * is never saved without one. The sandbox writes the rules and rebuilds; it does **not**
+       * rescan, because the rules are a pure function of names the last scan already read.
+       */
+      type: "set-path-rules";
+      rules: PathRule[];
+    }
   | { type: "set-active-theme"; name: string }
   /**
    * Put the current page into a theme's variable modes — ADR-0007 §7(c).
