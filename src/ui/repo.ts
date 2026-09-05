@@ -18,7 +18,7 @@
 import type { TokenGroup } from "../tokens/types";
 import type { FileStatus } from "../git/types";
 import { diffTrees, describeManifestChange, type FileDiff } from "../git/filediff";
-import { isFirstPush } from "../git/diff";
+import { firstPushNote } from "../git/diff";
 import { button, el, toast } from "./dom";
 import { diffRow } from "./diffRow";
 import { threePlaceStrip } from "./threePlace";
@@ -495,15 +495,8 @@ function renderReview(): void {
   // folder, where "12 changes" describes twelve files that have never existed. `git-sync.md` §11
   // already says this for the not-yet-staged case; this is the same sentence surviving one screen
   // further, into the place the count appears.
-  if (isFirstPush(status)) {
-    body.appendChild(
-      el(
-        "div",
-        "empty",
-        `${checked.length} file${checked.length === 1 ? "" : "s"} · none of these exist in ${git.settings?.branch ?? "main"} yet. This first push creates them.`
-      )
-    );
-  }
+  const firstPush = firstPushNote(status, checked.length, git.settings?.branch ?? "main");
+  if (firstPush !== null) body.appendChild(el("div", "empty", firstPush));
 
   if (review.loading) body.appendChild(el("p", "empty", "Loading the diff…"));
 

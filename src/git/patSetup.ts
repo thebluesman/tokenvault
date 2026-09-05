@@ -176,11 +176,18 @@ export function expiryDetail(expiry: Expiry): string {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** `3 Dec 2026` — read once, in the token field's result line (§4.3). */
+/**
+ * `3 Dec 2026` — read once, in the token field's result line (§4.3).
+ *
+ * **UTC, deliberately.** GitHub hands back `X-GitHub-Api-Expiration` as an absolute instant, and a
+ * token's expiry is not a local calendar event: the same credential must not read `3 Dec` in London
+ * and `2 Dec` in San Francisco. Local-timezone getters over a UTC instant do exactly that for any
+ * expiry falling in the small hours, so every component here is read with its `getUTC…` twin.
+ */
 export function formatExpiry(expiresAt: string): string {
   const at = new Date(expiresAt);
   if (!Number.isFinite(at.getTime())) return expiresAt;
-  return `${at.getDate()} ${MONTHS[at.getMonth()]} ${at.getFullYear()}`;
+  return `${at.getUTCDate()} ${MONTHS[at.getUTCMonth()]} ${at.getUTCFullYear()}`;
 }
 
 // ---------------------------------------------------------------------------

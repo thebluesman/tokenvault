@@ -86,6 +86,28 @@ export function groupCandidates(candidates: SubtypeCandidate[]): SubtypeGroup[] 
   return groups;
 }
 
+/**
+ * The `set-subtypes` map behind `[ Confirm N ]` — each candidate stamped with its own guess.
+ *
+ * Two candidates are skipped, and the count on the button is this map's size so the number and the
+ * write can never disagree:
+ *
+ * - **No guess.** There is nothing to confirm.
+ * - **Already confirmed.** A candidate the user has answered for is not part of "confirm the
+ *   guesses". Re-stamping it writes the same value, so the old behaviour was harmless, but a group
+ *   of 30 confirmed and 60 guessed rows offered `Confirm 90` — a number describing nothing the
+ *   click would change.
+ */
+export function confirmMap(candidates: SubtypeCandidate[]): Record<string, SubtypeSelection | null> {
+  const updates: Record<string, SubtypeSelection | null> = {};
+  for (const candidate of candidates) {
+    if (candidate.subtype !== undefined && candidate.needsConfirmation) {
+      updates[candidate.variableId] = candidate.subtype;
+    }
+  }
+  return updates;
+}
+
 /** Which group opens on load — the largest, so opening one shows the shape without rebuilding the wall. */
 export function defaultOpenGroup(groups: SubtypeGroup[]): string | null {
   const first = groups.find((group) => group.confirmable) ?? groups[0];

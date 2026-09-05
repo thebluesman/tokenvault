@@ -142,7 +142,15 @@ function blankDraft(): Draft {
 export function renderSettings(): void {
   if (!open) return;
   const git = getGit();
-  if (settingsEl.textContent === "") draft = blankDraft();
+  if (settingsEl.textContent === "") {
+    draft = blankDraft();
+    // A fresh draft has no token in it, so nothing has been asked about yet. Reset alongside it, or
+    // a check answered in a previous visit would let Save skip the wait for a newly pasted string.
+    checkSequence += 1;
+    checkedToken = null;
+    inFlightToken = null;
+    inFlightCheck = null;
+  }
 
   settingsEl.textContent = "";
   settingsEl.classList.remove("hidden");
@@ -176,6 +184,10 @@ export function renderSettings(): void {
   repoInput.addEventListener("input", () => {
     draft.repo = repoInput.value;
     repoInput.classList.toggle("invalid", repoInput.value.trim().length > 0 && parseRepo(repoInput.value) === null);
+    // §4.3's verdict names the repo it was about — *"This token can read and write owner/repoA"* —
+    // so editing the field it names makes it a claim about somewhere else. It retires immediately
+    // and re-asks itself if there is still a token to ask about.
+    invalidateTokenCheck();
   });
 
   // --- Access token ---------------------------------------------------------
@@ -330,6 +342,28 @@ let checkTimer = 0;
 let checkSequence = 0;
 
 /**
+ * The trimmed token string the last **completed** check answered for — verdict or named failure.
+ *
+ * Three things read it, and all three are the same question: *has this exact string already been
+ * asked about?* Blur skips a redundant request, Save knows whether an expiry is still unlearned,
+ * and editing the repo drops it because the answer was about the other repo.
+ */
+let checkedToken: string | null = null;
+
+/** The string a check is in flight for, and the promise Save can join rather than start a second. */
+let inFlightToken: string | null = null;
+let inFlightCheck: Promise<void> | null = null;
+
+/**
+ * How long Save waits on an unanswered token check before saving anyway — `error-states.md` §1.
+ *
+ * A credential the user has already pasted must not be held hostage to a network that isn't
+ * answering. The wait exists so the common case (paste, hit Save immediately) keeps its expiry
+ * date; past it the save goes through and a notice says what wasn't recorded.
+ */
+const SAVE_CHECK_TIMEOUT_MS = 4000;
+
+/**
  * The two regions of this screen that repaint **without** a full re-render, and why they must.
  *
  * The token field is a `<input type="password">` whose value is never read back out of the DOM
@@ -375,6 +409,11 @@ function tokenSection(body: HTMLElement): void {
       checkTimer = window.setTimeout(() => void runTokenCheck(), 500);
     });
     input.addEventListener("blur", () => {
+      // Blurring is not new information. If the debounced check has already answered for this exact
+      // string — or is mid-flight with it — tabbing out of the field must not spend a second GitHub
+      // request on the same question, which paste-then-tab did every time.
+      const value = input.value.trim();
+      if (value.length > 0 && (value === checkedToken || value === inFlightToken)) return;
       window.clearTimeout(checkTimer);
       void runTokenCheck();
     });
@@ -517,6 +556,7 @@ async function runTokenCheck(): Promise<void> {
   const candidate = draft.token;
   const parsed = parseRepo(draft.repo);
   if (candidate === null || candidate.trim().length === 0 || parsed === null) {
+    checkedToken = null;
     if (draft.verdict !== null || draft.checkFailure !== null) {
       draft.verdict = null;
       draft.checkFailure = null;
@@ -525,30 +565,97 @@ async function runTokenCheck(): Promise<void> {
     return;
   }
 
+  const value = candidate.trim();
   checkSequence += 1;
   const sequence = checkSequence;
   draft.checking = true;
   draft.checkFailure = null;
+  inFlightToken = value;
   paintTokenCheck();
 
-  const result = await checkPastedToken(parsed.owner, parsed.repo, candidate.trim());
-  if (sequence !== checkSequence) return;
+  const run = (async () => {
+    const result = await checkPastedToken(parsed.owner, parsed.repo, value);
+    if (sequence !== checkSequence) return;
+    inFlightToken = null;
+    inFlightCheck = null;
+    checkedToken = value;
 
+    draft.checking = false;
+    if (result.ok) {
+      applyCheck(result.check, `${parsed.owner}/${parsed.repo}`);
+    } else {
+      // A 401 stays *"GitHub rejected the token"* and a 404 stays *"Can't find owner/repo"* — §11's
+      // copy, unchanged. Only the read-only case moves; this is a scheduling change, not a rewrite.
+      draft.verdict = null;
+      draft.checkedExpiry = null;
+      draft.checkFailure = failureText(
+        result.failure.kind,
+        result.failure.message,
+        result.failure.rateLimitReset
+      );
+    }
+    paintTokenCheck();
+  })();
+  inFlightCheck = run;
+  await run;
+}
+
+/**
+ * Retires whatever the token field is currently claiming, and re-asks if it still can.
+ *
+ * Called when the repo changes under a finished check. The sequence bump is what drops an answer
+ * already in flight: it was asked about the previous repo and its verdict would name that repo.
+ */
+function invalidateTokenCheck(): void {
+  checkSequence += 1;
+  inFlightToken = null;
+  inFlightCheck = null;
+  checkedToken = null;
+
+  const showing = draft.verdict !== null || draft.checkFailure !== null || draft.checking;
+  draft.verdict = null;
+  draft.checkFailure = null;
+  draft.checkedExpiry = null;
   draft.checking = false;
-  if (result.ok) {
-    applyCheck(result.check, `${parsed.owner}/${parsed.repo}`);
-  } else {
-    // A 401 stays *"GitHub rejected the token"* and a 404 stays *"Can't find owner/repo"* — §11's
-    // copy, unchanged. Only the read-only case moves; this is a scheduling change, not a rewrite.
-    draft.verdict = null;
-    draft.checkedExpiry = null;
-    draft.checkFailure = failureText(
-      result.failure.kind,
-      result.failure.message,
-      result.failure.rateLimitReset
-    );
+  if (showing) paintTokenCheck();
+
+  if (draft.token !== null && draft.token.trim().length > 0) {
+    window.clearTimeout(checkTimer);
+    checkTimer = window.setTimeout(() => void runTokenCheck(), 500);
   }
-  paintTokenCheck();
+}
+
+/**
+ * Save's guarantee that a pasted token's expiry is not lost to a race — §4.4.
+ *
+ * `onSave` reads `draft.checkedExpiry`, which only a completed check fills in. Pasting a token and
+ * hitting Save inside the 500ms debounce therefore used to persist a real, expiring credential with
+ * no expiry recorded at all, so the Repo tab could never warn before it lapsed. This waits for the
+ * answer — joining a check already running rather than starting a second — and returns the notice
+ * to show if it never came.
+ */
+async function ensureTokenChecked(): Promise<string | null> {
+  const candidate = draft.token === null ? "" : draft.token.trim();
+  if (candidate.length === 0) return null;
+  if (checkedToken === candidate) return null;
+
+  window.clearTimeout(checkTimer);
+  const running =
+    inFlightToken === candidate && inFlightCheck !== null ? inFlightCheck : runTokenCheck();
+
+  let timer = 0;
+  await Promise.race([
+    running.catch(() => undefined),
+    new Promise<void>((resolve) => {
+      timer = window.setTimeout(resolve, SAVE_CHECK_TIMEOUT_MS);
+    }),
+  ]);
+  window.clearTimeout(timer);
+
+  // A check that *failed* still answered — a 401's own copy is already on screen and there is no
+  // expiry to learn. Only a check that never landed leaves the user with a silent gap to explain.
+  if (checkedToken === candidate) return null;
+  return "Saved, but Tokenvault couldn't reach GitHub to read this token's expiry date — it won't be able to warn you before the token lapses. Open settings again when you're back online and hit Save to record it.";
 }
 
 function applyCheck(check: TokenCheck, repoLabel: string): void {
@@ -635,12 +742,24 @@ function link(label: string, href: string): HTMLElement {
 
 // ---------------------------------------------------------------------------
 
+/** Re-entry guard: Save now awaits, and a second click mid-await would save twice. */
+let saving = false;
+
 async function onSave(): Promise<void> {
+  if (saving) return;
   const parsed = parseRepo(draft.repo);
   if (parsed === null) {
     draft.note = "That doesn't look like a repository. Paste a GitHub URL, or type owner/repo.";
     renderSettings();
     return;
+  }
+
+  saving = true;
+  let expiryNote: string | null;
+  try {
+    expiryNote = await ensureTokenChecked();
+  } finally {
+    saving = false;
   }
 
   const settings: RepoSettings = {
@@ -663,7 +782,8 @@ async function onSave(): Promise<void> {
   saveSettings(settings, token);
   draft.replacing = false;
   draft.token = null;
-  draft.note = null;
+  checkedToken = null;
+  draft.note = expiryNote;
   // The disclosure collapses once a valid token is stored (§4.2) — reopenable forever.
   if (token !== undefined && draft.verdict !== null && draft.verdict.tone === "ok") {
     draft.howOpen = false;

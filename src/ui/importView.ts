@@ -11,6 +11,7 @@ import { NUMBER_SUBTYPES, STRING_SUBTYPES } from "../tokens/subtype";
 import { countBands } from "../tokens/importCounts";
 import {
   bulkUndoMessage,
+  confirmMap,
   defaultOpenGroup,
   groupCandidates,
   needsConfirmStrip,
@@ -290,15 +291,6 @@ function commitBulk(
   });
 }
 
-/** The map that confirms each candidate's own guess — `no guess` rows have nothing to confirm. */
-function confirmMap(candidates: SubtypeCandidate[]): Record<string, SubtypeSelection | null> {
-  const updates: Record<string, SubtypeSelection | null> = {};
-  for (const candidate of candidates) {
-    if (candidate.subtype !== undefined) updates[candidate.variableId] = candidate.subtype;
-  }
-  return updates;
-}
-
 function setAllMap(
   candidates: SubtypeCandidate[],
   chosen: SubtypeSelection
@@ -482,12 +474,16 @@ function renderGroup(group: SubtypeGroup): HTMLElement {
   head.appendChild(caret);
   head.appendChild(el("span", "grow"));
 
-  if (group.confirmable) {
-    const confirm = button(`Confirm ${group.candidates.length}`);
+  // The button counts what the click would actually change, not how big the group is: with the
+  // `Only unconfirmed` filter off, a group can be mostly rows the user has already answered for.
+  const pendingConfirm = confirmMap(group.candidates);
+  const pendingConfirmCount = Object.keys(pendingConfirm).length;
+  if (group.confirmable && pendingConfirmCount > 0) {
+    const confirm = button(`Confirm ${pendingConfirmCount}`);
     confirm.disabled = scanning || pendingBulk !== null;
     confirm.addEventListener("click", () => {
       bulkWrite(
-        confirmMap(group.candidates),
+        pendingConfirm,
         null,
         (count) => `Confirm ${count} as ${String(group.subtype)}?`,
         (count) => `All ${count} keep the type Tokenvault guessed. You can change any of them later.`,

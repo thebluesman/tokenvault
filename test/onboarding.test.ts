@@ -26,13 +26,14 @@ import {
   BULK_CONFIRM_THRESHOLD,
   NO_GUESS,
   bulkUndoMessage,
+  confirmMap,
   defaultOpenGroup,
   groupCandidates,
   needsConfirmStrip,
   previousSelections,
 } from "../src/tokens/subtypeGroups";
 import { countBands } from "../src/tokens/importCounts";
-import { isFirstPush } from "../src/git/diff";
+import { firstPushNote, isFirstPush } from "../src/git/diff";
 import { HOW_IT_WORKS, NEVER_DOES, PLACEMENTS, VERBS } from "../src/ui/threePlace";
 import type { SubtypeCandidate, SubtypeSelection } from "../src/tokens/types";
 import type { FileStatus, RepoSettings } from "../src/git/types";
@@ -482,4 +483,167 @@ test("nothing dismisses the strip — it is outgrown, not skipped", () => {
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/^\s*\/\/.*$/gm, "");
   assert.equal(/dismiss|Skip|show this again|clientStorage|localStorage/i.test(strip), false);
+});
+
+// ---------------------------------------------------------------------------
+// The review pass on this phase's own work — six findings, six regressions
+// ---------------------------------------------------------------------------
+
+test("the first-push banner counts the files it is making a claim about", () => {
+  const absent = (path: string): FileStatus => ({ path, state: "to-push", localSha: "a" });
+  const status = {
+    files: [absent("tokens/a.json"), absent("tokens/b.json")],
+    toPush: [absent("tokens/a.json"), absent("tokens/b.json")],
+    toPull: [],
+    diverged: [],
+    clean: false,
+  };
+
+  assert.equal(
+    firstPushNote(status, 2, "main"),
+    "2 files · none of these exist in main yet. This first push creates them."
+  );
+  // The user unchecked one. The count follows the selection, so the sentence and the number on
+  // screen describe the same set of files.
+  assert.equal(
+    firstPushNote(status, 1, "main"),
+    "1 file · it doesn't exist in main yet. This first push creates it."
+  );
+});
+
+test("unchecking everything retires the first-push banner rather than claiming zero files", () => {
+  const absent = (path: string): FileStatus => ({ path, state: "to-push", localSha: "a" });
+  const status = {
+    files: [absent("tokens/a.json")],
+    toPush: [absent("tokens/a.json")],
+    toPull: [],
+    diverged: [],
+    clean: false,
+  };
+  // `isFirstPush` is still true — it is a property of the whole push set — but there is no push
+  // being described, so "0 files · none of these exist yet" next to a disabled button is gone.
+  assert.equal(isFirstPush(status), true);
+  assert.equal(firstPushNote(status, 0, "main"), null);
+  // And an ordinary push never gets the banner however much is checked.
+  const existing: FileStatus = { path: "tokens/a.json", state: "to-push", localSha: "a", remoteSha: "b" };
+  assert.equal(
+    firstPushNote({ files: [existing], toPush: [existing], toPull: [], diverged: [], clean: false }, 1, "main"),
+    null
+  );
+});
+
+test("`Confirm N` counts only the rows the click would actually change", () => {
+  const candidate = (
+    id: string,
+    subtype: SubtypeSelection | undefined,
+    needsConfirmation: boolean
+  ): SubtypeCandidate => ({
+    variableId: id,
+    name: id,
+    collection: "core",
+    tokenType: "number",
+    subtype,
+    needsConfirmation,
+    source: "guess",
+  });
+
+  const group = [
+    candidate("v1", "spacing", true),
+    candidate("v2", "spacing", true),
+    // Already answered for by the user: re-stamping it changes nothing, so it is not part of
+    // "confirm the guesses" and must not inflate the number on the button.
+    candidate("v3", "spacing", false),
+    // No guess at all — there has never been anything here to confirm.
+    candidate("v4", undefined, true),
+  ];
+
+  const map = confirmMap(group);
+  assert.deepEqual(map, { v1: "spacing", v2: "spacing" });
+  assert.equal(Object.keys(map).length, 2);
+});
+
+test("a group whose rows are all confirmed offers nothing to confirm", () => {
+  const done: SubtypeCandidate = {
+    variableId: "v1",
+    name: "space.md",
+    collection: "core",
+    tokenType: "number",
+    subtype: "spacing",
+    needsConfirmation: false,
+    source: "user",
+  };
+  assert.deepEqual(confirmMap([done]), {});
+  // The button is drawn only when there is a non-zero count, so an all-confirmed group renders
+  // its set-all control and no `Confirm 0`.
+  const view = readFileSync(join(process.cwd(), "src/ui/importView.ts"), "utf8");
+  assert.equal(/group\.confirmable && pendingConfirmCount > 0/.test(view), true);
+  assert.equal(/`Confirm \$\{pendingConfirmCount\}`/.test(view), true);
+});
+
+test("a token expiry reads the same date wherever the designer is sitting", () => {
+  // An expiry is an absolute instant, not a local calendar event: the same credential must not
+  // read `3 Dec` in London and `2 Dec` in San Francisco.
+  const original = process.env.TZ;
+  try {
+    process.env.TZ = "America/Los_Angeles";
+    assert.equal(formatExpiry("2026-12-03T01:00:00.000Z"), "3 Dec 2026");
+    process.env.TZ = "Pacific/Kiritimati";
+    assert.equal(formatExpiry("2026-12-03T23:00:00.000Z"), "3 Dec 2026");
+    process.env.TZ = "UTC";
+    assert.equal(formatExpiry("2026-12-03T23:00:00.000Z"), "3 Dec 2026");
+  } finally {
+    if (original === undefined) delete process.env.TZ;
+    else process.env.TZ = original;
+  }
+  // An unparseable value is still handed back untouched rather than rendering `NaN NaN NaN`.
+  assert.equal(formatExpiry("not a date"), "not a date");
+});
+
+test("Save waits for the token check before it can persist a token with no expiry", () => {
+  // The race the review found: `onSave` reads `draft.checkedExpiry`, which only a completed check
+  // fills in, so pasting and hitting Save inside the 500ms debounce stored a real expiring token
+  // with `patExpiresAt: undefined` and no way to warn before it lapsed.
+  const settings = readFileSync(join(process.cwd(), "src/ui/settings.ts"), "utf8");
+  assert.equal(/await ensureTokenChecked\(\)/.test(settings), true, "Save must await the check");
+  assert.equal(
+    /inFlightToken === candidate && inFlightCheck !== null \? inFlightCheck : runTokenCheck\(\)/.test(settings),
+    true,
+    "Save must join a check already running rather than starting a second"
+  );
+  // And it must never wait forever: a network that isn't answering saves the credential anyway,
+  // with a notice saying what wasn't recorded (`error-states.md` §1 — a failure the user can act on
+  // is a notice, never a toast).
+  assert.equal(/SAVE_CHECK_TIMEOUT_MS = \d+/.test(settings), true);
+  assert.equal(/Promise\.race\(/.test(settings), true);
+  assert.equal(/draft\.note = expiryNote;/.test(settings), true);
+});
+
+test("editing the repository field retires a verdict that names the old repo", () => {
+  const settings = readFileSync(join(process.cwd(), "src/ui/settings.ts"), "utf8");
+  const handler = /repoInput\.addEventListener\("input",[\s\S]*?\n  \}\);/.exec(settings);
+  assert.notEqual(handler, null);
+  assert.equal(/invalidateTokenCheck\(\)/.test(String(handler?.[0])), true);
+  // Retiring it means dropping the answer *and* the answer in flight — a verdict about repoA must
+  // not land under repoB — then re-asking if there is still a token to ask about.
+  const invalidate = /function invalidateTokenCheck\(\)[\s\S]*?\n\}/.exec(settings);
+  const body = String(invalidate?.[0]);
+  assert.equal(/checkSequence \+= 1/.test(body), true, "an in-flight answer must be dropped");
+  assert.equal(/draft\.verdict = null/.test(body), true);
+  assert.equal(/draft\.checkedExpiry = null/.test(body), true);
+  assert.equal(/runTokenCheck\(\)/.test(body), true, "it must re-ask, not just go blank");
+});
+
+test("tabbing out of the token field doesn't re-ask a question already answered", () => {
+  // Paste-then-tab is the common interaction, and it used to spend two GitHub requests on one
+  // token: the debounced check, then an unconditional blur check for the identical string.
+  const settings = readFileSync(join(process.cwd(), "src/ui/settings.ts"), "utf8");
+  const blur = /input\.addEventListener\("blur",[\s\S]*?\n    \}\);/.exec(settings);
+  assert.notEqual(blur, null);
+  assert.equal(
+    /if \(value\.length > 0 && \(value === checkedToken \|\| value === inFlightToken\)\) return;/.test(
+      String(blur?.[0])
+    ),
+    true,
+    "blur must skip when the same string is already checked or in flight"
+  );
 });

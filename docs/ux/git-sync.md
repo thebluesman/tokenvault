@@ -686,7 +686,7 @@ Two confirmations, and they do not duplicate each other: one is about scale, one
 > - *Repo tab, not connected* gains the three-place strip above its existing copy (§7.1).
 > - The **read-only token** row below moves its first catch to paste time. Its copy is unchanged for the push case, which can still happen with a token that was narrowed after it was stored.
 > - Two rows added: **token expiring** — *Your GitHub token expires in 5 days. Replace it before it lapses, or pushes will start failing.* `[ Open settings ]` — and **token expired** — *Your GitHub token has expired. Make a new one on GitHub and paste it in settings.* Both render in Settings and on the Repo tab, and both light the gear's `⚑` (§4.4).
-> - The Review & push screen's first push into an empty folder heads its file list *"12 files · none of these exist in `main` yet. This first push creates them."* — the same sentence as *Repo has no tokens folder yet*, surviving one screen further (§6.3).
+> - The Review & push screen's first push into an empty folder heads its file list *"12 files · none of these exist in `main` yet. This first push creates them."* — the same sentence as *Repo has no tokens folder yet*, surviving one screen further (§6.3). The count is the **checked** count, so the number and the claim always describe the same files; unchecking every file removes the line rather than announcing that zero files don't exist yet, and a single checked file reads *"1 file · it doesn't exist in `main` yet. This first push creates it."*
 
 ### Error and degraded states
 
