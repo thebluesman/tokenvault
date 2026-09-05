@@ -44,6 +44,7 @@ import {
   renderSettings,
   setSettingsCloseHandler,
 } from "./settings";
+import { onPipelineChange } from "./pipeline";
 import {
   renderRepo,
   repoTabLabel,
@@ -254,6 +255,12 @@ onGitChange(() => {
   // has to repaint whatever is open — both are live code paths, and a file can be disconnected at
   // any time.
   if (tab === "tokens" && isChangesOpen()) renderChanges();
+});
+
+// The export block answers on its own schedule — Repo tab open, after a push, its own button — so
+// each stage of it (runs, then the failed run's log) repaints the one tab it lives on (issue #25).
+onPipelineChange(() => {
+  if (tab === "repo") renderRepo();
 });
 
 onChange(() => {

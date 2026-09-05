@@ -25,6 +25,7 @@
 import type { RateLimit, RemoteTree } from "./types";
 import { GitError } from "./types";
 import { treeEntries, type CommitRequest } from "./commit";
+import type { WorkflowJobSummary, WorkflowRunSummary } from "./pipeline";
 
 const API = "https://api.github.com";
 
@@ -44,6 +45,14 @@ export interface GitClient {
   getTree(branch: string): Promise<RemoteTree>;
   getBlob(sha: string): Promise<string>;
   push(request: CommitRequest, branch: string): Promise<{ commitSha: string; url: string; blobShas: Record<string, string> }>;
+
+  // -- Actions, read-only (issue #25). Nothing here starts, re-runs or cancels anything. --
+
+  /** The most recent workflow runs on one branch, newest first as GitHub returns them. */
+  getWorkflowRuns(branch: string, limit?: number): Promise<WorkflowRunSummary[]>;
+  getRunJobs(runId: number): Promise<WorkflowJobSummary[]>;
+  /** One job's log as text, or `null` when it can't be read. See `getJobLog` for why null. */
+  getJobLog(jobId: number): Promise<string | null>;
 }
 
 export interface ClientOptions {
@@ -235,6 +244,87 @@ export function createClient(options: ClientOptions): GitClient {
       );
       if (blob.encoding !== "base64") return blob.content;
       return decodeBase64(blob.content);
+    },
+
+    /**
+     * The latest workflow runs on a branch — issue #25's build status, in one request.
+     *
+     * `exclude_pull_requests` keeps the answer about the branch itself rather than about every PR
+     * that happens to target it, and a small `per_page` is deliberate: the panel needs the newest
+     * run of one workflow, and paging further to find an older one would answer a question nobody
+     * asked. Reduced to `WorkflowRunSummary` here so nothing downstream ever holds a raw payload.
+     */
+    async getWorkflowRuns(branch: string, limit = 20): Promise<WorkflowRunSummary[]> {
+      const body = await call<{
+        workflow_runs?: Array<Record<string, unknown>>;
+      }>(
+        `/repos/${owner}/${repo}/actions/runs?branch=${encodeURIComponent(branch)}&per_page=${limit}&exclude_pull_requests=true`
+      );
+      return (body.workflow_runs ?? []).map((run) => ({
+        id: Number(run.id ?? 0),
+        path: typeof run.path === "string" ? run.path : "",
+        name: typeof run.name === "string" ? run.name : "",
+        status: typeof run.status === "string" ? run.status : "",
+        conclusion: typeof run.conclusion === "string" ? run.conclusion : null,
+        headSha: typeof run.head_sha === "string" ? run.head_sha : "",
+        createdAt: typeof run.created_at === "string" ? run.created_at : "",
+        htmlUrl: typeof run.html_url === "string" ? run.html_url : "",
+        runNumber: Number(run.run_number ?? 0),
+      }));
+    },
+
+    /** The jobs of one run, so a failure can name the step it failed at. */
+    async getRunJobs(runId: number): Promise<WorkflowJobSummary[]> {
+      const body = await call<{ jobs?: Array<Record<string, unknown>> }>(
+        `/repos/${owner}/${repo}/actions/runs/${runId}/jobs?per_page=30`
+      );
+      return (body.jobs ?? []).map((job) => ({
+        id: Number(job.id ?? 0),
+        name: typeof job.name === "string" ? job.name : "",
+        conclusion: typeof job.conclusion === "string" ? job.conclusion : null,
+        steps: Array.isArray(job.steps)
+          ? (job.steps as Array<Record<string, unknown>>).map((step) => ({
+              name: typeof step.name === "string" ? step.name : "",
+              conclusion: typeof step.conclusion === "string" ? step.conclusion : null,
+            }))
+          : [],
+      }));
+    },
+
+    /**
+     * One job's log — the only place the build's own diagnostics exist (issue #25, gap 9).
+     *
+     * Two things make this the one call in this file that returns `null` instead of throwing.
+     * It answers with a **302 to a signed storage URL**, not with JSON, and that redirect target is
+     * a different origin whose CORS posture is not ours to rely on from inside a plugin iframe; and
+     * a fine-grained PAT scoped only to `Contents` cannot read Actions at all. Neither is a sync
+     * failure and neither should raise one — the panel simply says it couldn't read *why* the build
+     * failed and still shows that it failed, with a link to the run. That is `error-states.md`'s
+     * rule applied here: a degraded answer, never a crash and never a lost primary fact.
+     *
+     * The text is returned raw and is **never rendered**: `pipeline.ts` extracts only lines matching
+     * the exact `[kind] theme: message` shape our own build script prints (ADR-0006 §10).
+     */
+    async getJobLog(jobId: number): Promise<string | null> {
+      let response: Response;
+      try {
+        response = await fetch(`${API}/repos/${owner}/${repo}/actions/jobs/${jobId}/logs`, {
+          headers: {
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      } catch {
+        return null;
+      }
+      readRateLimit(response);
+      if (!response.ok) return null;
+      try {
+        return await response.text();
+      } catch {
+        return null;
+      }
     },
 
     /**

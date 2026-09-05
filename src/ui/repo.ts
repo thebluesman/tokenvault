@@ -38,6 +38,7 @@ import {
   tokenCounts,
 } from "./git";
 import { clearLastPull } from "./git";
+import { refreshPipeline, renderPipeline } from "./pipeline";
 import { importedManifest, revertEntries } from "./state";
 import { failureText } from "./settings";
 
@@ -95,8 +96,10 @@ export function showRepoTab(show: boolean): void {
   repoEl.classList.toggle("hidden", !show);
   if (!show) return;
   // *"A status check runs on panel open, on Repo tab open, and after every push and pull"* — and
-  // never on a timer (UX §14, ADR-0006 §5).
-  void checkStatus();
+  // never on a timer (UX §14, ADR-0006 §5). The export block waits for it: the workflow lookup
+  // reads the tree that check fetches, so firing them together would cost a second tree call
+  // (issue #25).
+  void checkStatus().then(() => void refreshPipeline());
   renderRepo();
 }
 
@@ -231,6 +234,11 @@ function renderHome(): void {
   section(body, "To push", status.toPush, false);
   section(body, "To pull", status.toPull, false);
   section(body, "⚑ Diverged", status.diverged, true);
+
+  // *What happened after the push* — the sync sections answer what the repo thinks of the tokens,
+  // and this answers what CI did with them (issue #25, `user-journeys.md` §13b). Last, because it
+  // is downstream of everything above it.
+  renderPipeline(body);
 
   repoEl.appendChild(body);
 
@@ -700,6 +708,11 @@ async function runPush(files: FileStatus[], message: string, rows: number): Prom
   review = blankReview();
   screen = "home";
   renderRepo();
+
+  // A push is the one moment a build is about to exist, so this is where the export block is worth
+  // re-asking (issue #25). GitHub may not have queued the run yet, in which case the block still
+  // shows the previous one honestly rather than inventing a pending state — and no timer chases it.
+  void refreshPipeline();
 
   // §11's last row: the push succeeded, so the toast says so — but if the status check that runs
   // after it failed, the freshness line is unknown and the copy must not pretend otherwise.
