@@ -30,6 +30,7 @@ import type {
 } from "./types";
 import { hexToRgba } from "./values";
 import { isReference, referenceTarget } from "./references";
+import { memberShape, nonLiteralMembers } from "./members";
 
 // ---------------------------------------------------------------------------
 // The write ops
@@ -104,6 +105,15 @@ export interface Refusal {
   ok: false;
   reason: string;
   message: string;
+  /**
+   * For a `member-cycle`, the graph node whose loop the blocked member is waiting on.
+   *
+   * The composite is the blocked row (§14.6) but it need not be on the loop at all — a typography
+   * token pointing `fontFamily` at one of two tokens that cycle with each other is blocked by a loop
+   * it is no part of. Carrying the node is what lets the dialog's `[ Show the loop ]` find the right
+   * cycle instead of searching for the composite and coming back empty.
+   */
+  cycleNode?: string;
 }
 
 export type WriteResult = { ok: true; write: FigmaWriteOp } | Refusal;
@@ -149,6 +159,15 @@ export interface WriteOptions {
    * being written as the string it holds.
    */
   evaluateExpression?: (raw: string) => { ok: true; value: number } | Refusal;
+  /**
+   * Whether the pointer or formula a composite member holds sits on a loop — UX §14.6's reason line.
+   *
+   * The plan owns the cycle index, so the answer comes from there rather than from a second walk
+   * here. Returns the **node whose loop it is** so the dialog can render that loop, and `null` when
+   * the member is not waiting on one. Absent means "no idea", and the refusal falls back to naming
+   * the member's shape, which is true either way.
+   */
+  memberCycleNode?: (raw: string) => string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +210,7 @@ export function toFigmaValue(token: Token, options: WriteOptions = {}): WriteRes
   if (variable !== null) return variableWrite(token, variable, options);
 
   const styleId = styleTarget(token);
-  if (styleId !== null) return styleWrite(token, styleId);
+  if (styleId !== null) return styleWrite(token, styleId, options);
 
   return refuse(
     "no-provenance",
@@ -356,7 +375,60 @@ function scalarWrite(
 // Styles
 // ---------------------------------------------------------------------------
 
-function styleWrite(token: Token, styleId: string): WriteResult {
+/**
+ * A composite member that points or computes, refused by name — UX §14.6, issue #26's fourth
+ * acceptance criterion.
+ *
+ * **Refused, never flattened.** A Figma Style has no way to hold a pointer in one of its fields: the
+ * equivalent is binding a Variable to that field (`setBoundVariableForPaint` and friends), which
+ * ADR-0005 §12 defers wholesale. The alternative to refusing is writing the resolved number, and that
+ * is the silent flattening UX §5.6 rules out for a whole-value reference — with a second cost here,
+ * because the token would then say `{a}` while Figma said `24`, and every later scan would report
+ * that as drift the user cannot resolve.
+ *
+ * An expression refuses for the same reason rather than flattening as a `number` Variable's does:
+ * on a Variable the flattening is the only option Figma leaves and the apply preview shows the
+ * number; in a style field there is no per-field write to preview, and the drift is identical.
+ *
+ * The blocked row is the **composite**, because a composite is one write target (§14.6).
+ *
+ * **Every non-literal member is asked about the loop before any of them is reported.** A composite is
+ * the first thing in the panel that can hold several pointers at once, and they are not
+ * interchangeable: a typography token whose `fontFamily` resolves cleanly and whose `lineHeight` sits
+ * on a loop must report the loop and name `lineHeight`. Reporting whichever member came first would
+ * put the wrong name in the sentence and drop the row's `[ Show the loop ]` — a cycle rendered as an
+ * ordinary "can't hold a reference", which is the one thing §7.1 says a cycle must never become.
+ */
+function memberRefusal(token: Token, options: WriteOptions): Refusal | null {
+  const slots = nonLiteralMembers(token);
+  if (slots.length === 0) return null;
+
+  const onCycle = options.memberCycleNode;
+  if (onCycle !== undefined) {
+    for (const candidate of slots) {
+      const node = onCycle(candidate.value as string);
+      if (node === null) continue;
+      return {
+        ok: false,
+        reason: "member-cycle",
+        message: `\`${candidate.label}\` is on a loop, so this style can't be written.`,
+        cycleNode: node,
+      };
+    }
+  }
+
+  const slot = slots[0];
+  const shape = memberShape(slot.accepts, slot.value);
+
+  return refuse(
+    shape === "expression" ? "member-expression-unwritable" : "member-reference-unwritable",
+    shape === "expression"
+      ? `\`${slot.label}\` works out to a number from "${String(slot.value)}", and a Figma Style field can't hold a formula — writing the number instead would silently break the link. Use the resolved value in the token if that's what you want.`
+      : `\`${slot.label}\` points at ${referenceTarget(slot.value) ?? String(slot.value)}, and a Figma Style field can't hold a reference — only a Variable can. This style isn't written.`
+  );
+}
+
+function styleWrite(token: Token, styleId: string, options: WriteOptions = {}): WriteResult {
   // A style cannot hold a Variable alias as its *value*: the equivalent is binding a variable to
   // one of its fields, which is `setBoundVariableForPaint` and friends — a binding operation, and
   // ADR-0005 §12 defers bindings wholesale. Blocked, never flattened to the resolved literal
@@ -367,6 +439,9 @@ function styleWrite(token: Token, styleId: string): WriteResult {
       `Points at ${referenceTarget(token.$value) as string}, but this token is a Style — a Style can't hold a Variable reference as its value.`
     );
   }
+
+  const member = memberRefusal(token, options);
+  if (member !== null) return member;
 
   switch (token.$type) {
     case "color":
@@ -453,9 +528,9 @@ function textWrite(token: Token, styleId: string): WriteResult {
   const text: TextStyleWrite = {
     family: value.fontFamily,
     style: fontStyle,
-    fontSize: value.fontSize.value,
+    fontSize: literalMember(value.fontSize).value,
     letterSpacing: toUnitValue(
-      value.letterSpacing ?? { unit: "px", value: 0 },
+      literalMember(value.letterSpacing ?? { unit: "px", value: 0 }),
       typeof extras.letterSpacingUnit === "string" ? extras.letterSpacingUnit : undefined
     ),
   };
@@ -465,7 +540,7 @@ function textWrite(token: Token, styleId: string): WriteResult {
   // it is. Writing a default here is how an `AUTO` style silently becomes a fixed one.
   if (value.lineHeight !== undefined) {
     text.lineHeight = toUnitValue(
-      value.lineHeight,
+      literalMember(value.lineHeight),
       typeof extras.lineHeightUnit === "string" ? extras.lineHeightUnit : undefined
     );
   }
@@ -497,14 +572,25 @@ function effectWrite(token: Token, styleId: string): WriteResult {
       // Figma's shadow colour is RGBA, so alpha stays on the colour here rather than moving to an
       // opacity field the way it does for a paint. An absent alpha is opaque.
       color: { r: color.r, g: color.g, b: color.b, a: color.a === undefined ? 1 : color.a },
-      offsetX: dimensionNumber(shadow.offsetX),
-      offsetY: dimensionNumber(shadow.offsetY),
-      radius: dimensionNumber(shadow.blur),
-      spread: dimensionNumber(shadow.spread),
+      offsetX: dimensionNumber(literalMember(shadow.offsetX)),
+      offsetY: dimensionNumber(literalMember(shadow.offsetY)),
+      radius: dimensionNumber(literalMember(shadow.blur)),
+      spread: dimensionNumber(literalMember(shadow.spread)),
     });
   }
 
   return { ok: true, write: { kind: "effect-style", styleId, effects } };
+}
+
+/**
+ * A member that got past `memberRefusal` holds a literal — the refusal is what makes this true.
+ *
+ * One cast, in one place, with the invariant named. Widening the readers to take a `string` instead
+ * would mean every one of them needs its own answer to *what number is `{a.b}`*, and the only honest
+ * answer is the refusal that already happened.
+ */
+function literalMember<T>(value: T | string): T {
+  return value as T;
 }
 
 function dimensionNumber(value: { unit: string; value: number } | number | undefined): number {
@@ -536,10 +622,12 @@ function gridWrite(token: Token, styleId: string): WriteResult {
     // setting rather than as the "unset" it is meant to represent.
     const write: GridWrite = { pattern };
     if (grid.alignment !== undefined) write.alignment = grid.alignment.toUpperCase();
-    if (grid.count !== undefined) write.count = grid.count;
-    if (grid.gutter !== undefined) write.gutterSize = dimensionNumber(grid.gutter);
-    if (grid.offset !== undefined) write.offset = dimensionNumber(grid.offset);
-    if (grid.sectionSize !== undefined) write.sectionSize = dimensionNumber(grid.sectionSize);
+    if (grid.count !== undefined) write.count = literalMember(grid.count);
+    if (grid.gutter !== undefined) write.gutterSize = dimensionNumber(literalMember(grid.gutter));
+    if (grid.offset !== undefined) write.offset = dimensionNumber(literalMember(grid.offset));
+    if (grid.sectionSize !== undefined) {
+      write.sectionSize = dimensionNumber(literalMember(grid.sectionSize));
+    }
     grids.push(write);
   }
 

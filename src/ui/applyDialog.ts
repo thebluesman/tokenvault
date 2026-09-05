@@ -258,8 +258,14 @@ function readyRow(entry: ApplyEntry, checked: Set<string>, recount: () => void):
   );
 }
 
-/** The two skip reasons that mean *this token is on a loop* — `plan.ts`'s slugs. */
-const CYCLE_REASONS = ["alias-cycle", "expression-cycle"];
+/**
+ * The skip reasons that mean *this token is on a loop* — `plan.ts`'s and `toFigma.ts`'s slugs.
+ *
+ * `member-cycle` joins them for issue #26: the blocked row is the composite, because a composite is
+ * one write target, and the reason line names the member (UX §14.6). The loop it shows is the same
+ * loop, found by the same lookup, keyed by node.
+ */
+const CYCLE_REASONS = ["alias-cycle", "expression-cycle", "member-cycle"];
 
 function blockedRow(entry: ApplyEntry): HTMLElement {
   const row = diffRow({
@@ -274,7 +280,7 @@ function blockedRow(entry: ApplyEntry): HTMLElement {
   // one that was missing — a row that says "points into a circular reference" without showing which
   // loop leaves the user hunting through 1,316 tokens for it.
   if (entry.reason === undefined || CYCLE_REASONS.indexOf(entry.reason) === -1) return row;
-  const cycle = cycleFor(entry.set, entry.path);
+  const cycle = cycleFor(entry);
   if (cycle === undefined) return row;
 
   const wrap = el("div");
@@ -309,8 +315,16 @@ function blockedRow(entry: ApplyEntry): HTMLElement {
  * `Theme/Light` and `Theme/Dark` is two nodes, and each can sit on a different loop or on none, so a
  * path-only scan can show one set's loop against the other set's row. Cycles are theme-scoped for
  * the same underlying reason (UX §7.4), which makes this the exact case that produces two.
+ *
+ * `entry.cycleNode` wins where the plan set one, which it does for `member-cycle` and only there. The
+ * blocked row is the composite (§14.6) but the loop can be **somewhere else entirely** — a typography
+ * token pointing `fontFamily` at one of two tokens that cycle with each other is blocked by a loop it
+ * is no part of, and looking that token up in the cycle set finds nothing and silently drops the
+ * button §14.6 promises. Its own node stays the answer for `alias-cycle` and `expression-cycle`,
+ * where the token really is a participant.
  */
-function cycleFor(setId: string, path: string): Cycle | undefined {
+function cycleFor(entry: ApplyEntry): Cycle | undefined {
   const context = getModel().resolve;
-  return cycleContaining(context.cycles, cycleNodeKey(setId, path));
+  const node = entry.cycleNode ?? cycleNodeKey(entry.set, entry.path);
+  return cycleContaining(context.cycles, node);
 }

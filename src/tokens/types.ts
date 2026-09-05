@@ -207,32 +207,43 @@ export interface DimensionValue {
   value: number;
 }
 
+/**
+ * A composite member that may hold a `{path}` pointer or a math expression instead of a value —
+ * UX references-math-themes §14, issue #26.
+ *
+ * The string is the value, exactly as it is for a whole token (ADR-0007 §2): nothing stores a
+ * resolved number back into `$value`, and `members.ts` is the one place that says which members may
+ * carry one. Widening the type here rather than at each use site is what makes the compiler point at
+ * every reader that still assumes a member is already a number.
+ */
+export type Referable<T> = T | string;
+
 export interface TypographyValue {
   fontFamily: string;
-  fontSize: DimensionValue;
+  fontSize: Referable<DimensionValue>;
   /** A 100–900 number, or the raw Figma style string when the keyword table has no entry. */
   fontWeight: number | string;
-  letterSpacing: DimensionValue;
+  letterSpacing: Referable<DimensionValue>;
   /** Omitted entirely when Figma's line height is `AUTO` (ADR-0003 §3). */
-  lineHeight?: number | DimensionValue;
+  lineHeight?: Referable<number | DimensionValue>;
 }
 
 export interface ShadowValue {
-  blur: DimensionValue;
+  blur: Referable<DimensionValue>;
   color: string;
   inset: boolean;
-  offsetX: DimensionValue;
-  offsetY: DimensionValue;
-  spread: DimensionValue;
+  offsetX: Referable<DimensionValue>;
+  offsetY: Referable<DimensionValue>;
+  spread: Referable<DimensionValue>;
 }
 
 export interface GridValue {
   pattern: "columns" | "rows" | "grid";
   alignment?: string;
-  count?: number;
-  gutter?: DimensionValue;
-  offset?: DimensionValue;
-  sectionSize?: DimensionValue;
+  count?: Referable<number>;
+  gutter?: Referable<DimensionValue>;
+  offset?: Referable<DimensionValue>;
+  sectionSize?: Referable<DimensionValue>;
 }
 
 export type TokenValue =

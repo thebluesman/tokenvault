@@ -11,6 +11,7 @@
 import type {
   DimensionValue,
   GridValue,
+  Referable,
   ShadowValue,
   Subtype,
   Token,
@@ -18,6 +19,14 @@ import type {
   TypographyValue,
 } from "./types";
 import { isReference } from "./references";
+import type { MemberAccepts } from "./members";
+import {
+  gridMemberSpec,
+  memberShape,
+  refuseSubKeyReference,
+  shadowMemberSpec,
+  typographyMemberSpec,
+} from "./members";
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; message: string };
 
@@ -93,34 +102,53 @@ export function subtypeWarning(subtype: Subtype | undefined, value: number): str
 // ---------------------------------------------------------------------------
 
 /**
- * A sub-key of a composite that was handed a reference — UX §12.
+ * A member that was handed a pointer or a formula it may keep, stored **verbatim**.
  *
- * Sub-key reference authoring is ADR-0007 §10's deferral, and a typography editor's `fontSize`
- * field that rejects `{folio.typography.font-size.70}` while the row above it *displays*
- * `fontSize → {…}` from `boundVariables` is going to read as broken. So the rejection says which it
- * is, rather than reporting "that isn't a number" about a perfectly well-formed path.
+ * UX §14.1: a composite member is an ordinary Phase 7 value field, so the string is the value here
+ * exactly as it is for a whole token (ADR-0007 §2). Nothing evaluates on the way in and nothing is
+ * normalised — `resolve.ts` answers what it comes out as, every time it is asked.
+ *
+ * The four authoring rules do **not** run here. They run in `checkAuthoredValue` before the overlay
+ * entry is written, which is the same order the scalar field uses; this function is the store.
  */
-export function subKeyReferenceMessage(input: string): string | null {
-  if (!isReference(input.trim())) return null;
-  return "Pointing one field of a composite token at another token isn't in this version. The `→ {…}` line above comes from Figma and still works.";
+export function memberPointer(
+  input: string,
+  accepts: MemberAccepts
+): { kept: true; value: string } | { kept: false } {
+  const trimmed = input.trim();
+  if (memberShape(accepts, trimmed) === "literal") return { kept: false };
+  return { kept: true, value: trimmed };
 }
 
-export function parseDimension(input: string, unit: DimensionValue["unit"]): ParseResult<DimensionValue> {
-  const deferred = subKeyReferenceMessage(input);
-  if (deferred !== null) return fail(deferred);
+export function parseDimension(
+  input: string,
+  unit: DimensionValue["unit"],
+  accepts: MemberAccepts = "full"
+): ParseResult<DimensionValue | string> {
+  const pointer = memberPointer(input, accepts);
+  if (pointer.kept) return ok(pointer.value);
   const parsed = parseNumberValue(input);
   if (!parsed.ok) return parsed;
   return ok({ unit, value: parsed.value });
 }
 
-export function formatDimension(value: DimensionValue | number | undefined): string {
+/**
+ * What the member's field shows.
+ *
+ * A pointer or a formula shows as itself — that is what the file holds, and §14.1's whole premise is
+ * that the field the user types a path into is the field that shows the path back.
+ */
+export function formatDimension(value: Referable<DimensionValue | number> | undefined): string {
   if (value === undefined) return "";
+  if (typeof value === "string") return value;
   if (typeof value === "number") return String(value);
   return String(value.value);
 }
 
-export function dimensionUnit(value: DimensionValue | number | undefined): DimensionValue["unit"] {
-  if (value === undefined || typeof value === "number") return "px";
+export function dimensionUnit(
+  value: Referable<DimensionValue | number> | undefined
+): DimensionValue["unit"] {
+  if (value === undefined || typeof value === "number" || typeof value === "string") return "px";
   return value.unit;
 }
 
@@ -144,8 +172,14 @@ export function setTypographyField(
   unit?: DimensionValue["unit"]
 ): ParseResult<TypographyValue> {
   const next: TypographyValue = { ...value };
+  const accepts = typographyMemberSpec(field).accepts;
 
   if (field === "fontFamily") {
+    const pointer = memberPointer(raw, accepts);
+    if (pointer.kept) {
+      next.fontFamily = pointer.value;
+      return ok(next);
+    }
     const parsed = parseStringValue(raw);
     if (!parsed.ok) return parsed;
     next.fontFamily = parsed.value;
@@ -155,6 +189,11 @@ export function setTypographyField(
   if (field === "fontWeight") {
     const trimmed = raw.trim();
     if (trimmed.length === 0) return fail("Can't be empty.");
+    const pointer = memberPointer(raw, accepts);
+    if (pointer.kept) {
+      next.fontWeight = pointer.value;
+      return ok(next);
+    }
     // `number | string` on purpose: ADR-0003 §3 keeps Figma's raw style name when the keyword
     // table has no numeric entry, and retyping it must not coerce "Black Italic" to NaN.
     const numeric = Number(trimmed);
@@ -167,13 +206,13 @@ export function setTypographyField(
       delete next.lineHeight;
       return ok(next);
     }
-    const parsed = parseDimension(raw, unit ?? dimensionUnit(value.lineHeight));
+    const parsed = parseDimension(raw, unit ?? dimensionUnit(value.lineHeight), accepts);
     if (!parsed.ok) return parsed;
     next.lineHeight = parsed.value;
     return ok(next);
   }
 
-  const parsed = parseDimension(raw, unit ?? dimensionUnit(value[field]));
+  const parsed = parseDimension(raw, unit ?? dimensionUnit(value[field]), accepts);
   if (!parsed.ok) return parsed;
   next[field] = parsed.value;
   return ok(next);
@@ -217,25 +256,31 @@ export function setShadowField(
 ): ParseResult<ShadowValue> {
   const next: ShadowValue = { ...shadow };
 
+  const accepts = shadowMemberSpec(field).accepts;
+
   if (field === "inset") {
+    // §14.2: a two-state segmented control with nowhere to type, so a pointer is refused by name
+    // rather than silently written as the string `"{a.b}" === "true"` would make of it.
+    const refusal = refuseSubKeyReference(field, accepts, raw);
+    if (refusal !== null) return fail(refusal);
     next.inset = raw === "true";
     return ok(next);
   }
   if (field === "color") {
-    // A composite's sub-key takes a literal, never a pointer — ADR-0007 §10 defers sub-key reference
-    // authoring, and `parseDimension` and `setGridField`'s `count` already refuse one by name. This
-    // field used to *accept* any `{…}`-shaped string unchecked, which wrote a reference the graph
-    // does not index, the resolver does not follow and `toFigma` cannot bind. Same refusal, same
-    // sentence, so the whole shadow editor answers the question one way.
-    const deferred = subKeyReferenceMessage(raw);
-    if (deferred !== null) return fail(deferred);
+    // §14.2 — exactly §4.1's colour rule, one level down: a pointer is stored verbatim and the
+    // swatch shows what it resolves to, at full opacity like a literal (issue #28).
+    const pointer = memberPointer(raw, accepts);
+    if (pointer.kept) {
+      next.color = pointer.value;
+      return ok(next);
+    }
     const parsed = parseHexColor(raw);
     if (!parsed.ok) return parsed;
     next.color = parsed.value;
     return ok(next);
   }
 
-  const parsed = parseDimension(raw, dimensionUnit(shadow[field]));
+  const parsed = parseDimension(raw, dimensionUnit(shadow[field]), accepts);
   if (!parsed.ok) return parsed;
   next[field] = parsed.value;
   return ok(next);
@@ -284,20 +329,29 @@ export function setGridField(grid: GridValue, field: GridField, raw: string): Pa
     return ok(next);
   }
 
+  const accepts = gridMemberSpec(field).accepts;
+
   if (field === "alignment") {
+    // Literal-only for the same family of reason as `pattern` (§14.2): it names one of Figma's own
+    // enum values, and a `{…}` accepted here would become a graph edge nothing downstream can honour.
+    const refusal = refuseSubKeyReference(field, accepts, raw);
+    if (refusal !== null) return fail(refusal);
     next.alignment = raw;
     return ok(next);
   }
   if (field === "count") {
-    const deferred = subKeyReferenceMessage(raw);
-    if (deferred !== null) return fail(deferred);
+    const pointer = memberPointer(raw, accepts);
+    if (pointer.kept) {
+      next.count = pointer.value;
+      return ok(next);
+    }
     const parsed = parseNumberValue(raw);
     if (!parsed.ok) return parsed;
     next.count = parsed.value;
     return ok(next);
   }
 
-  const parsed = parseDimension(raw, dimensionUnit(grid[field]));
+  const parsed = parseDimension(raw, dimensionUnit(grid[field]), accepts);
   if (!parsed.ok) return parsed;
   next[field] = parsed.value;
   return ok(next);

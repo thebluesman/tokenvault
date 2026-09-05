@@ -52,6 +52,18 @@ import {
 } from "./valueField";
 import { NUMBER_SUBTYPES, STRING_SUBTYPES } from "../tokens/subtype";
 import type { GridField, ShadowField, TypographyField } from "../tokens/edit";
+import type { MemberAccepts, MemberType } from "../tokens/members";
+import {
+  gridMemberSpec,
+  memberBindingKeys,
+  memberKey,
+  memberLayerCount,
+  memberShape,
+  nonLiteralMembers,
+  shadowMemberSpec,
+  typographyMemberSpec,
+} from "../tokens/members";
+import type { Resolution } from "../tokens/resolve";
 import {
   deleteBlockers,
   deleteLines,
@@ -529,6 +541,32 @@ function pointerFooter(line: Line, setField: (raw: string) => void): HTMLElement
  * **commit**, not per keystroke: a half-typed path is not an error, and amber that appears on the
  * third character trains people to ignore amber (§5).
  */
+/**
+ * One composite member, addressed the way the field needs it — UX §14.1.
+ *
+ * Its presence is the *only* difference between a member field and a scalar one: the picker, the
+ * parser, the four rules and the cycle block are the same objects either way, which is §14.9's first
+ * build note. What the member supplies is which types it takes, whether it takes arithmetic, and how
+ * to write a pointer back into the composite.
+ */
+interface MemberField {
+  key: string;
+  label: string;
+  type: MemberType;
+  accepts: MemberAccepts;
+  /** Writes the raw pointer or formula into this member of the composite, verbatim. */
+  commitPointer: (raw: string) => string | null;
+  /** What this member currently resolves to, for the resolve line and the `—` slot. */
+  resolution?: Resolution;
+}
+
+/** The `$type`s a field will accept a pointer to — one for a scalar, one or two for a member. */
+function acceptedTypes(type: string, member: MemberField | undefined): Set<string> {
+  if (member === undefined) return new Set([type]);
+  if (member.type === "number-or-string") return new Set(["number", "string"]);
+  return new Set([member.type]);
+}
+
 function unifiedField(
   line: Line,
   options: {
@@ -538,20 +576,34 @@ function unifiedField(
     /** Extra control beside the input — the colour swatch. */
     trailing?: (input: HTMLInputElement, reference: boolean) => HTMLElement | null;
     initial?: string;
+    placeholder?: string;
+    member?: MemberField;
   } = {}
 ): HTMLElement {
   const token = line.entry.token;
-  const type = token.$type;
+  const member = options.member;
+  // The type the *field* answers to. For a member it is the member's own (§14.9), collapsed to the
+  // one thing `valueShape` cares about: whether a bare string here would be arithmetic.
+  const type =
+    member === undefined
+      ? token.$type
+      : member.accepts === "full"
+        ? "number"
+        : member.type === "number-or-string"
+          ? "string"
+          : member.type;
   const wrap = el("div");
   const row = el("div", "field");
   row.appendChild(el("label", undefined, options.label ?? "Value"));
 
   const initial = options.initial ?? String(token.$value);
+  const accepted = acceptedTypes(type, member);
   const input = el("input") as HTMLInputElement;
   input.type = "text";
   input.value = initial;
   input.className = "inline-edit";
   input.style.flex = "1";
+  if (options.placeholder !== undefined) input.placeholder = options.placeholder;
 
   const note = el("div", "field-note hidden");
   const extra = el("div");
@@ -599,7 +651,7 @@ function unifiedField(
       clearNotes();
       return;
     }
-    if (!isNonLiteral(raw, type)) {
+    if (member === undefined ? !isNonLiteral(raw, type) : memberShape(member.accepts, raw.trim()) === "literal") {
       const literalCommit = options.commitLiteral;
       if (literalCommit === undefined) {
         showAmber(`A ${type} token needs a ${type} value.`);
@@ -611,8 +663,9 @@ function unifiedField(
       return;
     }
 
-    // §5's four rules, all before the overlay entry is written.
-    const outcome = authorValue(line, raw);
+    // §5's four rules, all before the overlay entry is written — §14.4 runs the same four on a
+    // member, with rule 2 reading the member's type.
+    const outcome = authorValue(line, raw, member === undefined ? undefined : member);
     if (!outcome.ok) {
       showAmber(outcome.message);
       extra.textContent = "";
@@ -636,7 +689,8 @@ function unifiedField(
       return;
     }
 
-    const error = editValue(line, raw.trim() as never);
+    const error =
+      member === undefined ? editValue(line, raw.trim() as never) : member.commitPointer(raw.trim());
     if (error !== null) {
       showAmber(error);
       return;
@@ -659,7 +713,10 @@ function unifiedField(
       );
       const fix = button(`Use {${swap}}`);
       fix.addEventListener("click", () => {
-        const applied = editValue(line, `{${swap}}` as never);
+        const applied =
+          member === undefined
+            ? editValue(line, `{${swap}}` as never)
+            : member.commitPointer(`{${swap}}`);
         if (applied !== null) toast(applied);
       });
       extra.textContent = "";
@@ -715,7 +772,7 @@ function unifiedField(
     if (openedAt === -1) return;
     const query = input.value.slice(openedAt + 1, caret);
     popover(input, (close) =>
-      buildPicker(line.entry, query, type === "number", type, (path) => {
+      buildPicker(line.entry, query, accepted, (path: string) => {
         const before = input.value.slice(0, openedAt);
         const after = input.value.slice(caret);
         setField(`${before}{${path}}${after}`);
@@ -725,7 +782,7 @@ function unifiedField(
   }
 
   row.appendChild(input);
-  const trailing = options.trailing?.(input, isReference(token.$value));
+  const trailing = options.trailing?.(input, isReference(member === undefined ? token.$value : initial));
   if (trailing !== null && trailing !== undefined) row.appendChild(trailing);
 
   wrap.appendChild(row);
@@ -734,11 +791,51 @@ function unifiedField(
   wrap.appendChild(extra);
   renderLive();
 
-  const footer = pointerFooter(line, setField);
+  const footer =
+    member === undefined ? pointerFooter(line, setField) : memberFooter(member, initial);
   if (footer !== null) wrap.appendChild(footer);
 
   return wrap;
 }
+
+/**
+ * `Go to target` and the cycle block, for one member.
+ *
+ * The same two affordances a scalar pointer gets, minus *Use the resolved value instead*: a member's
+ * resolved value is a dimension object, not a string a field can be pre-filled with, and offering a
+ * button that writes `[object Object]` would be worse than not offering one.
+ */
+function memberFooter(member: MemberField, initial: string): HTMLElement | null {
+  const wrap = el("div");
+  const target = pointerTarget(initial);
+
+  if (target !== null && getModel().byPath.has(normalizePathKey(target))) {
+    const bar = el("div", "toolbar");
+    const go = button("Go to target");
+    go.addEventListener("click", () => {
+      closeDetail();
+      navigate(target);
+    });
+    bar.appendChild(go);
+    wrap.appendChild(bar);
+  }
+
+  // §14.6 — a cycled member renders the block **under its own field**, and every other member of the
+  // composite still edits normally. Same block, same copy, one component (§7.2).
+  if (member.resolution?.kind === "cycle" && member.resolution.cycle !== undefined) {
+    wrap.appendChild(
+      cycleBlock(member.resolution.cycle, getModel().resolve, {
+        navigate: (path: string) => {
+          closeDetail();
+          navigate(path);
+        },
+      })
+    );
+  }
+
+  return wrap.childNodes.length === 0 ? null : wrap;
+}
+
 
 function fieldRow(label: string, control: HTMLElement): HTMLElement {
   const row = el("div", "field");
@@ -917,9 +1014,62 @@ function unitSelect(current: DimensionValue["unit"], onChange: (unit: DimensionV
   return select;
 }
 
+/**
+ * What each member of this composite currently resolves to, keyed by its address.
+ *
+ * One lookup for the whole overlay rather than a resolve per field: the context is theme-scoped and
+ * shared, and asking it once is what keeps the per-member `—` and the whole-token preview showing
+ * the same answer (§14.6).
+ */
+function memberResolutions(line: Line): Map<string, Resolution> {
+  const resolution = resolutionFor(line);
+  const map = new Map<string, Resolution>();
+  if (resolution.kind !== "composite") return map;
+  for (const member of resolution.members ?? []) {
+    map.set(memberKey(member.slot.keyPath), member.resolution);
+  }
+  return map;
+}
+
+/**
+ * One composite member as an ordinary Phase 7 value field — §14.1, and the whole of this ticket's
+ * authoring surface.
+ *
+ * Same input, same `{` picker, same three groups, same four rules. What is passed in is the member's
+ * own type and its writer; nothing here decides whether the text is a literal, a pointer or a
+ * formula, because the parser decides that afterwards exactly as it does for a whole token (§4.1).
+ */
+function memberValueField(
+  line: Line,
+  spec: { key: string; label: string; type: MemberType; accepts: MemberAccepts },
+  keyPath: Array<string | number>,
+  initial: string,
+  commit: (raw: string) => string | null,
+  resolutions: Map<string, Resolution>,
+  trailing?: (input: HTMLInputElement, reference: boolean) => HTMLElement | null,
+  placeholder?: string
+): HTMLElement {
+  return unifiedField(line, {
+    label: spec.label,
+    initial,
+    commitLiteral: commit,
+    trailing,
+    placeholder,
+    member: {
+      key: spec.key,
+      label: spec.label,
+      type: spec.type,
+      accepts: spec.accepts,
+      commitPointer: commit,
+      resolution: resolutions.get(memberKey(keyPath)),
+    },
+  });
+}
+
 function typographyEditor(line: Line): HTMLElement {
   const value = line.entry.token.$value as TypographyValue;
   const wrap = el("div");
+  const resolutions = memberResolutions(line);
 
   const apply = (field: TypographyField, raw: string, unit?: DimensionValue["unit"]): string | null => {
     const parsed = setTypographyField(value, field, raw, unit);
@@ -927,49 +1077,72 @@ function typographyEditor(line: Line): HTMLElement {
     return editValue(line, parsed.value);
   };
 
-  wrap.appendChild(
-    fieldRow("Font family", committingInput(value.fontFamily, (raw) => apply("fontFamily", raw)).field)
-  );
-  wrap.appendChild(
-    fieldRow("Weight", committingInput(String(value.fontWeight), (raw) => apply("fontWeight", raw)).field)
-  );
-
-  for (const field of ["fontSize", "letterSpacing"] as const) {
-    const row = el("div", "field");
-    row.appendChild(el("label", undefined, field === "fontSize" ? "Font size" : "Letter spacing"));
-    const input = committingInput(formatDimension(value[field]), (raw) => apply(field, raw));
-    input.field.style.flex = "1";
-    row.appendChild(input.field);
-    row.appendChild(
-      unitSelect(dimensionUnit(value[field]), (unit) => apply(field, formatDimension(value[field]), unit))
+  const field = (
+    key: TypographyField,
+    label: string,
+    initial: string,
+    trailing?: () => HTMLElement | null,
+    placeholder?: string
+  ): HTMLElement =>
+    memberValueField(
+      line,
+      { key, label, ...typographyMemberSpec(key) },
+      [key],
+      initial,
+      (raw) => apply(key, raw),
+      resolutions,
+      trailing === undefined ? undefined : () => trailing(),
+      placeholder
     );
-    wrap.appendChild(row);
+
+  wrap.appendChild(field("fontFamily", "fontFamily", value.fontFamily));
+  wrap.appendChild(field("fontWeight", "fontWeight", String(value.fontWeight)));
+
+  // The unit picker stays where it was, beside the field — but only while the member holds a
+  // literal: `px` or `em` is meaningless next to a dotted path, and the unit the value comes out
+  // with is the target's (§14.1).
+  const unitFor = (key: "fontSize" | "letterSpacing" | "lineHeight") => () => {
+    if (typeof value[key] === "string" || value[key] === undefined) return null;
+    return unitSelect(dimensionUnit(value[key]), (unit) => {
+      const error = apply(key, formatDimension(value[key]), unit);
+      if (error !== null) toast(error);
+    });
+  };
+
+  for (const key of ["fontSize", "letterSpacing"] as const) {
+    wrap.appendChild(field(key, key, formatDimension(value[key]), unitFor(key)));
   }
 
   // Three states, not two (ADR-0003 §3): a number, a dimension, or absent when Figma said Auto.
-  // "Auto" removes the key rather than writing a sentinel, so a round-trip stays byte-identical.
-  const lineRow = el("div", "field");
-  lineRow.appendChild(el("label", undefined, "Line height"));
-  const lineInput = committingInput(formatDimension(value.lineHeight), (raw) => apply("lineHeight", raw));
-  lineInput.field.style.flex = "1";
-  lineRow.appendChild(lineInput.field);
-  if (value.lineHeight === undefined) {
-    lineInput.input.placeholder = "Auto";
-  } else {
-    lineRow.appendChild(
-      unitSelect(dimensionUnit(value.lineHeight), (unit) =>
-        apply("lineHeight", formatDimension(value.lineHeight), unit)
-      )
-    );
-    const auto = button("Auto");
-    auto.title = "Remove lineHeight — Figma's Auto has no token equivalent";
-    auto.addEventListener("click", () => {
-      const error = editValue(line, clearLineHeight(value));
-      if (error !== null) toast(error);
-    });
-    lineRow.appendChild(auto);
-  }
-  wrap.appendChild(lineRow);
+  // "Auto" removes the key rather than writing a sentinel, so a round-trip stays byte-identical, and
+  // it is unaffected by what the field holds (§14.2's last row).
+  wrap.appendChild(
+    field(
+      "lineHeight",
+      "lineHeight",
+      formatDimension(value.lineHeight),
+      () => {
+        // "Auto" sits beside the field and is unaffected by what the field holds (§14.2's last
+        // row). It removes the key rather than writing a sentinel, so a round-trip stays
+        // byte-identical.
+        const controls = el("div", "toolbar");
+        const unit = unitFor("lineHeight")();
+        if (unit !== null) controls.appendChild(unit);
+        if (value.lineHeight !== undefined) {
+          const auto = button("Auto");
+          auto.title = "Remove lineHeight — Figma's Auto has no token equivalent";
+          auto.addEventListener("click", () => {
+            const error = editValue(line, clearLineHeight(value));
+            if (error !== null) toast(error);
+          });
+          controls.appendChild(auto);
+        }
+        return controls.childNodes.length === 0 ? null : controls;
+      },
+      // An absent `lineHeight` is Figma's AUTO, and the placeholder is the only thing that says so.
+      value.lineHeight === undefined ? "Auto" : undefined
+    )
+  );
 
   return wrap;
 }
@@ -977,6 +1150,7 @@ function typographyEditor(line: Line): HTMLElement {
 function shadowEditor(line: Line): HTMLElement {
   const list = shadowList(line.entry.token.$value);
   const wrap = el("div");
+  const resolutions = memberResolutions(line);
 
   const write = (next: ShadowValue[]): string | null => editValue(line, denormalizeShadows(next));
   const writeOrToast = (next: ShadowValue[]): void => {
@@ -1011,10 +1185,23 @@ function shadowEditor(line: Line): HTMLElement {
       return write(next);
     };
 
-    for (const field of ["offsetX", "offsetY", "blur", "spread"] as const) {
-      box.appendChild(fieldRow(field, committingInput(formatDimension(shadow[field]), (raw) => apply(field, raw)).field));
+    // The address a member resolution is keyed by: a single shadow is a bare object, a stack is an
+    // array, and the token's `$value` shape is what tells them apart (edit.ts's `denormalizeShadows`).
+    const at = (field: string): Array<string | number> =>
+      Array.isArray(line.entry.token.$value) ? [index, field] : [field];
+
+    for (const field of ["offsetX", "offsetY", "blur", "spread", "color"] as const) {
+      box.appendChild(
+        memberValueField(
+          line,
+          { key: field, label: field, ...shadowMemberSpec(field) },
+          at(field),
+          field === "color" ? shadow.color : formatDimension(shadow[field]),
+          (raw) => apply(field, raw),
+          resolutions
+        )
+      );
     }
-    box.appendChild(fieldRow("color", committingInput(shadow.color, (raw) => apply("color", raw)).field));
 
     const inset = el("select") as HTMLSelectElement;
     inset.appendChild(new Option("drop", "false"));
@@ -1038,6 +1225,7 @@ function shadowEditor(line: Line): HTMLElement {
 function gridEditor(line: Line): HTMLElement {
   const list = gridList(line.entry.token.$value);
   const wrap = el("div");
+  const resolutions = memberResolutions(line);
 
   const write = (next: GridValue[]): string | null => editValue(line, next);
   const writeOrToast = (next: GridValue[]): void => {
@@ -1083,9 +1271,28 @@ function gridEditor(line: Line): HTMLElement {
               ? ""
               : String(grid.count)
             : formatDimension(grid[field]);
-      const input = committingInput(raw, (typed) => apply(field, typed));
-      input.input.placeholder = "empty = absent";
-      box.appendChild(fieldRow(field, input.field));
+
+      // `alignment` names one of Figma's own enum values and takes no pointer (§14.2), so it stays
+      // the plain input it was — a picker on it would offer paths the field then refuses.
+      if (gridMemberSpec(field).accepts === "literal") {
+        const input = committingInput(raw, (typed) => apply(field, typed));
+        input.input.placeholder = "empty = absent";
+        box.appendChild(fieldRow(field, input.field));
+        continue;
+      }
+
+      box.appendChild(
+        memberValueField(
+          line,
+          { key: field, label: field, ...gridMemberSpec(field) },
+          [index, field],
+          raw,
+          (typed) => apply(field, typed),
+          resolutions,
+          undefined,
+          "empty = absent"
+        )
+      );
     }
 
     wrap.appendChild(box);
@@ -1173,6 +1380,29 @@ function renderProvenance(line: Line): HTMLElement {
       details.appendChild(el("div", "mono", `${key} → ${bound[key]}`));
     }
     wrap.appendChild(details);
+
+    // §14.7 — the two can now both exist, so the overlay says which one applies. Only when they
+    // **disagree**: re-authoring what Figma already bound is the common case, and two lines agreeing
+    // needs no commentary. Grey, not amber, for the same reason §6.2's resolve line is grey —
+    // nothing is broken and nothing needs the user.
+    // Keyed by the slot's full address, not its bare name: two shadow layers both have a `blur`, and
+    // `shadowBoundVariables` files a multi-layer binding as `shadows.<index>.<field>` for exactly
+    // that reason. A bare-name lookup would read layer 1's binding against layer 2's authored value
+    // and announce a disagreement that doesn't exist.
+    const layers = memberLayerCount(line.entry.token.$value);
+    for (const slot of nonLiteralMembers(line.entry.token)) {
+      const binding = firstDefined(bound, memberBindingKeys(slot, layers));
+      if (binding === undefined) continue;
+      const authored = String(slot.value);
+      if (String(binding) === authored) continue;
+      wrap.appendChild(
+        el(
+          "div",
+          "muted",
+          `Figma binds \`${slot.label}\` to ${String(binding)}. This token's own value points at ${authored}, and that's what applies.`
+        )
+      );
+    }
   }
 
   const extras = figma.text ?? {};
@@ -1187,6 +1417,14 @@ function renderProvenance(line: Line): HTMLElement {
   }
 
   return wrap;
+}
+
+/** The first of `keys` the map actually carries — `memberBindingKeys`' most-specific-first order. */
+function firstDefined(map: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(map, key)) return map[key];
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
