@@ -3,6 +3,7 @@
 **Status**: Accepted
 **Date**: 2026-09-01
 **Accepted**: 2026-09-02 — Phase 4 built and merged against this ADR unamended (issue #7, PR #8), and Phase 5 (ADR-0005) then built on §1's two stores, §2's entry shape and §4's merge table without changing them.
+**Revision**: 2 — amended 2026-09-05, see [Amendment 1](#amendment-1--2026-09-05--confirmed-subtypes-travel-through-the-repo)
 **Owner**: @tech-lead
 
 ## Context
@@ -66,6 +67,8 @@ Each entry records:
 They go where they already go: `userSubtypes`, keyed by `variableId`, fed into `BuildOptions`, producing `subtypeSource: "user"`. That mechanism already round-trips, is already persisted, and is already the thing ADR-0002 §3 makes the committed files authoritative for at Phase 6.
 
 Routing subtype changes through the new overlay would give one concern two storage paths that could disagree. The Phase 4 editor's subtype dropdown writes the existing store; only `$value`, `$description`, and deletion are overlay operations.
+
+> **Amended 2026-09-05.** The claim *"that mechanism already round-trips"* was true of a re-import and false of a push/pull to a second machine until issue #23 wired the read side. See [Amendment 1](#amendment-1--2026-09-05--confirmed-subtypes-travel-through-the-repo).
 
 ### 4. Rescan is a three-way merge, and stops being destructive
 
@@ -148,3 +151,35 @@ Realistically the overlay is a few KB. The ceiling exists so that the failure mo
 - PRD §6.1, §6.4, §8, §9 Phase 4; GitHub issue #7
 - Phase 2/3 implementation: `src/code.ts` (`resolveStorageKey`, `loadUserSubtypes`, `handleSetSubtypes`), `src/tokens/merge.ts`, `src/tokens/types.ts`
 - Figma plugin docs — `figma.clientStorage`: 5MB per plugin, per user, per device; unsynced; clearable by the user
+
+---
+
+## Amendment 1 — 2026-09-05 — confirmed subtypes travel through the repo
+
+**Status**: Accepted. Owned by `@tech-lead` like the rest of this ADR; drafted from the implementation of issue #23 (Phase 10). Records what the code now does, and corrects a sentence in §3 that had been read as a promise the implementation never kept.
+
+### Why
+
+§3 said subtype edits "go where they already go: `userSubtypes` … that mechanism already round-trips, is already persisted, and is already the thing ADR-0002 §3 makes the committed files authoritative for at Phase 6." Two of those three were true. The mechanism round-tripped a **re-import on the same machine**; it was never pointed at the committed files, because Phase 6 shipped `extractUserSubtypes` and `extractUserSubtypesFromFiles` without a caller. So the last clause described an intent, not a behaviour, and the consequence was a real bug: a second machine pulling the same tree rebuilt every confirmed token as `subtypeSource: "default"`, re-asked for all of them, and — since the rebuilt `$extensions` no longer matched the repo's — read an untouched tree as a file to push.
+
+`README.md` and this ADR disagreed about it, which is how the gap survived four phases (`docs/ux/user-journeys.md` §13d gap 16 called the contradiction before anyone checked which side was right).
+
+### What is true now
+
+- A confirmed subtype is **build metadata that is committed**: `build.ts` writes `subtype` / `subtypeSource` into the token's `$extensions."com.tokenvault"` (ADR-0002 §3), so it has always been part of the pushed bytes. That half needed no change.
+- Every repo tree that reaches the sandbox — `git-repo-baseline`, which fires on a connect that adopts the repo and after every pull — is read for `subtypeSource: "user"` tags via `extractUserSubtypesFromFiles`, and `adoptUserSubtypes` merges them into this device's `userSubtypes` before the rebuild.
+- **Adoption fills gaps only.** An id this device has already answered keeps its answer, for §4's reason: the repo's version is one pull away and an overwritten local decision is gone. A genuine disagreement is therefore kept locally and shows up as a file to push, which is where the two devices settle it.
+- Adoption is **not** a write in ADR-0006 §5's sense. A subtype never reaches the Figma document — its only consumers are `$extensions` and the editor's `subtypeWarning` — so there is nothing for it to mutate. Pulled *values* and *descriptions* are unchanged: they still land as pending overlay entries and still go to Figma only through the apply flow.
+- `clientStorage` remains the per-device store the build reads from. It is now a working copy of an answer whose durable home is the repo, which is exactly the demotion §3 predicted.
+
+### What is unchanged
+
+- Subtypes still do not go in the overlay. §3's actual decision stands, and this amendment is the reason it stands: two storage paths for one concern is precisely what adoption avoids by keeping `userSubtypes` the single build input.
+- The **edit overlay** and the **PAT** stay per-device (§1, ADR-0006 §1). That is deliberate and out of scope for #23: an edit is uncommitted work, and a PAT is a credential.
+- The 5MB budget is untouched — the tag store is a few hundred bytes and gains nothing here.
+
+### References
+
+- GitHub issue #23; `docs/ux/user-journeys.md` §13d gap 16, §14 open question 1
+- `src/tokens/subtype.ts` (`adoptUserSubtypes`), `src/code.ts` (`adoptRepoSubtypes`, `setRepoBaseline`)
+- `test/subtypeSync.test.ts` — the push-side write and the pull-side read, including diff stability

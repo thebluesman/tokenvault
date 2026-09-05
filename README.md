@@ -30,9 +30,16 @@ Every local variable collection and every mode becomes the DTCG token tree defin
 
 Number variables whose Figma `VariableScope` says nothing useful are tagged `spacing` with
 `subtypeSource: "default"` and listed for confirmation; duration and easing are never
-auto-detectable and only ever arrive as an explicit user tag (PRD §6.1). User tags are held in
-Figma's `clientStorage`; Phase 6 gives the plugin a real working copy in a connected repo, but
-tags still live in the overlay regardless of connection state.
+auto-detectable and only ever arrive as an explicit user tag (PRD §6.1).
+
+User tags are **not** overlay entries — they are a build input, keyed by Figma variable id
+(ADR-0004 §3). This machine's copy lives in `clientStorage`, but the durable home is the repo: a
+confirmed tag is written into the token's `$extensions."com.tokenvault"` and pushed with the file,
+and every repo tree the plugin reads back — connecting with *adopt the repo*, and every pull —
+is scanned for `subtypeSource: "user"` tags and adopts the ones this machine has no answer for.
+So a confirmation made on a laptop reaches the desktop through git, and the desktop stops re-asking.
+Adoption never overwrites a local answer: where the two genuinely disagree the local one is kept and
+the file reads as one to push. (The edit overlay and the PAT stay per-device by design — ADR-0004.)
 
 Every local paint, text, effect and grid style becomes four synthetic, mode-free token sets under
 `tokens/styles/`, per [ADR-0003](docs/adr/0003-styles-token-schema.md) — paint → `color`, text →

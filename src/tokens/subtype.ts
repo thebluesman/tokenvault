@@ -9,6 +9,7 @@ import type {
   TokenType,
 } from "./types";
 import { isToken } from "./paths";
+import { compareKeys } from "./serialize";
 
 export const NUMBER_SUBTYPES: Subtype[] = [
   "spacing",
@@ -95,10 +96,10 @@ export function resolveSubtype(
  * Reads `subtypeSource: "user"` tags back out of a previously generated token tree, keyed by
  * Figma variable id (ADR §3, last bullet).
  *
- * Phase 2 has no git working copy to read from — that lands in Phase 6 — so the plugin also
- * mirrors user tags into `clientStorage`. This function is what Phase 6 will point at the real
- * `tokens/` tree, and it is the authority when both are available: the committed files are the
- * source of truth, `clientStorage` is only a local cache.
+ * Wired into the sync path as of issue #23: `src/code.ts` runs it over the repo tree every time one
+ * arrives (connect-and-adopt, and after every pull) and feeds the result through
+ * `adoptUserSubtypes`. `clientStorage` remains the per-device store the build reads from; the
+ * committed files are what let a confirmation made on one machine reach another at all.
  */
 export function extractUserSubtypes(tree: TokenGroup): Record<string, SubtypeSelection> {
   const result: Record<string, SubtypeSelection> = {};
@@ -139,4 +140,57 @@ export function extractUserSubtypesFromFiles(trees: TokenGroup[]): Record<string
     }
   }
   return merged;
+}
+
+export interface SubtypeAdoption {
+  /** The tags to hold locally after the repo has been read. */
+  subtypes: Record<string, SubtypeSelection>;
+  /** Variable ids taken from the repo — this device had no answer for them. */
+  adopted: string[];
+  /** Variable ids where this device's own answer differed and was kept. */
+  kept: string[];
+}
+
+/**
+ * Reconciles the repo's confirmed subtypes with this device's — issue #23.
+ *
+ * Confirmations are keyed by Figma variable id, and a variable id belongs to the *document*, not to
+ * the machine that read it: two people opening the same file see `VariableID:1:4` as the same
+ * variable. That is what makes a tag committed by one device meaningful to another, and it is why
+ * ADR-0002 §3's last bullet can call the committed files the authority for `subtypeSource: "user"`.
+ *
+ * **A local answer is never overwritten.** Adoption fills gaps only: an id this device has already
+ * answered keeps its answer and is reported in `kept`, on ADR-0004 §4's reasoning — the repo's
+ * version is one pull away, and a local decision overwritten in place is simply gone. A `kept` id is
+ * a real disagreement and will read as a file to push, which is the honest outcome: the two devices
+ * genuinely say different things, and the push/pull pair is where that gets settled.
+ *
+ * Nothing here is a write of any kind. A subtype is build metadata — it reaches `$extensions` and
+ * the panel's warnings and nothing else (`src/tokens/edit.ts`'s `subtypeWarning` is its only other
+ * consumer), so it never becomes a Figma mutation and ADR-0006 §5's "a pull never writes to Figma"
+ * is not in play. Pulled *values* still land as pending overlay entries, unchanged.
+ */
+export function adoptUserSubtypes(
+  local: Record<string, SubtypeSelection>,
+  remote: Record<string, SubtypeSelection>
+): SubtypeAdoption {
+  const subtypes: Record<string, SubtypeSelection> = {};
+  for (const key of Object.keys(local)) subtypes[key] = local[key];
+
+  const adopted: string[] = [];
+  const kept: string[] = [];
+
+  // Sorted so the two report lists are stable whatever order the repo files were read in — the
+  // same reason every other list that crosses `postMessage` in this codebase is sorted.
+  for (const variableId of Object.keys(remote).sort(compareKeys)) {
+    const mine = local[variableId];
+    if (mine === undefined) {
+      subtypes[variableId] = remote[variableId];
+      adopted.push(variableId);
+      continue;
+    }
+    if (mine !== remote[variableId]) kept.push(variableId);
+  }
+
+  return { subtypes, adopted, kept };
 }
