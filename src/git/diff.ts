@@ -161,3 +161,17 @@ export function advanceBase(
   }
   return next;
 }
+
+/**
+ * Whether this push is the one that creates the tokens folder — UX `onboarding-polish.md` §6.3.
+ *
+ * True only when every file the panel wants to push is absent from the repo and there is nothing
+ * to pull or reconcile. That combination has exactly one cause: a first push into an empty folder,
+ * where *"12 changes"* would describe twelve files that have never existed. It is not a first-run
+ * mode and it does not change a number — the count is the same count, under a truer heading.
+ */
+export function isFirstPush(status: SyncStatus): boolean {
+  if (status.toPush.length === 0) return false;
+  if (status.toPull.length > 0 || status.diverged.length > 0) return false;
+  return status.toPush.every((file) => file.remoteSha === undefined);
+}

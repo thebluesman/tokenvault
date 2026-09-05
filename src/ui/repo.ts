@@ -18,8 +18,10 @@
 import type { TokenGroup } from "../tokens/types";
 import type { FileStatus } from "../git/types";
 import { diffTrees, describeManifestChange, type FileDiff } from "../git/filediff";
+import { isFirstPush } from "../git/diff";
 import { button, el, toast } from "./dom";
 import { diffRow } from "./diffRow";
+import { threePlaceStrip } from "./threePlace";
 import { entryRefs } from "../tokens/overlay";
 import {
   branchName,
@@ -36,10 +38,12 @@ import {
   repoTreeFor,
   setsForFile,
   tokenCounts,
+  tokenExpiry,
 } from "./git";
 import { clearLastPull } from "./git";
 import { importedManifest, revertEntries } from "./state";
 import { failureText } from "./settings";
+import { expiryDetail, expiryHeadline } from "../git/patSetup";
 
 const repoEl = document.getElementById("repo") as HTMLElement;
 
@@ -152,6 +156,9 @@ function renderHome(): void {
   const body = el("div", "panel-body");
 
   if (git.settings === null) {
+    // `onboarding-polish.md` §7.1's third placement. The strip explains the system; the two lines
+    // under it are `git-sync.md` §11's own copy, untouched.
+    body.appendChild(threePlaceStrip("repo"));
     body.appendChild(el("p", undefined, "This file isn't connected to a repo."));
     body.appendChild(
       el("p", "empty", "Point it at a GitHub repo to push and pull your tokens.")
@@ -176,6 +183,21 @@ function renderHome(): void {
   again.addEventListener("click", () => void checkStatus());
   fresh.appendChild(again);
   body.appendChild(fresh);
+
+  // §4.4 — the one failure that arrives with no user action at all, pre-empted. Above the rate
+  // limit and the failure box because it is the only thing here that is about to stop working
+  // whether or not anything else on this screen is wrong.
+  const expiry = tokenExpiry();
+  const headline = expiryHeadline(expiry);
+  if (headline !== null) {
+    const entry = el("div", "entry");
+    entry.appendChild(el("div", undefined, `⚑ ${headline}`));
+    entry.appendChild(el("div", "empty", expiryDetail(expiry)));
+    const open = button("Open settings");
+    open.addEventListener("click", () => openSettingsFromRepo());
+    entry.appendChild(open);
+    body.appendChild(entry);
+  }
 
   const remaining = git.rateLimit === null ? undefined : git.rateLimit.remaining;
   if (remaining === null) {
@@ -467,6 +489,21 @@ function renderReview(): void {
       `${rows} change${rows === 1 ? "" : "s"} in ${checked.length} file${checked.length === 1 ? "" : "s"} → ${git.settings?.branch ?? "main"}`
     )
   );
+
+  // `onboarding-polish.md` §6.3 — `↑ 12` after the connect modal is exactly what the user chose,
+  // and stays. What changes is the file list's heading on a **first** push into an empty tokens
+  // folder, where "12 changes" describes twelve files that have never existed. `git-sync.md` §11
+  // already says this for the not-yet-staged case; this is the same sentence surviving one screen
+  // further, into the place the count appears.
+  if (isFirstPush(status)) {
+    body.appendChild(
+      el(
+        "div",
+        "empty",
+        `${checked.length} file${checked.length === 1 ? "" : "s"} · none of these exist in ${git.settings?.branch ?? "main"} yet. This first push creates them.`
+      )
+    );
+  }
 
   if (review.loading) body.appendChild(el("p", "empty", "Loading the diff…"));
 

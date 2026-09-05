@@ -17,7 +17,7 @@ Not a hypothetical token file. The Phase 3 fixture is a real capture of the Foli
 | **11 sets** across 4 collections + 4 style kinds | `$manifest.json` | Sets overlap on path: `Theme/Light` and `Theme/Dark` hold the same 289 dotted paths with different values. A merged browser (§10.2) has to fold those into one row instead of listing them twice. |
 | Panel is **460 × 640 px** | `src/code.ts` `figma.showUI` | No two-pane master/detail. One column, with the editor as an overlay. |
 | Token paths are **6–7 segments deep** (`folio.ref.palette.transparent.red-warm.50.30`) | `theme/light.json` | Full paths don't fit on a row. The tree has to carry the prefix so the row only shows the leaf. |
-| **132 unconfirmed subtypes**, **13 flagged**, **3 partial** | report counts | Import-quality state has to be visible *inside* the browser, not only on the post-scan report screen. |
+| **132 unconfirmed subtypes**, **13 flagged**, **3 partial** | report counts | Import-quality state has to be visible *inside* the browser, not only on the post-scan report screen. **Amended 2026-09-05** (issue #22): this row sized the queue and never specified a shape for it, so the Import tab's bulk controls got built without a spec. `onboarding-polish.md` §5 is now that spec — grouped by the guess, with a per-group confirm, a count in every bulk label, a confirm strip above 20 rows and a toast undo. |
 | Many `$value`s are already references (`{folio.ref.palette.red-warm.50}`) | `theme/light.json` | Aliasing is Phase 7, but aliased *data* exists in Phase 4. The editor must render references honestly without pretending it can resolve or edit them. |
 | Composite values carry 5–15 fields plus read-only provenance (`text` extras, `boundVariables`) | `styles/text.json` | Typography/shadow/grid can't be edited on a list row. |
 
@@ -366,7 +366,7 @@ Undo lives in the toast for 10 seconds; after that, the way back is *Undo all* o
 
 | When | Copy |
 |---|---|
-| Tokens tab, nothing imported, no local edits | **No tokens yet.** Scan the file on the Import tab to read its Variables and Styles. `[ Go to Import ]` |
+| Tokens tab, nothing imported, no local edits | *(three-place strip — `onboarding-polish.md` §7.1, added 2026-09-05)* **No tokens yet.** Scan the file on the Import tab to read its Variables and Styles. `[ Go to Import ]` |
 | Tokens tab, no cached import, **but the overlay has edits** (the cache was evicted or another file was opened — ADR-0004 §1) | **Scan the file to see your tokens.** Your 7 local edits are still here and will reapply after the scan. `[ Go to Import ]` — never let this read as "your edits are gone"; the overlay is durable and the import is the part that's re-derivable. |
 | Scan produced zero tokens | **Nothing importable in this file.** No Variables or Styles mapped to a token — see the Import tab's report for what was skipped. |
 | Set filter leaves nothing | **No tokens in the sets you've selected.** `[ Show all sets ]` |

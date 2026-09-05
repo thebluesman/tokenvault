@@ -20,22 +20,33 @@ import type { RepoSettings } from "../git/types";
 import { getAppearance, setAppearance } from "./appearance";
 import { DEFAULT_TOKENS_DIR, parseRepo } from "../git/state";
 import { normalizeTokensDir } from "../git/paths";
-import { button, el, toast } from "./dom";
+import { button, copy, el, toast } from "./dom";
 import { openModal } from "./applyDialog";
 import {
+  checkPastedToken,
   disconnect,
   getGit,
   probeRepo,
   saveSettings,
   seedBase,
   testConnection,
+  tokenExpiry,
 } from "./git";
+import {
+  NEW_TOKEN_URL,
+  expiryDetail,
+  expiryHeadline,
+  patChecklist,
+  patChecklistText,
+  statusLine as composeStatusLine,
+  tokenVerdict,
+  type TokenCheck,
+  type TokenVerdict,
+} from "../git/patSetup";
+import { renderHowItWorks } from "./threePlace";
 import { getModel } from "./state";
 
 const settingsEl = document.getElementById("settings") as HTMLElement;
-
-const TOKEN_DOCS =
-  "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens";
 
 let open = false;
 let onClose: () => void = () => undefined;
@@ -54,11 +65,23 @@ export function closeSettings(): void {
 
 export function openSettings(): void {
   open = true;
+  helpOpen = false;
   renderSettings();
 }
 
-/** Whether the gear should carry its one state mark — an amber `⚑` for a broken connection (§5.1). */
-export function connectionBroken(): boolean {
+/**
+ * Whether the gear carries its one state mark — `git-sync.md` §5.1, widened by
+ * `onboarding-polish.md` §4.4.
+ *
+ * §5.1's rule was *amber `⚑` when the connection is broken*, argued from the point that a settings
+ * icon decorated when everything is fine teaches the user to ignore it. That argument holds, so the
+ * rule widens rather than loosening: **the `⚑` means the connection needs you**, of which *broken*
+ * and *about to break* are two members. An expiring token is not "fine"; it is a scheduled outage,
+ * and it is the only failure in the product that arrives with no user action at all. Still not a
+ * count, and still never a green dot.
+ */
+export function connectionNeedsYou(): boolean {
+  if (tokenExpiry().state !== "none") return true;
   const failure = getGit().failure;
   if (failure === null) return false;
   return (
@@ -80,9 +103,21 @@ interface Draft {
   replacing: boolean;
   branches: string[] | null;
   note: string | null;
+  /** `onboarding-polish.md` §4.2 — open by default while the token field is empty. */
+  howOpen: boolean;
+  /** §4.3's in-place result. `null` until a token has been pasted and answered for. */
+  verdict: TokenVerdict | null;
+  /** The expiry the check found, carried into `RepoSettings.patExpiresAt` on save (§4.4). */
+  checkedExpiry: string | null;
+  /** A named failure from the paste-time check — a 401 or 404 keeps §11's own copy, verbatim. */
+  checkFailure: string | null;
+  checking: boolean;
 }
 
 let draft: Draft = blankDraft();
+
+/** The `How Tokenvault works` page — a screen of this overlay, not a tab (§7.2). */
+let helpOpen = false;
 
 function blankDraft(): Draft {
   const settings = getGit().settings;
@@ -94,6 +129,13 @@ function blankDraft(): Draft {
     replacing: settings === null,
     branches: null,
     note: null,
+    // Open while there is no stored token to collapse it, closed once there is one. Reopenable
+    // forever either way — the disclosure is the *how*, and someone remaking a token wants it back.
+    howOpen: !getGit().hasToken,
+    verdict: null,
+    checkedExpiry: null,
+    checkFailure: null,
+    checking: false,
   };
 }
 
@@ -104,6 +146,16 @@ export function renderSettings(): void {
 
   settingsEl.textContent = "";
   settingsEl.classList.remove("hidden");
+  // The in-place repaint targets belong to the tree being replaced. Dropped here so a stale node
+  // detached from the document can never be painted into.
+  checkResultEl = null;
+  disclosureEl = null;
+  statusEl = null;
+
+  if (helpOpen) {
+    renderHelpScreen();
+    return;
+  }
 
   const head = el("div", "panel-head");
   const back = button("←");
@@ -118,12 +170,19 @@ export function renderSettings(): void {
   body.appendChild(el("h3", undefined, "GitHub"));
 
   // --- Repository -----------------------------------------------------------
+  // First, because the token instructions name it (§4.1, §4.2).
   const repoInput = field(body, "Repository", draft.repo, "owner/repo");
   body.appendChild(el("div", "empty", "Paste a repo URL or type owner/repo."));
   repoInput.addEventListener("input", () => {
     draft.repo = repoInput.value;
     repoInput.classList.toggle("invalid", repoInput.value.trim().length > 0 && parseRepo(repoInput.value) === null);
   });
+
+  // --- Access token ---------------------------------------------------------
+  // **Above the branch picker** (§4.1). The old order put a dropdown populated by
+  // `GET …/branches` — a call needing a credential — above the field that supplies the credential,
+  // so a first-timer's second interaction with this screen was a control that could not load.
+  tokenSection(body);
 
   // --- Branch ---------------------------------------------------------------
   // A picker, not a free-text field: a typo'd branch name is a 404 the user then has to tell apart
@@ -175,52 +234,6 @@ export function renderSettings(): void {
     )
   );
 
-  // --- Access token ---------------------------------------------------------
-  const tokenWrap = el("div", "field");
-  tokenWrap.appendChild(el("label", undefined, "Access token"));
-  const pat = el("div", "pat-field");
-
-  if (draft.replacing) {
-    const input = el("input") as HTMLInputElement;
-    input.type = "password";
-    input.placeholder = "github_pat_…";
-    input.style.flex = "1";
-    input.addEventListener("input", () => {
-      draft.token = input.value;
-    });
-    pat.appendChild(input);
-    if (git.settings !== null) {
-      const cancel = button("Keep current");
-      cancel.addEventListener("click", () => {
-        draft.token = null;
-        draft.replacing = false;
-        renderSettings();
-      });
-      pat.appendChild(cancel);
-    }
-  } else {
-    // Inert. Not an `<input>` with a masked value — a mask rendered from stored metadata, so there
-    // is nothing in the DOM for a reveal toggle, an autofill, or a copy button to reach.
-    const mask = el("div", "pat-mask", git.hasToken ? `••••••••••••  ${git.settings?.patLastFour ?? "····"}` : "not set");
-    pat.appendChild(mask);
-    const replace = button("Replace");
-    replace.addEventListener("click", () => {
-      draft.replacing = true;
-      draft.token = "";
-      renderSettings();
-    });
-    pat.appendChild(replace);
-  }
-  tokenWrap.appendChild(pat);
-  body.appendChild(tokenWrap);
-
-  const scope = el("div", "empty");
-  scope.appendChild(
-    document.createTextNode("A fine-grained token for this repo only, with Contents: read and write. ")
-  );
-  scope.appendChild(link("How ↗", TOKEN_DOCS));
-  body.appendChild(scope);
-
   if (draft.note !== null) {
     const note = el("div", "entry");
     note.appendChild(el("div", undefined, draft.note));
@@ -239,7 +252,8 @@ export function renderSettings(): void {
 
   // --- Status line and the footer ------------------------------------------
   const foot = el("div", "panel-foot");
-  foot.appendChild(el("span", "note grow", statusLine()));
+  statusEl = el("span", "note grow", statusLine());
+  foot.appendChild(statusEl);
 
   const save = button("Save", "primary");
   save.addEventListener("click", () => void onSave());
@@ -273,6 +287,274 @@ export function renderSettings(): void {
   cut.addEventListener("click", () => confirmDisconnect());
   foot2.appendChild(cut);
   settingsEl.appendChild(foot2);
+
+  // §7.2 — a **footer** row, under `[ Disconnect ]`, rather than a body row, so it stays reachable
+  // when the fields above are full. Settings is the one place in the panel a person goes when they
+  // don't know something.
+  const foot3 = el("div", "panel-foot");
+  const how = button("How Tokenvault works");
+  how.addEventListener("click", () => {
+    helpOpen = true;
+    renderSettings();
+  });
+  foot3.appendChild(how);
+  settingsEl.appendChild(foot3);
+}
+
+/** §7.2's permanent page — one scrolling screen, reached from the Settings footer. */
+function renderHelpScreen(): void {
+  const head = el("div", "panel-head");
+  const back = button("←");
+  back.title = "Back to settings";
+  back.addEventListener("click", () => {
+    helpOpen = false;
+    renderSettings();
+  });
+  head.appendChild(back);
+  head.appendChild(el("div", "title", "How Tokenvault works"));
+  settingsEl.appendChild(head);
+
+  const body = el("div", "panel-body");
+  body.appendChild(renderHowItWorks());
+  settingsEl.appendChild(body);
+}
+
+// ---------------------------------------------------------------------------
+// The token field — UX `onboarding-polish.md` §4.2, §4.3
+// ---------------------------------------------------------------------------
+
+/** Debounce behind the paste-time check, so typing a token doesn't spend a request per keystroke. */
+let checkTimer = 0;
+
+/** Bumped per check, so a slow answer about an older string never overwrites a newer one. */
+let checkSequence = 0;
+
+/**
+ * The two regions of this screen that repaint **without** a full re-render, and why they must.
+ *
+ * The token field is a `<input type="password">` whose value is never read back out of the DOM
+ * (ADR-0006 §1), so rebuilding it mid-typing would silently discard what the user had pasted —
+ * `draft.token` would still hold it while the field showed nothing, which reads as the panel
+ * eating a credential. The paste-time check therefore repaints its own result strip and the
+ * footer's status line in place, the same way `changes.ts` repaints `drift-bulk` without
+ * rebuilding forty rows beneath it.
+ */
+let checkResultEl: HTMLElement | null = null;
+let disclosureEl: HTMLElement | null = null;
+let statusEl: HTMLElement | null = null;
+
+function paintTokenCheck(): void {
+  if (checkResultEl === null) return;
+  checkResultEl.textContent = "";
+  tokenResult(checkResultEl);
+  if (statusEl !== null) statusEl.textContent = statusLine();
+}
+
+function paintDisclosure(): void {
+  if (disclosureEl === null) return;
+  disclosureEl.textContent = "";
+  fillDisclosure(disclosureEl);
+}
+
+function tokenSection(body: HTMLElement): void {
+  const git = getGit();
+  const tokenWrap = el("div", "field");
+  tokenWrap.appendChild(el("label", undefined, "Access token"));
+  const pat = el("div", "pat-field");
+
+  if (draft.replacing) {
+    const input = el("input") as HTMLInputElement;
+    input.type = "password";
+    input.placeholder = "Paste a fine-grained token";
+    input.style.flex = "1";
+    input.addEventListener("input", () => {
+      draft.token = input.value;
+      // The check runs on paste and on blur (§4.3) — no button press. Debounced rather than fired
+      // per keystroke, because a token pasted character by character is still one token.
+      window.clearTimeout(checkTimer);
+      checkTimer = window.setTimeout(() => void runTokenCheck(), 500);
+    });
+    input.addEventListener("blur", () => {
+      window.clearTimeout(checkTimer);
+      void runTokenCheck();
+    });
+    pat.appendChild(input);
+    if (git.settings !== null) {
+      const cancel = button("Keep current");
+      cancel.addEventListener("click", () => {
+        draft.token = null;
+        draft.replacing = false;
+        draft.verdict = null;
+        draft.checkFailure = null;
+        renderSettings();
+      });
+      pat.appendChild(cancel);
+    }
+  } else {
+    // Inert. Not an `<input>` with a masked value — a mask rendered from stored metadata, so there
+    // is nothing in the DOM for a reveal toggle, an autofill, or a copy button to reach.
+    const mask = el("div", "pat-mask", git.hasToken ? `••••••••••••  ${git.settings?.patLastFour ?? "····"}` : "not set");
+    pat.appendChild(mask);
+    const replace = button("Replace");
+    replace.addEventListener("click", () => {
+      draft.replacing = true;
+      draft.token = "";
+      draft.howOpen = true;
+      renderSettings();
+    });
+    pat.appendChild(replace);
+  }
+  tokenWrap.appendChild(pat);
+  body.appendChild(tokenWrap);
+
+  // The eleven words that survive the disclosure being shut — `git-sync.md` §5.2's summary line,
+  // kept because the disclosure below is the *how*, not a replacement for the *what*.
+  body.appendChild(
+    el("div", "empty", "A fine-grained token for this repo only, with Contents: read and write.")
+  );
+
+  disclosureEl = el("div", "disclosure");
+  fillDisclosure(disclosureEl);
+  body.appendChild(disclosureEl);
+
+  checkResultEl = el("div");
+  tokenResult(checkResultEl);
+  body.appendChild(checkResultEl);
+
+  expiryNotice(body);
+}
+
+/** §4.2's inline, in-panel checklist. Was `[ How ↗ ]` — a link to a doc, from a plugin, about a website. */
+function fillDisclosure(wrap: HTMLElement): void {
+  const repoLabel = repoName();
+
+  const toggle = el("button", "disclosure-head", `${draft.howOpen ? "▾" : "▸"} How to make one`);
+  toggle.addEventListener("click", () => {
+    draft.howOpen = !draft.howOpen;
+    // Repainted in place rather than re-rendered: opening the checklist while a token sits in the
+    // field above must not take that token off the screen.
+    paintDisclosure();
+  });
+  wrap.appendChild(toggle);
+  if (!draft.howOpen) return;
+
+  const inner = el("div", "disclosure-body");
+  inner.appendChild(
+    el("p", "empty", "You do this on github.com — Tokenvault can't create a token for you.")
+  );
+
+  patChecklist(repoLabel).forEach((step, index) => {
+    const row = el("div", "step");
+    row.appendChild(el("span", "step-n", String(index + 1)));
+    row.appendChild(el("span", "grow", step));
+    inner.appendChild(row);
+  });
+
+  const actions = el("div", "toolbar");
+  // The new-token form, not a doc: the user doesn't need reading, they need to be on the right page
+  // with the right three answers in hand.
+  actions.appendChild(link("Open GitHub ↗", NEW_TOKEN_URL));
+  // The panel is about to be behind a browser window, and a checklist you cannot see is not one.
+  const copyThree = button("Copy these 3");
+  copyThree.addEventListener("click", () => copy(patChecklistText(repoLabel), "the 3 steps"));
+  actions.appendChild(copyThree);
+  inner.appendChild(actions);
+
+  wrap.appendChild(inner);
+}
+
+/** The three lines §4.3 asks for, in place, under the field. */
+function tokenResult(body: HTMLElement): void {
+  if (draft.checking) {
+    body.appendChild(el("div", "empty", "Checking this token…"));
+    return;
+  }
+  if (draft.checkFailure !== null) {
+    const box = el("div", "entry");
+    box.appendChild(el("div", undefined, draft.checkFailure));
+    body.appendChild(box);
+    return;
+  }
+  if (draft.verdict === null) return;
+
+  const verdict = draft.verdict;
+  const box = el("div", verdict.tone === "ok" ? "entry info" : "entry");
+  box.appendChild(el("div", undefined, `${verdict.tone === "ok" ? "●" : "⚑"} ${verdict.headline}`));
+  for (const line of verdict.detail) box.appendChild(el("div", "empty", line));
+  if (verdict.offerGitHub) {
+    const actions = el("div", "toolbar");
+    actions.appendChild(link("Open GitHub ↗", NEW_TOKEN_URL));
+    box.appendChild(actions);
+  }
+  body.appendChild(box);
+}
+
+/** §4.4 — the stored token's expiry, said before it becomes a 401 nobody can explain. */
+function expiryNotice(body: HTMLElement): void {
+  const expiry = tokenExpiry();
+  const headline = expiryHeadline(expiry);
+  if (headline === null) return;
+  const box = el("div", "entry");
+  box.appendChild(el("div", undefined, `⚑ ${headline}`));
+  box.appendChild(el("div", "empty", expiryDetail(expiry)));
+  body.appendChild(box);
+}
+
+function repoName(): string {
+  const parsed = parseRepo(draft.repo);
+  if (parsed !== null) return `${parsed.owner}/${parsed.repo}`;
+  const settings = getGit().settings;
+  return settings === null ? "your repo" : `${settings.owner}/${settings.repo}`;
+}
+
+/**
+ * Runs §4.3's check against whatever is currently in the field.
+ *
+ * Silent when there is nothing to check — an empty field or an unparseable repo is not a failure,
+ * it is a form half filled in, and saying so would be noise at exactly the wrong moment.
+ */
+async function runTokenCheck(): Promise<void> {
+  const candidate = draft.token;
+  const parsed = parseRepo(draft.repo);
+  if (candidate === null || candidate.trim().length === 0 || parsed === null) {
+    if (draft.verdict !== null || draft.checkFailure !== null) {
+      draft.verdict = null;
+      draft.checkFailure = null;
+      paintTokenCheck();
+    }
+    return;
+  }
+
+  checkSequence += 1;
+  const sequence = checkSequence;
+  draft.checking = true;
+  draft.checkFailure = null;
+  paintTokenCheck();
+
+  const result = await checkPastedToken(parsed.owner, parsed.repo, candidate.trim());
+  if (sequence !== checkSequence) return;
+
+  draft.checking = false;
+  if (result.ok) {
+    applyCheck(result.check, `${parsed.owner}/${parsed.repo}`);
+  } else {
+    // A 401 stays *"GitHub rejected the token"* and a 404 stays *"Can't find owner/repo"* — §11's
+    // copy, unchanged. Only the read-only case moves; this is a scheduling change, not a rewrite.
+    draft.verdict = null;
+    draft.checkedExpiry = null;
+    draft.checkFailure = failureText(
+      result.failure.kind,
+      result.failure.message,
+      result.failure.rateLimitReset
+    );
+  }
+  paintTokenCheck();
+}
+
+function applyCheck(check: TokenCheck, repoLabel: string): void {
+  draft.verdict = tokenVerdict(check, repoLabel);
+  draft.checkedExpiry = check.expiresAt;
+  draft.checkFailure = null;
 }
 
 /**
@@ -312,12 +594,24 @@ function appearanceSection(into: HTMLElement): void {
   into.appendChild(el("div", "empty", "Auto follows Figma's own theme."));
 }
 
+/**
+ * §4.5 — the status line says what is missing, not that the button is off.
+ *
+ * The shape lives in `patSetup.ts` so it can be reasoned about without a DOM; this reads the two
+ * view models and hands it the answer. `hasToken` counts a typed-but-unsaved one: the field is
+ * filled in, and telling someone they need a token while they are looking at the one they just
+ * pasted is worse than saying nothing.
+ */
 function statusLine(): string {
   const git = getGit();
-  if (git.settings === null) return "● Not connected";
-  if (git.sync === null) return "● Not connected for this file";
-  if (git.failure !== null) return "⚑ Connection problem";
-  return `● Connected · ${git.settings.branch}`;
+  return composeStatusLine({
+    settings: git.settings,
+    hasToken: git.hasToken || (draft.token !== null && draft.token.trim().length > 0),
+    connectedForFile: git.sync !== null,
+    draftRepo: parseRepo(draft.repo) !== null,
+    failure: git.failure !== null,
+    checked: git.checkedAt !== null || draft.verdict !== null,
+  });
 }
 
 function field(into: HTMLElement, label: string, value: string, placeholder: string): HTMLInputElement {
@@ -355,6 +649,11 @@ async function onSave(): Promise<void> {
     branch: draft.branch.trim().length === 0 ? "main" : draft.branch.trim(),
     tokensDir: normalizeTokensDir(draft.tokensDir),
     patLastFour: getGit().settings?.patLastFour,
+    // §4.4: the expiry the paste-time check learned, kept beside the token's last four. A save that
+    // doesn't replace the token keeps whatever was already recorded — the date belongs to the
+    // credential, not to this visit to the screen.
+    patExpiresAt:
+      draft.token === null ? getGit().settings?.patExpiresAt : (draft.checkedExpiry ?? undefined),
   };
 
   // `draft.token` is `null` for "leave the stored one alone" and a string for "replace it". The
@@ -365,6 +664,10 @@ async function onSave(): Promise<void> {
   draft.replacing = false;
   draft.token = null;
   draft.note = null;
+  // The disclosure collapses once a valid token is stored (§4.2) — reopenable forever.
+  if (token !== undefined && draft.verdict !== null && draft.verdict.tone === "ok") {
+    draft.howOpen = false;
+  }
   renderSettings();
 
   await maybeFirstConnect();

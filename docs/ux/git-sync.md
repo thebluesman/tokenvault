@@ -174,6 +174,8 @@ A **gear icon in the header**, right of the tabs, opening a full-panel Settings 
 
 The gear carries **one state mark and only one**: an amber `⚑` when the connection is broken (bad token, missing repo, missing branch). Not a count, not a green dot when healthy. A settings icon that is decorated when everything is fine teaches the user to ignore its decoration.
 
+> **Amended 2026-09-05** (`onboarding-polish.md` §4.4, issue #22). The rule widens rather than loosening: **the `⚑` means the connection needs you**, of which *broken* and *about to break* are two members. A token inside 7 days of expiry lights it. The argument above holds — an expiring token is not "fine", it is a scheduled outage, and it is the only failure in the product that arrives with no user action at all. Still not a count, still never a green dot.
+
 ### 5.2 The Settings overlay
 
 ```
@@ -216,6 +218,15 @@ Decisions, and why:
 - **`[ Test connection ]` is explicit and always available.** It runs the status check and reports in place — `● Connected · main · checked just now`, or the §11 failure copy right below the field that caused it. Every field here can be wrong in a way that only GitHub can tell you about, so there is a button that asks GitHub.
 - **`[ Disconnect ]` is not destructive styling and not red.** It clears the repo settings and `tokenvault:sync:<file-id>`; it touches no tokens, no Figma, and nothing in the repo. It does prompt once — *"Disconnect from thebluesman/folio-tokens? Your tokens and local changes stay exactly as they are; drift goes back to comparing against your last scan."* — because the last clause is a real consequence nobody would predict (§10).
 - **Repo, branch and token are the user's; the connection is the file's.** ADR-0006 §3 stores the credential per user and the sync state per Figma file. The panel doesn't explain this, but it shows it: open a second Figma file and Settings already has the repo and token filled in, with the connection not yet established for that file. The status line is the tell — `● Not connected for this file · [ Connect ]`.
+
+> **Amended 2026-09-05** (`onboarding-polish.md` §4.1–§4.5, issue #22). Four changes to this screen, shipped:
+>
+> - **Field order is Repository → Access token → Branch → Tokens folder.** The branch picker is populated by a call that needs a credential, so it sat above the field that would have made it load.
+> - **`[ How ↗ ]` is gone**, replaced by an inline three-step checklist under the token field — GitHub's own control names, the repo interpolated into step 1, `[ Open GitHub ↗ ]` to the new-token form and `[ Copy these 3 ]`. Open by default while the field is empty, collapsed once a valid token is stored, reopenable forever. The scope sentence above it is unchanged and is now the collapsed summary.
+> - **The token is checked on paste and on blur**, not at first push. A token scoped to Contents: **Read** is named where it was made — *"This token can read `owner/repo`, but not write to it. Step 2 above is the one to change."* `[ Test connection ]` survives unchanged; it stops being the thing a first-timer must know to press. Where GitHub's repo response carries no `permissions` block, the copy downgrades to a warning — *"We couldn't confirm this token can push"* — rather than a verdict.
+> - **The status line names what is missing**: `● Needs a repo and a token` / `● Needs a token` / `● Needs a repo` / `● Not checked yet`, in the same slot, with the same dot.
+>
+> A **`How Tokenvault works`** row now sits in this overlay's footer, under `[ Disconnect ]` (`onboarding-polish.md` §7.2).
 
 ### 5.3 First connect — the one-time bootstrap
 
@@ -662,12 +673,20 @@ Two confirmations, and they do not duplicate each other: one is about scale, one
 
 | When | Copy |
 |---|---|
-| Repo tab, not connected | **This file isn't connected to a repo.** Point it at a GitHub repo to push and pull your tokens. `[ Open settings ]` |
+| Repo tab, not connected | *(three-place strip — `onboarding-polish.md` §7.1)* **This file isn't connected to a repo.** Point it at a GitHub repo to push and pull your tokens. `[ Open settings ]` |
 | Repo tab, connected, nothing to do | **Everything's pushed.** `main` matches your tokens. *(green, per Phase 5 §8)* |
 | Review & push with nothing checked | `[ Commit to main ]` disabled, `Nothing selected` beneath it |
 | Repo has no tokens folder yet | **Nothing in `tokens/` yet.** Your first push creates it. |
 | Pull with nothing incoming | *(no modal)* toast: **`main` has nothing new.** |
 | Settings, never configured | Fields empty, status line reads `● Not connected`, `[ Test connection ]` disabled until a repo and token exist |
+
+> **Amended 2026-09-05** (`onboarding-polish.md` §4.3–§4.5, §6.3, §7.1, issue #22):
+>
+> - *Settings, never configured* now reads `● Needs a repo and a token`, and narrows as fields are filled (§4.5). The disabled button is unchanged; it is no longer the only thing explaining itself.
+> - *Repo tab, not connected* gains the three-place strip above its existing copy (§7.1).
+> - The **read-only token** row below moves its first catch to paste time. Its copy is unchanged for the push case, which can still happen with a token that was narrowed after it was stored.
+> - Two rows added: **token expiring** — *Your GitHub token expires in 5 days. Replace it before it lapses, or pushes will start failing.* `[ Open settings ]` — and **token expired** — *Your GitHub token has expired. Make a new one on GitHub and paste it in settings.* Both render in Settings and on the Repo tab, and both light the gear's `⚑` (§4.4).
+> - The Review & push screen's first push into an empty folder heads its file list *"12 files · none of these exist in `main` yet. This first push creates them."* — the same sentence as *Repo has no tokens folder yet*, surviving one screen further (§6.3).
 
 ### Error and degraded states
 
