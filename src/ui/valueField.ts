@@ -24,6 +24,7 @@ import { checkAuthoredValue, resolveValue, referencePathsOf } from "../tokens/re
 import { cycleFromCandidate, describeCycle, graphNodeKey } from "../tokens/graph";
 import { looksLikeExpression, noOpReferenceIn, valueShape } from "../tokens/expr";
 import { isReference, referenceTarget } from "../tokens/references";
+import type { MemberAccepts, MemberType } from "../tokens/members";
 import { normalizePathKey } from "../tokens/paths";
 import { getModel } from "./state";
 import { previewOf, truncateReference } from "../tokens/preview";
@@ -87,6 +88,15 @@ function describeResolved(value: unknown): string {
   if (value === undefined) return "—";
   if (typeof value === "number") return String(value);
   if (typeof value === "string") return value;
+  // A composite member's target is frequently a dimension, and `{"unit":"px","value":20}` is a
+  // worse answer than `20px` to *what does this come out as* (§14.1 — a member field is an ordinary
+  // value field, so its resolve line has to read like one).
+  if (value !== null && typeof value === "object") {
+    const record = value as { unit?: unknown; value?: unknown };
+    if (typeof record.value === "number" && typeof record.unit === "string") {
+      return `${record.value}${record.unit}`;
+    }
+  }
   return JSON.stringify(value);
 }
 
@@ -192,8 +202,7 @@ export function pickerGroups(
   entry: FlatToken,
   query: string,
   context: ResolveContext,
-  wantNumber: boolean,
-  wantType: string
+  accepted: Set<string>
 ): PickerGroups {
   const needle = query.trim().toLowerCase();
   const from = graphNodeKey(entry.setId, entry.path);
@@ -234,7 +243,9 @@ export function pickerGroups(
       context.stack.has(key)
         ? new Set([target.token.$type])
         : context.everywhereTypes.get(key) ?? new Set([target.token.$type]);
-    const compatible = types.has(wantNumber ? "number" : wantType);
+    // A set rather than one type, because a composite member can take more than one: `fontWeight` is
+    // `number | string` (§14.2), so both are "can be used here" and rule 2 fires for the rest.
+    const compatible = Array.from(types).some((one) => accepted.has(one));
     if (compatible) groups.usable.push(row);
     else groups.wrongType.push(row);
 
@@ -248,12 +259,12 @@ export function pickerGroups(
 export function buildPicker(
   entry: FlatToken,
   query: string,
-  wantNumber: boolean,
-  wantType: string,
+  accepted: Set<string>,
   choose: (path: string) => void
 ): HTMLElement {
   const model = getModel();
-  const groups = pickerGroups(entry, query, model.resolve, wantNumber, wantType);
+  const groups = pickerGroups(entry, query, model.resolve, accepted);
+  const wanted = listAccepted(accepted);
   const wrap = el("div");
 
   if (groups.usable.length + groups.wrongType.length + groups.wouldLoop.length === 0) {
@@ -268,12 +279,12 @@ export function buildPicker(
       el(
         "div",
         "empty",
-        `Nothing of type ${wantNumber ? "number" : wantType} matches "${query.trim()}". The paths below are other types and can't be used here.`
+        `Nothing of type ${wanted} matches "${query.trim()}". The paths below are other types and can't be used here.`
       )
     );
   }
 
-  appendGroup(wrap, `${wantNumber ? "number" : wantType} — can be used here`, groups.usable, choose);
+  appendGroup(wrap, `${wanted} — can be used here`, groups.usable, choose);
   appendGroup(wrap, "other types — can't be used here", groups.wrongType, undefined);
   appendGroup(wrap, "would make a loop", groups.wouldLoop, undefined);
 
@@ -283,6 +294,13 @@ export function buildPicker(
     wrap.appendChild(el("div", "empty", `Values shown for ${model.activeTheme.name}.`));
   }
   return wrap;
+}
+
+/** `number`, `number or string` — the picker's own name for what this field takes. */
+function listAccepted(accepted: Set<string>): string {
+  const names = Array.from(accepted).sort();
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
 }
 
 function appendGroup(
@@ -320,13 +338,20 @@ function appendGroup(
  * rather than after-the-fact badges. The one that warns commits first and explains second, because
  * the user just did a legitimate thing and nothing needs them (§5.4).
  */
-export function authorValue(line: Line, raw: string): AuthorOutcome {
+export function authorValue(
+  line: Line,
+  raw: string,
+  member?: { key: string; type: MemberType; accepts: MemberAccepts }
+): AuthorOutcome {
   const model = getModel();
   return checkAuthoredValue({
     entry: line.entry,
     raw,
     context: model.resolve,
     themeStacks: model.themeStacks,
+    // §14.4: the same four rules, with rule 2 reading the **member's** type. Passing the spec down
+    // rather than re-checking here is what keeps one rule set for scalars and members alike.
+    member,
   });
 }
 

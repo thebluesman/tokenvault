@@ -879,8 +879,14 @@ function colorSwatch(color: string): HTMLElement {
 }
 
 function appendValue(container: HTMLElement, line: Line, row: Row): void {
-  const preview = previewOf(line.entry.token);
   const resolution = resolutionFor(line);
+  // A composite renders its **resolved** summary (UX §14.5): `Urbanist 20/24 · 500`, not the 140
+  // characters of raw paths its `$value` holds. Members that don't resolve come through as `—`,
+  // which `previewOf` produces from the substituted value rather than from a second rule here.
+  const preview = previewOf(
+    line.entry.token,
+    resolution.kind === "composite" ? resolution.value : undefined
+  );
 
   // §7.3b — a token on a loop carries `⚑ cycle` on its value line and its preview is `—`. No
   // number, no swatch, no stale value: a silently wrong number is strictly worse than a visible
@@ -954,7 +960,32 @@ function appendValue(container: HTMLElement, line: Line, row: Row): void {
   //
   // There is deliberately **no new glyph for an expression**, and the absence is the signal. What
   // an expression risks being mistaken for is a *link*, so the honest mark is the missing `↗`.
-  if (resolution.kind === "expression") {
+  // §14.5 — one trailing `↗` on a composite whose members point somewhere. No new glyph and no new
+  // colour: `↗` already exists and already means *some part of this points elsewhere*. Which parts
+  // is the overlay's answer, which is where composites have always been edited.
+  if (preview.memberPointer === true) {
+    const glyph = el("span", "glyph", "↗");
+    glyph.title = "Some fields of this token point at other tokens. Open it to see which.";
+    container.appendChild(glyph);
+  }
+
+  if (resolution.kind === "composite") {
+    // §14.6 — the *member* is valueless, not the token, so the badge sits beside a preview that
+    // still shows the four members that are fine. The header count is unchanged: it counts loops.
+    const cycled = (resolution.members ?? []).filter((one) => one.resolution.kind === "cycle");
+    const unresolved = (resolution.members ?? []).filter(
+      (one) => one.resolution.kind === "unresolved"
+    );
+    if (cycled.length > 0) {
+      const badge = el("span", "badge needs", "⚑ cycle");
+      badge.title = `${cycled.map((one) => one.slot.label).join(", ")} ${cycled.length === 1 ? "is" : "are"} part of a loop, so ${cycled.length === 1 ? "it has" : "they have"} no value.`;
+      container.appendChild(badge);
+    } else if (unresolved.length > 0) {
+      const badge = el("span", "badge needs", "⚑ unresolved");
+      badge.title = `${unresolved.map((one) => one.slot.label).join(", ")} ${unresolved.length === 1 ? "points" : "point"} at something with no value in the active theme. Nothing is broken.`;
+      container.appendChild(badge);
+    }
+  } else if (resolution.kind === "expression") {
     container.appendChild(el("span", "muted", `= ${String(resolution.value)}`));
   } else if (resolution.kind === "unresolved") {
     const badge = el("span", "badge needs", "⚑ unresolved");

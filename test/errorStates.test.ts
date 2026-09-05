@@ -164,7 +164,12 @@ test("a blocked cycle row can open the loop", () => {
   assert.equal(/cycleBlock\(/.test(dialog), true);
   // Same block, not a second rendering of a loop — §7.2 is one component, three callers.
   assert.equal(/function cycleBlock/.test(dialog), false);
-  assert.equal(/CYCLE_REASONS = \["alias-cycle", "expression-cycle"\]/.test(dialog), true);
+  // `member-cycle` joined the list for issue #26 — a composite whose member is on a loop blocks as
+  // one row (UX §14.6) and opens the same block.
+  assert.equal(
+    /CYCLE_REASONS = \["alias-cycle", "expression-cycle", "member-cycle"\]/.test(dialog),
+    true
+  );
   // Keyed by `(setId, path)`, never by path alone — a sibling instance at the same path in another
   // set is on its own loop or on none, and must never be handed this row's.
   assert.equal(/cycleContaining\(context\.cycles, cycleNodeKey\(setId, path\)\)/.test(dialog), true);

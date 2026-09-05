@@ -34,7 +34,7 @@ import { buildReferenceGraph, findCycles, graphEdgeKey, graphNodeKey } from "./g
 import type { CycleIndex } from "./graph";
 import { valueShape } from "./expr";
 import type { ResolveContext } from "./resolve";
-import { buildFlatResolveContext, resolveValue } from "./resolve";
+import { buildFlatResolveContext, referencePathsOf, resolveValue } from "./resolve";
 import { normalizePathKey } from "./paths";
 
 // ---------------------------------------------------------------------------
@@ -451,6 +451,7 @@ function planEntry(entry: OverlayEntry, key: string, context: PlanContext): Appl
   const write = toFigmaValue(live.token, {
     resolveAlias: (path) => resolveAlias(path, live.token, context),
     evaluateExpression: (raw) => evaluateFor(raw, context),
+    memberOnCycle: (raw) => memberOnCycle(raw, live.token, context),
   });
   if (!write.ok) return { ...base, reason: write.reason, message: write.message };
   return { ...base, status: "ready", write: write.write };
@@ -534,6 +535,25 @@ function resolveAlias(
   }
 
   return { ok: true, targetId: target.variableId };
+}
+
+/**
+ * Whether what a composite member points at sits on a loop — UX §14.6's reason line.
+ *
+ * Asked of the same cycle index every other checkpoint asks (ADR-0007 §3), so the apply dialog and
+ * the editor can never disagree about what a loop is. Two ways to be on one, and both count: the
+ * member's own edge closes a loop, or the token it lands on is itself on one — a member waiting on a
+ * loop has no value either way.
+ */
+function memberOnCycle(raw: string, source: Token, context: PlanContext): boolean {
+  const from = sourceNode(source, context);
+  for (const path of referencePathsOf(raw)) {
+    const target = context.aliasIndex.get(normalizePathKey(path));
+    if (target === undefined) continue;
+    if (context.cycles.nodes.has(target.node)) return true;
+    if (from !== null && context.cycles.edges.has(cycleEdgeKey(from, target.node))) return true;
+  }
+  return false;
 }
 
 /** The graph node the token being written *is*, or `null` when it isn't in the effective tree. */

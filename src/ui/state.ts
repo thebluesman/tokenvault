@@ -44,8 +44,7 @@ import { buildApplyPlan } from "../tokens/plan";
 import type { EffectiveTheme } from "../tokens/themes";
 import { tokensInStack } from "../tokens/themes";
 import type { Cycle } from "../tokens/graph";
-import { graphNodeKey } from "../tokens/graph";
-import type { ResolveContext, Resolution } from "../tokens/resolve";
+import type { MemberResolution, ResolveContext, Resolution } from "../tokens/resolve";
 import {
   buildResolveContext,
   emptyResolveContext,
@@ -905,9 +904,23 @@ export function resolutionFor(line: Line): Resolution {
   return resolveToken(line.entry, model.resolve);
 }
 
-/** True when this line sits on a loop — the `⚑ cycle` badge and the `—` value preview. */
+/**
+ * True when this line sits on a loop — the `⚑ cycle` badge and the `—` value preview.
+ *
+ * Asked of the **resolution** rather than of the cycle set directly, because a composite can be
+ * partly on a loop (UX §14.6): a typography token whose `fontSize` points into one still knows its
+ * font family, so it gets a `—` in that slot and a cycle block under that member's field, not the
+ * whole-token treatment. `resolveToken` is where that distinction is made, once.
+ */
 export function onCycle(line: Line): boolean {
-  return model.resolve.cycles.nodes.has(graphNodeKey(line.entry.setId, line.entry.path));
+  return resolutionFor(line).kind === "cycle";
+}
+
+/** The members of a composite that are on a loop — the `⚑ cycle` badge's other cause (§14.6). */
+export function cycledMembers(line: Line): MemberResolution[] {
+  const resolution = resolutionFor(line);
+  if (resolution.kind !== "composite") return [];
+  return (resolution.members ?? []).filter((member) => member.resolution.kind === "cycle");
 }
 
 /**

@@ -258,8 +258,14 @@ function readyRow(entry: ApplyEntry, checked: Set<string>, recount: () => void):
   );
 }
 
-/** The two skip reasons that mean *this token is on a loop* — `plan.ts`'s slugs. */
-const CYCLE_REASONS = ["alias-cycle", "expression-cycle"];
+/**
+ * The skip reasons that mean *this token is on a loop* — `plan.ts`'s and `toFigma.ts`'s slugs.
+ *
+ * `member-cycle` joins them for issue #26: the blocked row is the composite, because a composite is
+ * one write target, and the reason line names the member (UX §14.6). The loop it shows is the same
+ * loop, found by the same lookup, keyed by node.
+ */
+const CYCLE_REASONS = ["alias-cycle", "expression-cycle", "member-cycle"];
 
 function blockedRow(entry: ApplyEntry): HTMLElement {
   const row = diffRow({

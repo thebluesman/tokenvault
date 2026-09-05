@@ -21,7 +21,6 @@ import {
   setShadowField,
   setTypographyField,
   shadowList,
-  subKeyReferenceMessage,
   subtypeWarning,
   withDescription,
   withValue,
@@ -177,16 +176,11 @@ test("editing a shadow field keeps the rest of the shadow", () => {
   assert.equal(expectOk(setShadowField(SHADOW, "color", "#FFF")).color, "#ffffff");
 });
 
-// ADR-0007 §10 defers sub-key reference authoring, and `parseDimension` and a grid's `count` both
-// refuse one by name. A shadow colour used to accept any `{…}`-shaped string unchecked, writing a
-// reference nothing downstream indexes, resolves or binds.
-test("a shadow colour refuses a reference, the same way every other sub-key does", () => {
-  const result = setShadowField(SHADOW, "color", "{folio.ref.palette.black}");
-  assert.equal(result.ok, false);
-  assert.equal(
-    result.ok === false ? result.message : "",
-    subKeyReferenceMessage("{folio.ref.palette.black}")
-  );
+// UX §14.2 retires Phase 7's blanket sub-key refusal for a shadow colour: it takes a pointer now,
+// stored verbatim, exactly as §4.1's colour rule stores one on a whole token.
+test("a shadow colour keeps a reference verbatim", () => {
+  const next = expectOk(setShadowField(SHADOW, "color", "{folio.ref.palette.black}"));
+  assert.equal(next.color, "{folio.ref.palette.black}");
 });
 
 test("a new shadow is a complete DTCG shadow", () => {
