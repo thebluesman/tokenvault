@@ -519,8 +519,6 @@ function loopOf(message: string): string | null {
 }
 
 export interface CiFailure {
-  /** True when at least one diagnostic is a cycle — the sentence the panel leads with. */
-  cycle: boolean;
   diagnostics: CiDiagnostic[];
   /** The failing step's name, when the jobs call answered. */
   step: string | null;
@@ -562,4 +560,24 @@ export function describeBuildFailure(failure: CiFailure): string {
     return `The build failed at the "${failure.step}" step.`;
   }
   return "Tokenvault couldn't read why it failed. Open the run on GitHub for the log.";
+}
+
+/** Shown when the run failed and its diagnostics could not be read — the honest shrug, once. */
+export const LOG_UNAVAILABLE =
+  "Tokenvault couldn't read the build log — the token may not have Actions: read. Open the run on GitHub to see it.";
+
+/**
+ * The lines to render under a failed build.
+ *
+ * One rule: never two sentences that say the same thing. When nothing at all could be read — the
+ * jobs call was refused, or the log was — `describeBuildFailure` bottoms out at its own "couldn't
+ * read why it failed", which is the log-unavailable sentence with less information in it. In that
+ * case the specific one is the only one that renders.
+ */
+export function buildFailureLines(failure: CiFailure, logUnavailable: boolean): string[] {
+  const nothingRead = failure.diagnostics.length === 0 && failure.step === null;
+  if (logUnavailable && nothingRead) return [LOG_UNAVAILABLE];
+  const lines = [describeBuildFailure(failure)];
+  if (logUnavailable) lines.push(LOG_UNAVAILABLE);
+  return lines;
 }

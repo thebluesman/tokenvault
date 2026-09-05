@@ -20,6 +20,7 @@ import {
   buildDetail,
   buildState,
   describeBuild,
+  buildFailureLines,
   describeBuildFailure,
   describeMismatch,
   failingJobId,
@@ -36,6 +37,8 @@ import {
   workflowFilePaths,
   type WorkflowRunSummary,
 } from "../src/git/pipeline";
+import { buildImport } from "../src/tokens/build";
+import { IMPORTED_AT, collection, snapshot, variable } from "./helpers";
 
 const WORKFLOW = readFileSync(
   join(process.cwd(), ".github/workflows/export-tokens.yml"),
@@ -199,6 +202,30 @@ test("with nothing to push, coverage is unknown rather than a guess", () => {
   assert.equal(filterCoverage({ kind: "filtered", globs: ["tokens/**"] }, []).covered, "unknown");
 });
 
+test("the paths the build actually writes are nested, so a flat guess would answer wrongly", () => {
+  // The candidate list the panel checks a filter against comes from the last scan. Before a scan
+  // there is none, and standing in a plausible-looking flat filename for it is what this asserts
+  // against: `build.ts` writes `<tokensDir>/<collection>/<mode>.json`, never `<tokensDir>/x.json`,
+  // so a single-level filter that a flat guess satisfies the real files would never match.
+  const core = collection("VariableCollectionId:1:1", "Core", [["1:0", "Value"]]);
+  const written = buildImport(snapshot([core], [variable("VariableID:1:10", "space/4", core.id, "FLOAT", { "1:0": 4 })]), {
+    userSubtypes: {},
+    importedAt: IMPORTED_AT,
+  })
+    .files.map((file) => file.path)
+    .filter((path) => !path.endsWith("$import-report.json"));
+
+  const single = parsePushPaths("on:\n  push:\n    paths:\n      - 'tokens/*.json'\n");
+  // The fabricated fallback this used to carry.
+  assert.equal(filterCoverage(single, ["tokens/$manifest.json", "tokens/core.json"]).covered, "yes");
+  // What the build really produces, against the same filter.
+  assert.equal(filterCoverage(single, written).covered, "partial");
+  assert.deepEqual(filterCoverage(single, written).unmatched, ["tokens/core/value.json"]);
+  // And with no scan yet there is no candidate list at all, so the honest answer is the only one.
+  assert.equal(filterCoverage(single, []).covered, "unknown");
+  assert.equal(describeMismatch("tokens", filterCoverage(single, []), ["tokens/*.json"]), null);
+});
+
 // ---------------------------------------------------------------------------
 // Build state — gap 7
 // ---------------------------------------------------------------------------
@@ -337,7 +364,7 @@ test("a very long message is truncated, so nothing unbounded reaches the panel",
 
 test("a cycle failure says cycle, not 'the build failed'", () => {
   const diagnostics = parseBuildLog(LOG);
-  const said = describeBuildFailure({ cycle: true, diagnostics, step: "Build tokens" });
+  const said = describeBuildFailure({ diagnostics, step: "Build tokens" });
   assert.match(said, /reference cycle/);
   assert.match(said, /color\.brand/);
   assert.match(said, /Light/);
@@ -352,27 +379,50 @@ test("more than one cycle is counted rather than listed one by one", () => {
       '  [reference-cycle] Light: "b" is on a reference loop (b → a → b), so it has no value to export.',
     ].join("\n")
   );
-  assert.match(describeBuildFailure({ cycle: true, diagnostics, step: null }), /2 tokens on loops/);
+  assert.match(describeBuildFailure({ diagnostics, step: null }), /2 tokens on loops/);
 });
 
 test("a non-cycle failure is described without borrowing the cycle's words", () => {
   const diagnostics = parseBuildLog(
     '  [dangling-reference] Dark: "space.lg" references "space.base", which theme "Dark" does not define.'
   );
-  const said = describeBuildFailure({ cycle: false, diagnostics, step: "Build tokens" });
+  const said = describeBuildFailure({ diagnostics, step: "Build tokens" });
   assert.match(said, /dangling-reference/);
   assert.equal(/reference cycle/.test(said), false);
 });
 
 test("a failure with no readable log still says something true", () => {
   assert.match(
-    describeBuildFailure({ cycle: false, diagnostics: [], step: "Build tokens" }),
+    describeBuildFailure({ diagnostics: [], step: "Build tokens" }),
     /failed at the "Build tokens" step/
   );
   assert.match(
-    describeBuildFailure({ cycle: false, diagnostics: [], step: null }),
+    describeBuildFailure({ diagnostics: [], step: null }),
     /couldn't read why/
   );
+});
+
+test("an unreadable log is said once, not twice in two wordings", () => {
+  // The jobs read itself failed: no diagnostics, no step, and `describeBuildFailure` bottoms out
+  // at its own "couldn't read why", which is the log-unavailable sentence with less in it.
+  const lines = buildFailureLines({ diagnostics: [], step: null }, true);
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /couldn't read the build log/);
+  assert.equal(/couldn't read why/.test(lines.join(" ")), false);
+});
+
+test("a readable reason still carries the log note alongside it", () => {
+  // The log was unreadable but the jobs list answered, so the step name is real information the
+  // note does not repeat — both lines earn their place.
+  const lines = buildFailureLines({ diagnostics: [], step: "Build tokens" }, true);
+  assert.equal(lines.length, 2);
+  assert.match(lines[0], /failed at the "Build tokens" step/);
+  assert.match(lines[1], /Actions: read/);
+
+  // Nothing to apologise for when the log was read.
+  const read = buildFailureLines({ diagnostics: parseBuildLog(LOG), step: "Build tokens" }, false);
+  assert.equal(read.length, 1);
+  assert.match(read[0], /reference cycle/);
 });
 
 test("the failing job and step are picked out of the run's jobs", () => {

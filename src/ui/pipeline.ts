@@ -29,9 +29,9 @@ import type {
 } from "../git/pipeline";
 import {
   buildDetail,
+  buildFailureLines,
   buildState,
   describeBuild,
-  describeBuildFailure,
   describeMismatch,
   failingJobId,
   failingStep,
@@ -200,7 +200,7 @@ async function refreshTarget(target: PipelineTarget): Promise<void> {
       : ({ kind: "unknown", run: null } as BuildState);
 
     const paths = workflow.yaml === null ? null : parsePushPaths(workflow.yaml);
-    const coverage = paths === null ? null : filterCoverage(paths, pushedPaths(target));
+    const coverage = paths === null ? null : filterCoverage(paths, pushedPaths());
     const globs = paths !== null && paths.kind !== "all" && paths.kind !== "unknown" ? paths.globs : [];
     const mismatch =
       coverage === null ? null : describeMismatch(target.tokensDir, coverage, globs);
@@ -238,13 +238,18 @@ async function refreshTarget(target: PipelineTarget): Promise<void> {
   }
 }
 
-/** Repo paths this connection would actually push — what the filter has to match to be useful. */
-function pushedPaths(target: PipelineTarget): string[] {
-  const local = [...localFiles().keys()];
-  if (local.length > 0) return local;
-  // Nothing imported yet, so ask the question about the two files a first push is certain to write
-  // rather than answering "unknown" and going quiet at exactly the moment setup is being checked.
-  return [`${target.tokensDir}/$manifest.json`, `${target.tokensDir}/core.json`];
+/**
+ * Repo paths this connection would actually push — what the filter has to match to be useful.
+ *
+ * Empty until a scan has run, and it stays empty: `filterCoverage` answers `unknown` for an empty
+ * candidate list, and *unknown* is the only honest answer here. A guessed filename is worse than
+ * silence in both directions — `build.ts` writes `<tokensDir>/<collection>/<mode>.json`, so a
+ * flat guess like `<tokensDir>/core.json` matches a single-level filter (`tokens/*.json`) that the
+ * real, nested files would never match, and gap 8 would report `covered: "yes"` for exactly the
+ * misconfiguration it exists to catch.
+ */
+function pushedPaths(): string[] {
+  return [...localFiles().keys()];
 }
 
 function hasGeneratedFiles(outDir: string): boolean {
@@ -307,7 +312,7 @@ async function findWorkflow(
 async function explainFailure(target: PipelineTarget, run: WorkflowRunSummary): Promise<void> {
   const jobs = await withReadClient(target, (client) => client.getRunJobs(run.id));
   if (!jobs.ok) {
-    set(target.key, { ci: { cycle: false, diagnostics: [], step: null }, logUnavailable: true });
+    set(target.key, { ci: { diagnostics: [], step: null }, logUnavailable: true });
     return;
   }
 
@@ -318,11 +323,7 @@ async function explainFailure(target: PipelineTarget, run: WorkflowRunSummary): 
   const diagnostics = text === null ? [] : parseBuildLog(text);
 
   set(target.key, {
-    ci: {
-      cycle: diagnostics.some((one) => one.kind === "reference-cycle"),
-      diagnostics,
-      step,
-    },
+    ci: { diagnostics, step },
     logUnavailable: text === null,
   });
 }
@@ -428,7 +429,12 @@ function renderWhy(into: HTMLElement, state: PipelineState): void {
     into.appendChild(el("div", "empty", "Reading the build log…"));
     return;
   }
-  into.appendChild(el("div", undefined, describeBuildFailure(state.ci)));
+  const lines = buildFailureLines(state.ci, state.logUnavailable);
+  // The first line is the reason; anything after it is the log-unavailable note, which reads as
+  // detail rather than headline. When nothing could be read there is only one line, and it is that
+  // note — `buildFailureLines` refuses to say "couldn't read why" twice in two wordings.
+  const [reason, ...rest] = lines;
+  into.appendChild(el("div", lines.length === 1 && state.logUnavailable ? "empty" : undefined, reason));
 
   for (const diagnostic of state.ci.diagnostics.slice(0, 3)) {
     if (diagnostic.loop === null) continue;
@@ -437,15 +443,7 @@ function renderWhy(into: HTMLElement, state: PipelineState): void {
     into.appendChild(el("div", "cycle-steps", diagnostic.loop));
   }
 
-  if (state.logUnavailable) {
-    into.appendChild(
-      el(
-        "div",
-        "empty",
-        "Tokenvault couldn't read the build log — the token may not have Actions: read. Open the run on GitHub to see it."
-      )
-    );
-  }
+  for (const line of rest) into.appendChild(el("div", "empty", line));
 }
 
 function refreshButton(target: PipelineTarget): HTMLElement {
