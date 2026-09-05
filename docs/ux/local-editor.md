@@ -243,6 +243,8 @@ Tokens Studio puts everything in a modal. We diverge for scalars because the dom
   > > Pointing one field of a typography token at another token isn't in this version. The `fontSize → {…}` line above comes from Figma and still works.
   >
   > Shipped as `refuseSubKeyReference` in `src/tokens/edit.ts`, which generalises the copy to any composite type.
+  >
+  > **Superseded 2026-09-05 — `references-math-themes.md` §14 (issue #26).** Member references are now authorable: each composite member is an ordinary value field, `{` opens the same picker, and the type check reads the member's type. `refuseSubKeyReference` narrows to grid `pattern` and shadow `inset` rather than disappearing. The `boundVariables` block stays read-only and below the member fields; when the two disagree, §14.7 has the one grey line that says the authored value is what applies.
 - **`text` extras** — collapsed behind *"11 Figma text properties"*, expandable. They round-trip but have no DTCG home.
 
 ### 5.3 Editing a reference value

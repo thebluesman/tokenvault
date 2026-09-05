@@ -1,6 +1,7 @@
 # UX: References, math, and themes (Phase 7)
 
 **Status:** Implemented 2026-09-03 — shipped in Phase 7. Written ahead of the build against ADR-0007 (Accepted 2026-09-03). **All four of §11's questions were resolved by Shyam on 2026-09-03, each confirming the recommendation as written**, so nothing in this doc is provisional any more. This is the live Phase 7 spec: amend it when the design changes, and move it to *Implemented* when the phase ships. ADR-0007's open question 1 (what live theme switching targets) is **settled at build time in favour of the current page**, and not by preference: `setExplicitVariableModeForCollection` lives on `ExplicitVariableModesMixin`, which `PageNode` extends and `DocumentNode` does **not**, so there is no document-root equivalent to choose instead. §8.4's control ships exactly as drawn, label included.
+**Extended 2026-09-05 — §14, sub-key references on composite tokens (issue #26).** Phase 7 deferred these (§2, §12) and ADR-0007 §10 left the authoring surface unsettled. §14 settles it: **the picker does not change shape** — a composite member becomes an ordinary Phase 7 value field and `{` fires the same popover. §14 is Settled; its two remaining questions (§14.8) are product-feel calls for Shyam and neither gates the build.
 **Owner:** `@ux-designer`
 **Covers:** PRD §6.2 (themes), §6.3 (aliasing, math expressions, circular-reference detection), §6.7 (plugin panel), build plan §9 Phase 7.
 **Builds on:** `docs/ux/local-editor.md` (Phase 4), `docs/ux/apply-and-drift.md` (Phase 5), `docs/ux/git-sync.md` (Phase 6) — same panel, same 460 × 640 px, same vocabulary. Read those first; this doc extends them and does not restate them.
@@ -40,7 +41,7 @@ Authoring a reference or a math expression as a token's value, in the same field
 |---|---|---|
 | **Theme composition editing** — create, rename, delete a theme, or change its sets | Deferred by Shyam 2026-09-03; designed in ADR-0007 §7b, unbuilt | The theme control is a **picker, not an editor**. No `[ New theme ]`, no set checkboxes inside it, no rename. The dropdown lists a theme's sets **read-only**, because seeing what you're resolving against is the whole point of the control. §8.2. |
 | **Files that get no themes at all** (2+ multi-mode collections — ADR-0002 §6's `ambiguous` entry, undischarged) | Same deferral | Not hidden. The theme control stays present and explains itself rather than disappearing. §8.5 is the entire design for this, and it is the section most likely to be quietly dropped in a build. |
-| Sub-key references on composites — setting a typography token's `fontSize` to `{a}` | ADR-0007 §10, its own ticket | Composite editors keep Phase 4's behaviour: `boundVariables` are **displayed** as `fontSize → {…}` and the numeric fields take numbers only. §12 has the one line of copy that keeps this from reading as a bug. |
+| Sub-key references on composites — setting a typography token's `fontSize` to `{a}` | ADR-0007 §10, its own ticket — **now issue #26; the authoring surface is settled in §14 (2026-09-05), which lifts this row** | Phase 7 shipped the refusal: `boundVariables` are **displayed** as `fontSize → {…}` and the numeric fields take numbers only. §12 has the one line of copy that keeps this from reading as a bug. |
 | Token creation and path rename | Still ADR-0004's open questions | So a reference can only ever point at a path that already exists, which is what makes §5's rule 1 a refusal rather than an offer to create. |
 | Color math, functions, percentages, units in expressions | ADR-0007 §10 | `lighten()`, `round()`, `50%`, `4px * 2` are all parse errors with their own copy. §6.4. |
 | Applying one token across every mode | ADR-0007 §7 | Apply stays single-mode. Switching themes on the canvas is not an apply and never routes through the apply dialog. §8.4. |
@@ -114,7 +115,7 @@ Tokens Studio does the same thing — one input, `{` triggers suggestions — an
 | `number` | The field accepts a literal, a reference, or an expression. The subtype dropdown is unaffected — a reference does not inherit its target's subtype, and the field beside it keeps saying what this token is tagged as. |
 | `color` | The field accepts a literal or a **whole-value reference**. Not an expression (ADR-0007 §1: operands must be numbers). While the value is a reference, the native `<input type="color">` swatch is **inert and shows the resolved colour**, not editable — clicking it does nothing except focus the text field, because a colour picker that silently converts a pointer into a hex value is the exact silent flattening §6 exists to prevent. It renders that resolved colour at **full opacity with a solid border, identical to a literal's swatch** — see the 2026-09-04 amendment at `local-editor.md` §4.5. |
 | `boolean`, `string` | Whole-value reference or literal. The boolean's segmented control gains a third, non-selectable readout position when the value is a reference; picking `true` or `false` replaces the reference, and that is a deliberate two-tap action, not a stray one. |
-| `typography`, `shadow`, `grid` | **Unchanged.** Composite sub-keys are ADR-0007 §10's deferral. The fields take literals. §12 carries the copy. |
+| `typography`, `shadow`, `grid` | **Unchanged in Phase 7** — composite sub-keys were ADR-0007 §10's deferral, the fields took literals, and §12 carried the copy. **Superseded 2026-09-05 by §14** (issue #26): each member field becomes one of these same value fields, keyed to the member's own type. §14.2 is the per-member table. |
 
 ### 4.2 The path picker
 
@@ -548,7 +549,10 @@ Phase 6 §6.1 set the precedence: **diverged → conflicts → repo counts → F
 | Expression with a non-numeric operand | Refuse when typed; **blocked row** when it arrived by pull | `folio.color.accent is a color. Expressions only work with numbers.` |
 | Expression that is a no-op over one reference | **Commit**, grey note, one-tap fix offered | `{a} * 1 is the same as {a} …` §6.5 |
 | Expression entry still listed after an apply | Grey `expression` tag, one explanatory line above the section | §6.6 |
-| Composite sub-key typed as `{a}` | Field rejects it, grey note | `Pointing one field of a typography token at another token isn't in this version.` §12 |
+| Composite sub-key typed as `{a}` | ~~Field rejects it, grey note~~ — **retired 2026-09-05 by §14.** The member commits like any other value field; only grid `pattern` and shadow `inset` still refuse, with §14.2's narrowed copy | ~~`Pointing one field of a typography token at another token isn't in this version.`~~ → `pattern can't point at another token.` §14.2 |
+| Composite member on a cycle | The member's slot in the preview renders `—`, `⚑ cycle` on the composite's value line, block under the member field | §14.6 — the member is valueless, never the whole token |
+| Authored member reference disagrees with Figma's `boundVariables` | Grey line under the read-only block; the authored value applies | §14.7 |
+| Reference typed at a sub-key *target* (`{path.fontSize}`) | Refuse — rule 1, because no token has that path | §14.3 — references point at tokens, never into them |
 | Stored theme no longer exists | Toast on rebuild, falls back to first theme | `Brand isn't in this file any more. Showing Light instead.` §8.3 |
 | Theme switch maps no collections | Button disabled with a reason | `Nothing on this page follows these collections.` §8.4 |
 | Theme switch maps some sets | Toast names the unmapped hand-composed sets only | `Switched this page to Dark. 2 sets have no Figma mode: Text, Effect.` §8.4 |
@@ -586,7 +590,7 @@ Phase 6 §6.1 set the precedence: **diverged → conflicts → repo counts → F
 
 **Delete stays blocked.** Phase 7 makes re-pointing possible; it does not make it automatic, and there is still deliberately no *"remove all references"* button, because rewriting seven tokens' values on one tap is reference surgery the user hasn't seen. The block is now a dead end the user can dig out of, which is what §7's original *"be honest that this can be a dead end"* was waiting for.
 
-**Composite sub-keys stay refused, with copy instead of silence.** ADR-0007 §10 defers them. A typography editor's `fontSize` field that rejects `{folio.typography.font-size.70}` while the row above it *displays* `fontSize → {folio.typography.font-size.70}` from `boundVariables` is going to read as broken, so the field's rejection says which it is:
+**Composite sub-keys stay refused, with copy instead of silence.** *(Superseded 2026-09-05 by §14, which lifts the refusal for every member except grid `pattern` and shadow `inset`. Kept as the record of what Phase 7 shipped.)* ADR-0007 §10 defers them. A typography editor's `fontSize` field that rejects `{folio.typography.font-size.70}` while the row above it *displays* `fontSize → {folio.typography.font-size.70}` from `boundVariables` is going to read as broken, so the field's rejection says which it is:
 
 > Pointing one field of a typography token at another token isn't in this version. The `fontSize → {…}` line above comes from Figma and still works.
 
@@ -613,3 +617,148 @@ Phase 6 §6.1 set the precedence: **diverged → conflicts → repo counts → F
 - **Preserve `$extensions."com.tokenvault"` byte-for-byte through every authoring path.** ADR-0002 §7's guarantee is as fragile here as in Phases 4–6, and a value field that round-trips a token through a form is the classic way to break it. Write `$value` only.
 - **The apply row for an expression is Phase 5's row component with a third line**, not a new row kind (§6.3). If Phase 7 introduces a second diff row, something went wrong.
 - **Section 2's out-of-scope table is the scope boundary.** If a task starts needing theme composition editing, composite sub-key references, token creation, colour math, or units, stop and raise it.
+
+---
+
+## 14. Sub-key references on composite tokens (issue #26)
+
+**Status: Settled 2026-09-05.** §2 deferred this to its own ticket and ADR-0007 §10 deferred it without settling the authoring surface. Issue #26 routes that one call here before the build starts. This section is the answer, and it is deliberately short — it is a **scope widening, not a new surface**. Two questions that don't gate the build are carried in §14.8.
+
+### 14.1 The call: nothing about the picker changes
+
+**A composite member field becomes an ordinary Phase 7 value field.** Typing `{` in it opens the same popover from §4.2, with the same three groups, the same substring matching, the same resolved-value column and the same footer. There is no per-member `{` button, no chip, no "add reference" affordance, and no second entry point.
+
+That is the whole decision, and the reason it is the right one is that §4.1 already made it. The load-bearing choice of this phase was *one field, no mode toggle, the parser classifies after the fact*. A typography editor's `fontSize` field is a number field. A shadow row's `blur` is a number field. Widening them is applying §4.1 to five more inputs, not designing a sixth thing.
+
+The alternatives, and why each is worse:
+
+- **A per-member `{ }` toggle button.** This is the mode switch §4.1 rejected, re-introduced once per member — five toggles in a typography overlay, each one a second classifier that can disagree with the parser. It also makes the composite editor read differently from every scalar editor in the panel for no gain.
+- **A separate "reference mode" for the whole composite.** Puts a decision about one member on the whole token, and it has no honest rendering when three members are literals and two are pointers.
+- **A dedicated sub-key picker that lists `path → member` pairs as targets.** This is the one that changes the picker's shape, and it is rejected on a boundary rather than on taste — see §14.3.
+
+### 14.2 Which members take what
+
+Per-member, keyed off the **member's** own type, not the composite's `$type`. This extends §4.1's table one row deeper rather than replacing it.
+
+| Member | Accepts | Notes |
+|---|---|---|
+| `fontSize`, `letterSpacing`, `lineHeight`, and shadow/grid numerics (`offsetX`, `offsetY`, `blur`, `spread`, `gutterSize`, `offset`, `count`, `sectionSize`) | literal · reference · expression | Same three shapes as a `number` token. The resolve line (§6.2) renders under the member field, not under the overlay. |
+| `fontWeight` | literal · reference | Its type is `number \| string` (Phase 4 §5.2), so the picker's "can be used here" group holds both, and rule 2 (§5.2) only fires for the other types. No expression — arithmetic on `"Semi Bold"` has no meaning, and `600 * 1` is §6.5's no-op anyway. |
+| `fontFamily` | literal · reference | A `string` token, per §4.1. |
+| Shadow `color` | literal · reference | Exactly §4.1's `color` rule, including the inert-swatch behaviour: while the member holds a reference the swatch shows the resolved colour at full opacity and clicking it focuses the text field rather than converting the pointer to a hex. |
+| Shadow `inset` | literal only | It is a two-state segmented control, not a field. There is nowhere to type `{`, and a boolean token pointing at a shadow's inset flag is not a real authoring need. |
+| Grid `pattern`, and any member that chooses which other keys exist | literal only | It selects the object's *shape* (Phase 4 §5.2: switching pattern to `grid` removes `count`/`alignment`). A reference here would make a token's key set depend on another token's value, which is a different and much larger idea. |
+| `lineHeight`'s **Auto** affordance | unchanged | Auto removes the key (ADR-0003 §3). It sits beside the field and is unaffected by what the field holds. |
+
+`refuseSubKeyReference` in `src/tokens/edit.ts` — the Phase 7 helper that produced §12's copy — is **retired for the rows above and kept for the last two**, with its message narrowed to name what it is refusing:
+
+> **`pattern` can't point at another token.** It decides which fields this grid has, so it takes a value directly.
+
+### 14.3 A reference points at a token, never into one
+
+**The picker's rows stay whole token paths.** You can point a member *at* a token; you cannot point anything *into* a composite. `{folio.type.heading.fontSize}` is not a path, does not appear in the picker, and is refused with §5.1's rule-1 copy when typed, because there is genuinely no token at it.
+
+This is the boundary that keeps the picker's shape unchanged, and it is worth stating rather than leaving implied — the symmetric feature (*addressable sub-keys as reference targets*) reads like the obvious other half of this ticket and is not in it. It would mean every composite contributes 5–15 synthetic entries to the path index, that the index stops being a one-to-one map of the token file, and that §5.2's type check has to reason about member types on both ends of an edge. None of that is needed for what issue #26 asks: *point a typography token's font size at another token*, which is one direction.
+
+If it is ever wanted, it is its own ticket and its own decision, and it starts by amending ADR-0002 §5's path normalisation — not by widening this picker.
+
+### 14.4 The four rules, unchanged
+
+§5's rules run per member, on commit of that member's field, with the type check reading the member's type. All four copies are reused verbatim; only rule 2 needs the member named, because "this token is a typography" would be true and useless:
+
+> **`folio.color.accent` is a color.** `fontSize` takes a number, so it can't point there.
+
+Rule 4 (resolves here, missing in another theme) badges the **composite's** value line with `⚑ unresolved`, as it does today, and the overlay's per-set block names the member:
+
+```
+┌──────────────────────────────────────────────┐
+│ ⚑ No value in some themes                    │
+│   fontSize points at  ↗ {folio.brand.size.l} │
+│   Resolves in   Light                        │
+│   Missing in    Dark                         │
+│   Nothing is broken — this field just has no │
+│   value when those themes are active.        │
+└──────────────────────────────────────────────┘
+```
+
+### 14.5 How it reads in the tree
+
+Phase 4 §4's composite preview is a **resolved summary** — `Urbanist 20/24 · 500`, `0 4 4 #00000040`, `columns · 4 · 8px`. It stays one, and gains one mark:
+
+```
+■ type.heading
+    Base   Urbanist 20/24 · 500  ↗
+```
+
+The trailing `↗` means *some part of this points elsewhere*, and the overlay says which parts. This is a **deliberate divergence from §6.3**, which puts the string in the primary slot on the grounds that the tree is a view of the file and the file holds the string. The divergence is width, not principle: a typography token with three referenced members has a `$value` that is roughly 140 characters, and rendering it in a 460 px column produces four wrapped lines of left-truncated paths where a designer wanted to know which font it is. The scalar rule holds because a scalar's string *is* its whole value; a composite's isn't. The full strings are one tap away, unwrapped, in the overlay — which is where composites have always been edited (Phase 4 §5.1).
+
+No new glyph and no new colour: `↗` already exists and already means exactly this (§6.3).
+
+### 14.6 A cycle through a member
+
+Phase 7's rule is absolute and does not bend here: **no fallback value, ever** (§7.1). What needs a note is the *granularity*, because a composite is the first thing in the panel that can be partly on a loop.
+
+**The member is valueless, not the token.** A typography token whose `fontSize` sits on a loop still knows its font family and its weight, and blanking all five members would invent an error where four values are fine.
+
+```
+■ type.heading
+    Base   Urbanist —/24 · 500   ⚑ cycle
+```
+
+The `—` sits in the cycled member's slot in the preview — no zero, no last-good number, no omitted slot that would silently read as `Urbanist 24 · 500`. In the overlay, the cycled member's field renders empty with the cycle block (§7.2) directly beneath it, and every other member edits normally.
+
+**The cycle block gains a second segment on a sub-key edge**, and nothing else:
+
+```
+┌──────────────────────────────────────────────┐
+│ ⚑ These tokens point in a loop               │
+│                                              │
+│   folio.type.heading  fontSize               │
+│                    →  folio.space.a          │
+│   folio.space.a    →  folio.type.heading     │
+│                       fontSize            ↵  │
+│                                              │
+│ Nothing in the loop has a value, because     │
+│ each one is waiting on the next.             │
+│ Editing any one of them breaks it.           │
+└──────────────────────────────────────────────┘
+```
+
+- The member name renders in the muted weight, on the same row as its path, so a sub-key edge reads as *one endpoint with two parts* rather than as two rows.
+- Tapping either segment navigates to the composite's overlay **scrolled to that member**, extending Phase 4 §7's referrer-list row rather than adding a target kind.
+- Both copy sentences are unchanged. *"Editing any one of them breaks it"* is still true, and still the fix.
+- The two sentences also stay true for the mixed case where a loop runs through a scalar and a member; the block does not need to know which kind of edge it is drawing.
+
+**At apply, the blocked row is the composite, not the member.** Phase 5's row is one write target, and a composite token is written as one object. The row lands in the blocked section, unchecked and uncheckable, with `[ Show the loop ]` as usual and its reason line naming the member:
+
+> `fontSize` is on a loop, so this style can't be written.
+
+**Header count is unchanged** — `2 cycles` counts loops, not tokens and not members (§9).
+
+### 14.7 `boundVariables` and an authored member reference now coexist
+
+Phase 4 §5.2 displays Figma's own `boundVariables` read-only — `fontSize → {folio.typography.font-size.70}` — and Phase 7 refused authored member references partly so the two could not be confused. Once they can both exist, the overlay has to say which one applies:
+
+- **The member field is above; the `boundVariables` block stays below and stays read-only.** Order matters — the editable thing is the thing you can act on.
+- **When they name the same target, the block says nothing new.** This is the common case: the user is re-authoring what Figma already bound, and two lines agreeing needs no commentary.
+- **When they disagree, one grey line under the block:**
+
+  > Figma binds `fontSize` to `{…font-size.70}`. This token's own value points at `{…size.l}`, and that's what applies.
+
+  Grey, not amber: nothing is broken and nothing needs the user. It is the same register as §6.2's resolve line, and for the same reason.
+
+§12's refusal copy — *"Pointing one field of a typography token at another token isn't in this version"* — is **retired** by this section, along with §10's error-table row for it. `local-editor.md` §5.2's 2026-09-04 amendment is superseded and gets a pointer here.
+
+### 14.8 Questions for Shyam — neither gates the build
+
+1. **Do composite members take math expressions, or references only?** §14.2 says expressions, on the grounds that it is the same field and the same parser and that `{space.4} * 1.5` for a line height is the most obviously real use of arithmetic in the product. The narrower cut — references only — is defensible and costs one rule, and it would keep the flattening consequence (§6.5) out of composites entirely, where it is slightly harder to see because the resolve line is buried in an overlay. **Recommendation: expressions, as written.**
+2. **Is the resolved composite preview with a trailing `↗` (§14.5) the right divergence from §6.3?** It optimises for *which font is this* over *what does the file say*, which is the opposite of the call made for scalars. The alternative is showing the raw string and accepting the wrap. **Recommendation: as written** — but it is a product-feel call, and it is the one thing here a future reader might reasonably read as an inconsistency rather than a deliberate exception.
+
+### 14.9 Build notes
+
+- **No new component.** The member field is the Phase 7 value field; the picker is the Phase 7 picker; the cycle block is the same one component with a second segment on sub-key rows. If the build produces a second picker, a second parser, or a second cycle block, the design was misread.
+- **The type check reads the member's type**, from the per-type editor's own schema (Phase 4 §5.2), not the token's `$type`.
+- **The cycle detector's edge set widens to member edges** — the same widening ADR-0007 §3 already did from alias edges to alias + expression edges, at the same one function and the same three checkpoints. Issue #26's acceptance criterion is explicit that a missed edge escapes into CI.
+- **A cycle blanks one member, never the token** (§14.6). A composite preview that renders `—` for a cycled slot must not collapse the slot.
+- **`refuseSubKeyReference` narrows rather than disappearing** (§14.2) — grid `pattern` and shadow `inset` still refuse, with new copy.
+- **§14.3 is a hard boundary.** If a task starts wanting `{path.member}` as a *target*, stop and raise it.
