@@ -90,7 +90,7 @@ a file.
 | 2 | **Scan file** | Reads every collection/mode and every paint/text/effect/grid style in one pass; merges them; Variables win collisions and both sides are named | ADR-0002, ADR-0003; `README.md` "The import" |
 | 3 | Reads the report | Counts, generated file list, and the fail-loud rows: 132 unconfirmed subtypes, 13 flagged, 3 partial in the Folio fixture | `local-editor.md` §1 |
 | 4 | Confirms subtypes / tags a duration | Number Variables Figma couldn't scope are `spacing` / `subtypeSource: "default"` until confirmed; duration and easing arrive **only** as an explicit tag | PRD §6.1; ADR-0002 Am.1 §A |
-| 5 | Switches to **Tokens** | Merged tree, one row per dotted path, value lines per set. Header chip: `132 local` or similar, from the tagging in step 4 | `local-editor.md` §4.2, §5.4 |
+| 5 | Switches to **Tokens** | Merged tree, one row per dotted path, value lines per set. Header chip: **`Not compared`** — no apply baseline and no repo yet (ADR-0005 §8) | `local-editor.md` §4.2, §5.4 |
 | 6 | Opens **⚙ Settings** | Repo, branch (a picker, fetched), tokens folder, PAT — write-only field, last four shown, `[ How ↗ ]` for the scope instruction | `git-sync.md` §5.2 |
 | 7 | *Leaves the plugin.* Creates a fine-grained PAT on github.com, scoped to one repo, Contents: read **and** write | Nothing. This step is entirely outside the panel | PRD §6.4 (PAT in v1) |
 | 8 | Pastes the token, **Test connection** | `● Connected · main · checked just now`, or §11's named failure under the field that caused it | `git-sync.md` §5.2, §11 |
@@ -115,13 +115,19 @@ effects are flagged, not mangled (PRD §11's stated risk, discharged in ADR-0003
   stall — GitHub's fine-grained token screen, three choices, one of which silently produces a
   read-only token that works until the first push (`git-sync.md` §11, *"This token can only read the
   repo"*) — happens with the plugin closed. `[ How ↗ ]` is the entire assistance.
-- **Step 4 is 132 decisions with no batch affordance.** The subtype confirm list is per-token by
-  design (`local-editor.md` §1: import-quality state is visible *inside* the browser), but a fresh
-  import of a real file starts with a three-digit queue and nothing that says *"these 90 are all
-  `spacing`, accept them all"*.
-- **The chip's first-ever reading is `132 local`**, from confirmations rather than edits. That is
-  correct — a subtype tag is an overlay entry — and it reads as *"I have made 132 changes"* on a file
-  the user has not yet touched.
+- **Step 4's batch affordances can't act on a subset.** *(Corrected 2026-09-05 — see
+  `onboarding-polish.md` §5.1. The original claim, "132 decisions with no batch affordance", was
+  written from `local-editor.md` §1 rather than from the panel: `Only unconfirmed`, `Set all shown
+  to…` and `Confirm all guesses as-is` all ship in `src/ui/importView.ts`.)* What's actually missing
+  is anything that says *"these 90 are all `spacing`, accept them all"* — the bulk controls act on
+  the whole filtered list, and the only filter is confirmed / unconfirmed. They also carry no count,
+  no confirm and no undo for a write that can touch 132 rows.
+- **The first-run numbers read as defects.** *(Corrected 2026-09-05 — see `onboarding-polish.md` §6.
+  The original claim, that the chip reads `132 local`, is wrong and structurally impossible: the
+  subtype dropdown writes `userSubtypes`, never the overlay (ADR-0004 §3), and the chip counts
+  overlay entries. A fresh unconnected scan reads `Not compared`.)* The number a first-timer actually
+  meets is the Import grid's `132 Unconfirmed`, sitting in one row with `13 Flagged` and `3 Partial`
+  at identical weight — two import defects and one job, rendered the same.
 - **There is no "you are done" moment.** `● In sync` is it, and it is a chip.
 
 ---
@@ -393,17 +399,21 @@ this list plus discussion (PRD §9.10).
 
 | # | Friction | Hurts | Origin |
 |---|---|---|---|
-| 11 | **PAT creation happens outside the plugin**, at the exact moment a first-timer is most likely to stall | A | PRD §6.4 (PAT in v1). `[ How ↗ ]` is the whole assist. Note PRD §11 already flags the PAT/OAuth tradeoff for revisiting *"once v1 is in daily use"* — which is now |
-| 12 | **132 subtype confirmations with no bulk affordance** | A | Per-token by design (`local-editor.md` §1); the design never sized the queue |
-| 13 | **First-ever chip reads `132 local`** on an untouched file | A | Correct — a tag is an overlay entry — and it reads as 132 changes |
+| 11 | **PAT creation happens outside the plugin**, at the exact moment a first-timer is most likely to stall | A | PRD §6.4 (PAT in v1). `[ How ↗ ]` is the whole assist. ~~Note PRD §11 already flags the PAT/OAuth tradeoff for revisiting~~ — **not being revisited; PAT stands** (§14 q4) |
+| 12 | **The bulk subtype controls can't act on a subset** | A | ~~*"132 confirmations with no bulk affordance"* — wrong; three ship today.~~ **Corrected 2026-09-05**: the controls exist and act only on the whole filtered list, with no count, confirm or undo |
+| 13 | **The first-run numbers read as defects** | A | ~~*"chip reads `132 local`"* — wrong; subtypes bypass the overlay, the chip reads `Not compared`.~~ **Corrected 2026-09-05**: the misreading is the Import grid, not the chip |
 | 14 | **No plugin-side README, tour, or empty-state that explains the three-place model** | A, H | Every empty state is excellent locally; none of them explains the system |
+
+**Gaps 11–14 are scoped and Settled — `docs/ux/onboarding-polish.md` (2026-09-05, issue #22).** Two
+of the four rows above were written from the docs rather than from the running panel and are
+corrected in place; that doc's §1 and §9.1 record what changed and why.
 
 ### 13d. Durability and multi-context
 
 | # | Friction | Hurts | Origin |
 |---|---|---|---|
 | 15 | **Overlay and PAT are per-device**; uncommitted work doesn't travel | H | ADR-0004, honest about it throughout. Mitigated only by "push often" and Copy-as-JSON |
-| 16 | **Subtype confirmations across machines: unclear** | H | Contradiction-shaped gap between `README.md` and ADR-0004. **Needs an answer before it needs a design** |
+| 16 | ~~**Subtype confirmations across machines: unclear**~~ **Closed 2026-09-05** | H | Was a contradiction between `README.md` and ADR-0004; the code matched neither. Issue #23 / PR #31 wires `extractUserSubtypes` into the sync path, so the tags travel and a second machine adopts rather than re-asks. ADR-0004 gains Amendment 1 |
 | 17 | **Drift measured against a watermark that can be a month old** | H | `apply-and-drift.md` §6.1. Correct and cheap; the first rescan after a long gap is a wall of `⚑` |
 | 18 | **One branch, no PR flow** | E, and any second person | Decided out, `git-sync.md` §13.4. Revisit only if PRD §5's "secondary users later" becomes now |
 
@@ -426,10 +436,11 @@ not this document's call.
 
 Surfaced rather than guessed at, per the operating principle.
 
-1. **Subtype confirmations across machines** (§11, gap 16) — do the 132 tags survive a push/pull round
-   trip to a second device, or are they redone? `README.md` and ADR-0004 read differently. This is a
-   fact about the implementation before it is a design question; `@tech-lead` or
-   `@frontend-engineer` can settle it, and the answer decides whether there is anything to design.
+1. ~~**Subtype confirmations across machines** (§11, gap 16) — do the 132 tags survive a push/pull round
+   trip to a second device, or are they redone? `README.md` and ADR-0004 read differently.~~
+   **Closed 2026-09-05 by issue #23 / PR #31.** They were redone: `extractUserSubtypes` shipped in
+   Phase 6 with no caller. The push side always carried the tags; the read side now adopts them, gaps
+   only, local answer wins a disagreement. There was nothing to design — the answer was a bug.
 2. **Does Phase 10 have a theme?** §13's five groups are five different products: an *authoring*
    phase (13a), a *pipeline visibility* phase (13b), an *onboarding* phase (13c), a *durability*
    phase (13d), or a cleanup phase (13e). Picking one is more coherent than picking the top item from
@@ -438,4 +449,11 @@ Surfaced rather than guessed at, per the operating principle.
    judged on — a stranger who installs Tokenvault and cannot create a token will file that as a bug,
    not a deferral. If publishing stays public, 13a and Phase 11 are related; if it stays private, they
    are not.
-4. **PRD §11's PAT/OAuth revisit** (gap 11) says *"once v1 is in daily use."* Is it?
+4. ~~**PRD §11's PAT/OAuth revisit** (gap 11) says *"once v1 is in daily use."* Is it?~~
+   **Closed 2026-09-05 — Shyam: no, OAuth is not being revisited.** PRD §6.4/§11's v1 decision (PAT
+   only) stands, so gap 11 is scoped as reducing friction *inside* the PAT flow —
+   `onboarding-polish.md` §4.
+
+Question 3's publish-target half is also answered for scoping purposes: **Community publishing stays
+on the table** (now Phase 13), so `onboarding-polish.md` §7 writes its first-run copy for a stranger
+rather than for the author. That settles what onboarding has to survive, not Phase 13 itself.

@@ -13,6 +13,7 @@ fixtures in `test/fixtures/`, not against a hypothetical schema.
 | [`references-math-themes.md`](references-math-themes.md) | 7 — Reference authoring, math, theme selection | Implemented — §11's four questions all closed 2026-09-03 |
 | [`error-states.md`](error-states.md) | 9 — Scan failure, crash, unreadable overlay | Implemented |
 | [`dark-mode.md`](dark-mode.md) | 10 — Dark mode | Settled — Phase 10 |
+| [`onboarding-polish.md`](onboarding-polish.md) | 10 — PAT setup, subtype queue, first-run counts, three-place explainer | Settled — Phase 10 |
 | [`user-journeys.md`](user-journeys.md) | 1–9 — Narrative survey | Published (not a spec; informs Phase 10 scoping) |
 
 **Status vocabulary.** *Provisional* — written ahead of the build, open questions still in the doc.
@@ -55,3 +56,12 @@ doc by construction — the per-phase error tables stay where they are and stay 
 the two places implementation and doc were reconciled.
 
 Phase 8 (the export pipeline: Style Dictionary + GitHub Actions) shipped outside the plugin scope — the build is repo-side by PRD §7, so there is no UX doc for it, though `README.md` "Exporting to code" documents the workflow. Phases 10–11 are now on the build plan (2026-09-04): Phase 10 is penultimate with scope TBD pending discussion; Phase 11 is Figma publishing.
+
+Phase 10 has two UX docs, not one, because the phase bundles workstreams with different gates.
+[`dark-mode.md`](dark-mode.md) is issue #21 (shipped). [`onboarding-polish.md`](onboarding-polish.md)
+is issue #22 — the four first-run gaps `user-journeys.md` §13c named, scoped 2026-09-05 after Shyam
+closed both of that issue's blocking questions (**OAuth is not being revisited**; **Community
+publishing stays on the table**). Two of the four gaps turned out to be partly misdescribed in the
+survey — the bulk subtype controls already exist, and the first chip has never read `132 local` —
+so that doc's §9.1 corrects `user-journeys.md` in place and §9.2 lists the amendments `git-sync.md`
+and `local-editor.md` take when the build lands.
