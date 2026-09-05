@@ -156,7 +156,7 @@ Realistically the overlay is a few KB. The ceiling exists so that the failure mo
 
 ## Amendment 1 — 2026-09-05 — confirmed subtypes travel through the repo
 
-**Status**: Accepted. Written by `@frontend-engineer` alongside issue #23 (Phase 10); records what the code now does, and corrects a sentence in §3 that had been read as a promise the implementation never kept.
+**Status**: Accepted. Owned by `@tech-lead` like the rest of this ADR; drafted from the implementation of issue #23 (Phase 10). Records what the code now does, and corrects a sentence in §3 that had been read as a promise the implementation never kept.
 
 ### Why
 
