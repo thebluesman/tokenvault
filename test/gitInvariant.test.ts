@@ -105,7 +105,52 @@ test("api.ts never renders GitHub's own words back to the user", () => {
   // into a message is how a header ends up on screen.
   const api = code(readFileSync(join(GIT, "api.ts"), "utf8"));
   assert.equal(/message:\s*(await|response|error|String\()/.test(api), false);
-  assert.equal(/response\.(text|statusText)/.test(api), false);
+
+  // One response body is read as text, and exactly one: the Actions job log (issue #25, gap 9),
+  // which is not JSON. It is never rendered — `parseBuildLog` extracts only lines matching the
+  // `[kind] theme: message` shape Tokenvault's own build script prints — and the test below binds
+  // that promise. `statusText` stays banned outright, since there is no reading of it that isn't
+  // GitHub's words on our screen.
+  assert.deepEqual(api.match(/response\.(?:text|statusText)\(/g) ?? [], ["response.text("]);
+  assert.equal(/response\.statusText/.test(api), false);
+});
+
+test("the CI job log is only ever read through the diagnostic parser", () => {
+  // The bound on the carve-out above. A module that fetches a log and does anything with it other
+  // than hand it to `parseBuildLog` would be putting an untrusted response body one step from the
+  // DOM, so the two names travel together or the rule has been broken.
+  for (const { path, text } of everySource()) {
+    if (path === "src/git/api.ts" || path === "src/git/pipeline.ts") continue;
+    if (!/getJobLog/.test(text)) continue;
+    assert.equal(/parseBuildLog/.test(text), true, `${path} must parse the log, not render it`);
+  }
+});
+
+test("the export block is read-only — it never starts, re-runs or cancels a build", () => {
+  // Issue #25's out-of-scope list, as code. Every Actions call is a GET; the four write endpoints
+  // (`/rerun`, `/cancel`, `/dispatches`, `/approve`) must not appear anywhere.
+  const api = code(readFileSync(join(GIT, "api.ts"), "utf8"));
+  assert.equal(/rerun|\/cancel|dispatches|\/approve/.test(api), false);
+  for (const { path, text } of everySource()) {
+    // Every Actions request, with the 200 characters of the call that follow it — long enough to
+    // reach the options object a write would need, short enough not to run into the next request.
+    for (const match of text.matchAll(/actions\//g)) {
+      const call = text.slice(match.index ?? 0, (match.index ?? 0) + 200);
+      assert.equal(
+        /method:\s*"(POST|PUT|PATCH|DELETE)"/.test(call),
+        false,
+        `${path} must call Actions read-only`
+      );
+    }
+  }
+});
+
+test("the export block never polls, and never repairs a workflow", () => {
+  // Same rule as the status check (ADR-0006 §5), and issue #25's second out-of-scope item: a
+  // `tokensDir` mismatch is *warned*, never auto-fixed — the fix is a commit to the repo.
+  const pipeline = code(readFileSync(join(UI, "pipeline.ts"), "utf8"));
+  assert.equal(/setInterval|setTimeout/.test(pipeline), false);
+  assert.equal(/send\(\{\s*type:\s*"(apply|delete-in-figma)"/.test(pipeline), false);
 });
 
 test("the iframe holds the credential in a closure, not in a module or on window", () => {

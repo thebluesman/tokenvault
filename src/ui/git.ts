@@ -873,3 +873,68 @@ export async function testConnection(): Promise<string[] | null> {
 export function clearLastPull(): void {
   update({ lastPull: null, lastPullMerge: null });
 }
+
+// ---------------------------------------------------------------------------
+// A read-only lease on the client, for surfaces that are not sync — issue #25
+// ---------------------------------------------------------------------------
+
+export type ReadResult<T> = { ok: true; value: T } | { ok: false; failure: GitFailure };
+
+/**
+ * Runs a **read-only** operation against a client for one repo, without touching sync state.
+ *
+ * Deliberately not `withToken`. `withToken` owns `view.busy` and `view.failure`, which are the sync
+ * conversation: a failed Actions read must not make the Repo tab's push button say *"Checking…"*,
+ * and must not overwrite a real push failure with *"couldn't read the build"*. So this returns its
+ * failure to the caller instead of parking it on the shared view, which is what lets the export
+ * block degrade on its own while the rest of the tab carries on (`error-states.md` §1 — a notice,
+ * not a takeover).
+ *
+ * The credential rule is unchanged and is the reason this lives here rather than in the caller:
+ * ADR-0006 §1's *"held in a closure for one operation and dropped"* holds because `requestToken`
+ * and `createClient` stay inside this module, and the caller never sees a token.
+ *
+ * `target` is passed in rather than read off `view.settings` so that a second connection (ADR-0008
+ * §1 — N connections, no primary) needs no change here at all; only the credential lookup grows a
+ * per-connection branch when ADR-0008 §2's override tokens reach the iframe.
+ */
+export async function withReadClient<T>(
+  target: { owner: string; repo: string },
+  run: (client: GitClient) => Promise<T>
+): Promise<ReadResult<T>> {
+  const token = await requestToken();
+  if (token === null) {
+    return {
+      ok: false,
+      failure: { kind: "not-configured", message: "Add a GitHub access token in settings before syncing." },
+    };
+  }
+  try {
+    const client = createClient({ owner: target.owner, repo: target.repo, token });
+    return { ok: true, value: await run(client) };
+  } catch (error) {
+    return {
+      ok: false,
+      failure:
+        error instanceof GitError
+          ? error.failure
+          : { kind: "unknown", message: "Something went wrong talking to GitHub. Nothing was changed." },
+    };
+  }
+}
+
+/**
+ * Every path in the repo tree the last status check fetched, or `null` when there hasn't been one.
+ *
+ * The tree is already in hand and already covers `.github/workflows/` and the generated output
+ * folder, so the workflow lookup and the *"is there anything in `exports/` yet"* question cost no
+ * extra request at all (ADR-0006 §4's one-call tree is what makes that true).
+ */
+export function remoteBlobs(): Record<string, string> | null {
+  return remoteTree === null ? null : remoteTree.blobs;
+}
+
+/** The tree SHA the paths above came from — a cache key for anything derived from that tree. */
+export function remoteTreeSha(): string | null {
+  return remoteTree === null ? null : remoteTree.treeSha;
+}
