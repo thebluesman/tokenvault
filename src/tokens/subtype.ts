@@ -9,6 +9,7 @@ import type {
   TokenType,
 } from "./types";
 import { isToken } from "./paths";
+import { compareKeys } from "./serialize";
 
 export const NUMBER_SUBTYPES: Subtype[] = [
   "spacing",
@@ -181,7 +182,7 @@ export function adoptUserSubtypes(
 
   // Sorted so the two report lists are stable whatever order the repo files were read in — the
   // same reason every other list that crosses `postMessage` in this codebase is sorted.
-  for (const variableId of Object.keys(remote).sort()) {
+  for (const variableId of Object.keys(remote).sort(compareKeys)) {
     const mine = local[variableId];
     if (mine === undefined) {
       subtypes[variableId] = remote[variableId];

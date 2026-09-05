@@ -981,22 +981,14 @@ async function handleGitSaveSync(state: SyncState | null): Promise<void> {
 }
 
 /**
- * Swaps the drift baseline — ADR-0006 §7. `null` reverts to Phase 5's scan watermark.
+ * Parses the repo's token files into trees, keyed by build path.
  *
- * Returns the repo trees it parsed, because they are also the only copy of the repo's *confirmed
- * subtypes* the sandbox ever sees — see `adoptRepoSubtypes`. Parsed once, read twice.
+ * Split out of `setRepoBaseline` because the two things a repo tree is good for have different
+ * preconditions: the drift baseline needs an import to flatten against, and subtype adoption
+ * needs nothing but the tree. Parsing once and handing the same map to both keeps that from
+ * meaning two walks of the JSON.
  */
-function setRepoBaseline(files: SerializedFile[] | null): TokenGroup[] {
-  if (files === null) {
-    if (repoBaseline === null) return [];
-    repoBaseline = null;
-    driftDirty = true;
-    return [];
-  }
-  // A baseline fetch that resolves after the user disconnected must not silently re-point drift at
-  // a repo this file is no longer connected to — the disconnect prompt promised the opposite (§7).
-  if (importResult === null || !repoConnected) return [];
-
+function parseRepoTrees(files: SerializedFile[]): Map<string, TokenGroup> {
   const trees = new Map<string, TokenGroup>();
   for (const file of files) {
     if (file.path.startsWith("tokens/$")) continue;
@@ -1007,14 +999,37 @@ function setRepoBaseline(files: SerializedFile[] | null): TokenGroup[] {
       // not cost the baseline for the eleven good ones.
     }
   }
-  repoBaseline = flattenImport(trees, importResult.manifest);
-  driftDirty = true;
+  return trees;
+}
 
-  // Sorted by path so `extractUserSubtypesFromFiles`'s later-file-wins rule is deterministic rather
-  // than dependent on the order the UI happened to fetch the blobs in.
+/**
+ * The parsed trees in a deterministic order.
+ *
+ * Sorted by path so `extractUserSubtypesFromFiles`'s later-file-wins rule depends on the repo's
+ * own file names rather than on the order the UI happened to fetch the blobs in.
+ */
+function orderedRepoTrees(trees: Map<string, TokenGroup>): TokenGroup[] {
   return Array.from(trees.keys())
     .sort(compareKeys)
     .map((path) => trees.get(path) as TokenGroup);
+}
+
+/** Swaps the drift baseline — ADR-0006 §7. `null` reverts to Phase 5's scan watermark. */
+function setRepoBaseline(trees: Map<string, TokenGroup> | null): void {
+  if (trees === null) {
+    if (repoBaseline === null) return;
+    repoBaseline = null;
+    driftDirty = true;
+    return;
+  }
+  // A baseline fetch that resolves after the user disconnected must not silently re-point drift at
+  // a repo this file is no longer connected to — the disconnect prompt promised the opposite (§7).
+  // No import yet means nothing to flatten against; subtype adoption is deliberately not gated on
+  // that, and runs from the same trees regardless — see `adoptRepoSubtypes`.
+  if (importResult === null || !repoConnected) return;
+
+  repoBaseline = flattenImport(trees, importResult.manifest);
+  driftDirty = true;
 }
 
 /**
@@ -1032,12 +1047,21 @@ function setRepoBaseline(files: SerializedFile[] | null): TokenGroup[] {
  * Figma document, and it produces no overlay entry, because a subtype is not a value. Pulled values
  * are unaffected and still arrive as pending entries via `git-pull` (ADR-0006 §5).
  *
+ * **Deliberately not gated on `importResult`.** Connecting a repo and adopting it before the file
+ * has ever been scanned is an ordinary first-run order — `maybeFirstConnect` can pick
+ * `seedBase("repo")` on its own — and it is exactly the case the whole feature exists for: a second
+ * machine opening the file for the first time. The tags land in `userSubtypes` now and the first
+ * scan's rebuild reads them, the same way a tag confirmed in the panel would.
+ *
  * Returns whether anything changed, so the caller knows whether a rebuild is owed.
  */
 async function adoptRepoSubtypes(trees: TokenGroup[]): Promise<boolean> {
-  if (trees.length === 0) return false;
+  // The disconnect guard `setRepoBaseline` applies, and for the same reason: a fetch that resolves
+  // after the user disconnected must not go on adopting from a repo this file has left.
+  if (trees.length === 0 || !repoConnected) return false;
 
   const adoption = adoptUserSubtypes(userSubtypes, extractUserSubtypesFromFiles(trees));
+  reportSubtypeConflicts(adoption.kept);
   if (adoption.adopted.length === 0) return false;
 
   userSubtypes = adoption.subtypes;
@@ -1048,6 +1072,31 @@ async function adoptRepoSubtypes(trees: TokenGroup[]): Promise<boolean> {
     // pull — losing this write costs them surviving a reopen, not this session.
   }
   return true;
+}
+
+/**
+ * Says out loud that this device and the repo disagree about some subtypes.
+ *
+ * `adoptUserSubtypes` fills gaps only, so a `kept` id is a real disagreement that was resolved in
+ * the local answer's favour — and a decision made silently on the user's behalf is the one thing
+ * ADR-0005 §8's "unknown is not none" reasoning says not to do. It is also genuinely rare, so it
+ * gets the lightest surface the plugin already has rather than a new one: `figma.notify`, the same
+ * channel a selection jump uses. Not a console line — `gitInvariant.test.ts` forbids logging
+ * anywhere in the shipped sandbox, and a variable id is exactly the kind of payload that rule is
+ * about not leaking into a shared console.
+ *
+ * A richer surface — a `⚑` report entry that rides the flagged filter the way drift does — would be
+ * a UX call about severity and copy, not an implementation one, so it is not invented here.
+ */
+function reportSubtypeConflicts(kept: string[]): void {
+  if (kept.length === 0) return;
+  const noun = kept.length === 1 ? "tag" : "tags";
+  figma.notify(
+    `${kept.length} subtype ${noun} differ from the repo — this file's own ${noun} kept. Push to publish ${
+      kept.length === 1 ? "it" : "them"
+    }, or pull to take the repo's.`,
+    { timeout: 6000 }
+  );
 }
 
 /**
@@ -1263,10 +1312,12 @@ figma.ui.onmessage = (message: UiToPluginMessage) => {
       return;
     }
     if (message.type === "git-repo-baseline") {
-      const repoTrees = setRepoBaseline(message.files);
+      const repoTrees = message.files === null ? null : parseRepoTrees(message.files);
+      setRepoBaseline(repoTrees);
       // Before the rebuild, not after: the adopted tags are a build input (ADR-0004 §3), so a
       // rebuild that ran first would emit the tree without them and then need a second one.
-      const adopted = await adoptRepoSubtypes(repoTrees);
+      const adopted =
+        repoTrees === null ? false : await adoptRepoSubtypes(orderedRepoTrees(repoTrees));
       // `driftDirty` survives if there is nothing to rebuild against yet, so the next rebuild
       // honours it. Reporting a baseline the panel has not actually compared against would be
       // exactly the "unknown read as none" lie ADR-0005 §8 spends a section refusing.
