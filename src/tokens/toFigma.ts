@@ -105,6 +105,15 @@ export interface Refusal {
   ok: false;
   reason: string;
   message: string;
+  /**
+   * For a `member-cycle`, the graph node whose loop the blocked member is waiting on.
+   *
+   * The composite is the blocked row (§14.6) but it need not be on the loop at all — a typography
+   * token pointing `fontFamily` at one of two tokens that cycle with each other is blocked by a loop
+   * it is no part of. Carrying the node is what lets the dialog's `[ Show the loop ]` find the right
+   * cycle instead of searching for the composite and coming back empty.
+   */
+  cycleNode?: string;
 }
 
 export type WriteResult = { ok: true; write: FigmaWriteOp } | Refusal;
@@ -154,10 +163,11 @@ export interface WriteOptions {
    * Whether the pointer or formula a composite member holds sits on a loop — UX §14.6's reason line.
    *
    * The plan owns the cycle index, so the answer comes from there rather than from a second walk
-   * here. Absent means "no idea", and the refusal falls back to naming the member's shape, which is
-   * true either way.
+   * here. Returns the **node whose loop it is** so the dialog can render that loop, and `null` when
+   * the member is not waiting on one. Absent means "no idea", and the refusal falls back to naming
+   * the member's shape, which is true either way.
    */
-  memberOnCycle?: (raw: string) => boolean;
+  memberCycleNode?: (raw: string) => string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -381,19 +391,34 @@ function scalarWrite(
  * number; in a style field there is no per-field write to preview, and the drift is identical.
  *
  * The blocked row is the **composite**, because a composite is one write target (§14.6).
+ *
+ * **Every non-literal member is asked about the loop before any of them is reported.** A composite is
+ * the first thing in the panel that can hold several pointers at once, and they are not
+ * interchangeable: a typography token whose `fontFamily` resolves cleanly and whose `lineHeight` sits
+ * on a loop must report the loop and name `lineHeight`. Reporting whichever member came first would
+ * put the wrong name in the sentence and drop the row's `[ Show the loop ]` — a cycle rendered as an
+ * ordinary "can't hold a reference", which is the one thing §7.1 says a cycle must never become.
  */
 function memberRefusal(token: Token, options: WriteOptions): Refusal | null {
   const slots = nonLiteralMembers(token);
   if (slots.length === 0) return null;
+
+  const onCycle = options.memberCycleNode;
+  if (onCycle !== undefined) {
+    for (const candidate of slots) {
+      const node = onCycle(candidate.value as string);
+      if (node === null) continue;
+      return {
+        ok: false,
+        reason: "member-cycle",
+        message: `\`${candidate.label}\` is on a loop, so this style can't be written.`,
+        cycleNode: node,
+      };
+    }
+  }
+
   const slot = slots[0];
   const shape = memberShape(slot.accepts, slot.value);
-
-  if (options.memberOnCycle?.(slot.value as string) === true) {
-    return refuse(
-      "member-cycle",
-      `\`${slot.label}\` is on a loop, so this style can't be written.`
-    );
-  }
 
   return refuse(
     shape === "expression" ? "member-expression-unwritable" : "member-reference-unwritable",

@@ -249,7 +249,17 @@ function resolveComposite(
       resolution.kind === "error" &&
       resolution.error?.reason === "operand-cycle"
     ) {
-      resolution = { kind: "cycle", cycle: cycleContaining(context, node), expression: slot.value as string };
+      // **The loop is the operand's, not the composite's.** A typography token whose `lineHeight`
+      // is `{space.a} * 2` where `space.a` self-cycles is not itself a cycle participant, so asking
+      // for the loop at *this* token's node returns nothing — and a `cycle` resolution with no
+      // `cycle` renders as a silent blank, which is precisely the bare-blank §7.2 forbids. The
+      // composite's own node stays as the fallback for the case where the member's edge is what
+      // closes the loop.
+      resolution = {
+        kind: "cycle",
+        cycle: operandCycle(slot.value as string, context, node),
+        expression: slot.value as string,
+      };
     }
 
     members.push({ slot, resolution });
@@ -283,6 +293,22 @@ export function resolveValue(
   const evaluated = evaluate(expression, (path) => operand(path, context));
   if (!evaluated.ok) return { kind: "error", expression, error: evaluated.error };
   return { kind: "expression", expression, value: evaluated.value };
+}
+
+/**
+ * The loop an expression's operands lead into, for §7.2's block under the member's field.
+ *
+ * `followReference` answers both ways an operand can be waiting on a loop — the token it names is on
+ * one, or the chain from it walks into one — and it is the same walk `operand` already did, so the
+ * two can never disagree about which loop that is. `fallback` is the composite's own node, which is
+ * the answer when the member's own edge is what closes the loop.
+ */
+function operandCycle(raw: string, context: ResolveContext, fallback: string): Cycle | undefined {
+  for (const path of referencePathsOf(raw)) {
+    const followed = followReference(path, context, new Set());
+    if (followed !== null && followed.cycle !== undefined) return followed.cycle;
+  }
+  return cycleContaining(context, fallback);
 }
 
 /** The loop a node sits on, for the block to render (§7.2). */
@@ -736,10 +762,27 @@ export function graphReport(
 
     // A composite reports per member (§14.6): the token as a whole is fine, and naming the member is
     // the difference between a report the user can act on and one that says "this typography is
-    // wrong". Cycle members can't reach here — the whole token was skipped above.
+    // wrong".
     if (resolved.kind === "composite") {
       for (const member of resolved.members ?? []) {
-        if (member.resolution.kind === "unresolved") {
+        if (member.resolution.kind === "cycle") {
+          // A member can be on a loop the *token* is not on — `lineHeight: "{space.a} * 2"` where
+          // `space.a` self-cycles — so the `continue` above never fired and this is the only place
+          // the field's missing value is reported. Without it a build report calls the token clean
+          // while one of its fields renders `—`.
+          const cycle = member.resolution.cycle;
+          const summary = cycle === undefined ? "" : cycleSummary(context.graph, cycle);
+          entries.push({
+            kind: "reference-cycle",
+            reason: cycle !== undefined && cycle.nodes.length === 1 ? "self-reference" : "circular-reference",
+            message:
+              summary.length === 0
+                ? `\`${member.slot.label}\` is on a loop, so it has no value. Editing any token in the loop breaks it.`
+                : `\`${member.slot.label}\` is on a loop: ${summary}. Nothing in the loop has a value, because each one is waiting on the next. Editing any one of them breaks it.`,
+            path: entry.path,
+            set: entry.setId,
+          });
+        } else if (member.resolution.kind === "unresolved") {
           entries.push({
             kind: "unresolved-in-theme",
             reason: "active-theme",

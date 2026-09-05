@@ -55,7 +55,9 @@ import type { GridField, ShadowField, TypographyField } from "../tokens/edit";
 import type { MemberAccepts, MemberType } from "../tokens/members";
 import {
   gridMemberSpec,
+  memberBindingKeys,
   memberKey,
+  memberLayerCount,
   memberShape,
   nonLiteralMembers,
   shadowMemberSpec,
@@ -1383,8 +1385,13 @@ function renderProvenance(line: Line): HTMLElement {
     // **disagree**: re-authoring what Figma already bound is the common case, and two lines agreeing
     // needs no commentary. Grey, not amber, for the same reason §6.2's resolve line is grey —
     // nothing is broken and nothing needs the user.
+    // Keyed by the slot's full address, not its bare name: two shadow layers both have a `blur`, and
+    // `shadowBoundVariables` files a multi-layer binding as `shadows.<index>.<field>` for exactly
+    // that reason. A bare-name lookup would read layer 1's binding against layer 2's authored value
+    // and announce a disagreement that doesn't exist.
+    const layers = memberLayerCount(line.entry.token.$value);
     for (const slot of nonLiteralMembers(line.entry.token)) {
-      const binding = bound[slot.key];
+      const binding = firstDefined(bound, memberBindingKeys(slot, layers));
       if (binding === undefined) continue;
       const authored = String(slot.value);
       if (String(binding) === authored) continue;
@@ -1392,7 +1399,7 @@ function renderProvenance(line: Line): HTMLElement {
         el(
           "div",
           "muted",
-          `Figma binds \`${slot.key}\` to ${String(binding)}. This token's own value points at ${authored}, and that's what applies.`
+          `Figma binds \`${slot.label}\` to ${String(binding)}. This token's own value points at ${authored}, and that's what applies.`
         )
       );
     }
@@ -1410,6 +1417,14 @@ function renderProvenance(line: Line): HTMLElement {
   }
 
   return wrap;
+}
+
+/** The first of `keys` the map actually carries — `memberBindingKeys`' most-specific-first order. */
+function firstDefined(map: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(map, key)) return map[key];
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------

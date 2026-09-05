@@ -12,6 +12,7 @@ import type { FlatToken } from "../src/tokens/view";
 import type { GridValue, ShadowValue, Token, TypographyValue } from "../src/tokens/types";
 import {
   hasNonLiteralMember,
+  memberBindingKeys,
   memberShape,
   memberSlots,
   memberValueAt,
@@ -26,6 +27,7 @@ import {
   graphReport,
   resolveToken,
 } from "../src/tokens/resolve";
+import { buildApplyPlan, cycleNodeKey, findReferenceCycles } from "../src/tokens/plan";
 import { setGridField, setShadowField, setTypographyField } from "../src/tokens/edit";
 import { previewOf } from "../src/tokens/preview";
 import { toFigmaValue } from "../src/tokens/toFigma";
@@ -189,6 +191,44 @@ test("the editor refuses a pointer in pattern, inset and alignment, and keeps on
   assert.equal(painted.ok && painted.value.color, "{palette.black}");
 });
 
+test("a binding is looked up by the member's full address, so two shadow layers don't collide", () => {
+  // §14.7's "do these disagree?" line. `shadowBoundVariables` files a multi-layer binding as
+  // `shadows.<index>.<field>`, and both layers have a `blur` — a bare-name lookup would read layer
+  // 1's binding against layer 2's authored value and report a disagreement that isn't there.
+  const stack = styleToken("shadow", [
+    (shadow().$value as ShadowValue),
+    { ...(shadow().$value as ShadowValue), blur: "{space.a}" },
+  ]);
+  const slots = memberSlots(stack).filter((slot) => slot.key === "blur");
+  assert.deepEqual(memberBindingKeys(slots[0], 2), ["shadows.0.blur"]);
+  assert.deepEqual(memberBindingKeys(slots[1], 2), ["shadows.1.blur"]);
+  // A single shadow is filed flat by the writer while the slot still carries its index, so both
+  // spellings are offered there and only there.
+  const one = memberSlots(styleToken("shadow", [shadow().$value as ShadowValue]))[0];
+  assert.deepEqual(memberBindingKeys(one, 1), [`shadows.0.${one.key}`, one.key]);
+});
+
+test("a brace-shaped value on a literal-only member is a corrupt literal, not a reference", () => {
+  // The editor refuses one, but an imported or hand-edited file never went through the editor. If
+  // `{a.b}` on a grid's `pattern` classified as a reference it would get a graph edge, a resolution
+  // and an apply refusal — everything §14.2 says that member can never have.
+  assert.equal(memberShape("literal", "{a.b}"), "literal");
+  const corrupt = styleToken("grid", [{ ...(grid().$value as GridValue[])[0], pattern: "{a.b}" }], {
+    styleType: "GRID",
+  });
+  assert.equal(nonLiteralMembers(corrupt).length, 0);
+  assert.equal(hasNonLiteralMember(corrupt), false);
+  // And no edge, so it can never manufacture a loop.
+  assert.deepEqual(outgoingPaths(corrupt), []);
+  // A legitimate pointer on the same token still gets its edge.
+  const mixed = styleToken(
+    "grid",
+    [{ ...(grid().$value as GridValue[])[0], pattern: "{a.b}", count: "{a.b}" }],
+    { styleType: "GRID" }
+  );
+  assert.deepEqual(outgoingPaths(mixed), ["a.b"]);
+});
+
 test("writing a member copies rather than mutates", () => {
   const value = typography().$value as TypographyValue;
   const next = withMemberValue(value, ["fontSize"], px(32)) as TypographyValue;
@@ -257,6 +297,46 @@ test("the preview renders the cycled slot as an em dash and never collapses it",
   // `Urbanist —/24 · 500`, never `Urbanist 24 · 500`, which is what dropping the slot would read as.
   assert.equal(preview.text, "Urbanist —/24 · 500");
   assert.equal(preview.memberPointer, true);
+});
+
+test("a member expression whose operand cycles renders the loop, though the token is on none", () => {
+  // `space.a` points at itself; `type.heading` merely does arithmetic on it and is no part of the
+  // loop. Asking for the loop at *the composite's* node — which is what the code used to do — comes
+  // back empty, and `detail.ts` renders the "show the loop" block only when there is a cycle to
+  // show, so the member went silently blank. §7.2: a cycle is always rendered as the loop.
+  const tokens: FlatToken[] = [
+    flat("type.heading", "S", typography({ lineHeight: "{space.a} * 2" })),
+    num("space.a", "S", "{space.a}"),
+  ];
+  const context = buildFlatResolveContext(tokens);
+  const resolved = resolveToken(tokens[0], context);
+
+  assert.equal(resolved.kind, "composite");
+  const member = (resolved.members ?? [])[0];
+  assert.equal(member.resolution.kind, "cycle");
+  assert.equal(member.resolution.value, undefined);
+  assert.equal(member.resolution.cycle !== undefined, true);
+  // The loop it shows is `space.a`'s, and the composite is not in it.
+  assert.equal(context.cycles.nodes.has(cycleNodeKey("S", "type.heading")), false);
+  assert.deepEqual(member.resolution.cycle?.nodes, [cycleNodeKey("S", "space.a")]);
+  // And the preview still blanks exactly one slot.
+  assert.equal(previewOf(tokens[0].token, resolved.value).text, "Urbanist 20/— · 500");
+});
+
+test("the build report has an entry for a member cycle the token itself isn't on", () => {
+  // Paired with the test above: the composite is skipped by the whole-token cycle guard only when it
+  // is *in* the loop, and here it isn't — so without a `cycle` case in the composite branch the
+  // report calls this token clean while `lineHeight` renders `—`.
+  const tokens: FlatToken[] = [
+    flat("type.heading", "S", typography({ lineHeight: "{space.a} * 2" })),
+    num("space.a", "S", "{space.a}"),
+  ];
+  const entries = graphReport(tokens, buildFlatResolveContext(tokens));
+  const forHeading = entries.filter((each) => each.path === "type.heading");
+  assert.equal(forHeading.length, 1);
+  assert.equal(forHeading[0].kind, "reference-cycle");
+  assert.match(forHeading[0].message, /`lineHeight` is on a loop/);
+  assert.match(forHeading[0].message, /space\.a/);
 });
 
 test("a member reference that resolves shows the resolved summary, with the pointer mark", () => {
@@ -404,13 +484,66 @@ test("apply refuses a member expression too, and names it as a formula", () => {
 
 test("a member on a loop refuses with §14.6's reason line", () => {
   const write = toFigmaValue(typography({ fontSize: "{space.a}" }), {
-    memberOnCycle: () => true,
+    memberCycleNode: () => "S|space.a",
   });
   assert.equal(write.ok, false);
   assert.equal(
     write.ok === false ? write.message : "",
     "`fontSize` is on a loop, so this style can't be written."
   );
+  // The node travels with the refusal so `[ Show the loop ]` has something to look up — the
+  // composite is the blocked row but need not be on the loop at all.
+  assert.equal(write.ok === false ? write.cycleNode : "", "S|space.a");
+});
+
+test("a LATER member on a loop still reports the loop, not the first member's shape", () => {
+  // The regression this pins: `memberRefusal` used to test `nonLiteralMembers(token)[0]` only, so a
+  // composite whose first pointer resolves fine and whose *second* one is on a loop was reported as
+  // an ordinary "can't hold a reference" — naming the wrong member and dropping the row's
+  // `[ Show the loop ]`. A cycle rendered as anything other than a cycle is what §7.1 forbids.
+  const write = toFigmaValue(typography({ fontFamily: "{brand.font}", lineHeight: "{a} * 2" }), {
+    memberCycleNode: (raw) => (raw.indexOf("{a}") === -1 ? null : "S|a"),
+  });
+  assert.equal(write.ok, false);
+  assert.equal(write.ok === false ? write.reason : "", "member-cycle");
+  assert.match(write.ok === false ? write.message : "", /`lineHeight` is on a loop/);
+  assert.equal(write.ok === false ? write.cycleNode : "", "S|a");
+});
+
+test("the plan hands the dialog the node the member's loop actually lives on", () => {
+  // `core.brand` and `core.accent` cycle with each other; `text.heading` merely points at one of
+  // them and is on no loop. The blocked row is `text.heading` (§14.6), so a lookup keyed by the
+  // row's own node finds nothing — the recorded node is what keeps the button on the row.
+  const tokens: FlatToken[] = [
+    flat("text.heading", "S", typography({ fontFamily: "{core.brand}" })),
+    flat("core.brand", "S", varToken("string", "{core.accent}")),
+    flat("core.accent", "S", varToken("string", "{core.brand}")),
+  ];
+  const plan = buildApplyPlan({
+    tokens,
+    imported: [flat("text.heading", "S", typography()), tokens[1], tokens[2]],
+    overlay: {
+      version: 1,
+      entries: [
+        {
+          path: "text.heading",
+          set: "S",
+          at: "2026-09-05T10:00:00.000Z",
+          target: { styleId: "S:abc" },
+          op: "set-value",
+          value: tokens[0].token.$value,
+        },
+      ],
+    },
+  });
+  const entry = plan.entries.find((each) => each.path === "text.heading");
+  assert.equal(entry?.reason, "member-cycle");
+  assert.notEqual(entry?.cycleNode, undefined);
+  assert.notEqual(entry?.cycleNode, cycleNodeKey("S", "text.heading"));
+  // It is a node the cycle index can answer for — which the composite's own node is not.
+  const cycles = findReferenceCycles(tokens);
+  assert.equal(cycles.nodes.has(String(entry?.cycleNode)), true);
+  assert.equal(cycles.nodes.has(cycleNodeKey("S", "text.heading")), false);
 });
 
 test("a composite with only literal members still writes", () => {

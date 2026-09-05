@@ -22,7 +22,7 @@
 // than re-deriving which members take what.
 
 import type { GridValue, ShadowValue, Token, TokenValue, TypographyValue } from "./types";
-import { isReference } from "./references";
+import { isReference, referenceTarget } from "./references";
 import { looksLikeExpression } from "./expr";
 
 /** What a member's field will take, per §14.2. */
@@ -177,12 +177,39 @@ export type MemberShape = "literal" | "reference" | "expression";
  * A member that does not accept expressions never has one: `"Semi Bold"` on `fontWeight` and
  * `"#c33a2e"` on a shadow colour are literals however they lex, and running them past the tokenizer
  * would be a way to invent an error out of a perfectly ordinary value.
+ *
+ * **`accepts` is asked before the shape is read**, and the order is load-bearing. A literal-only
+ * member (`pattern`, `inset`, `alignment`) can still *hold* a brace-shaped string — the editor
+ * refuses one, but an imported or hand-edited file bypasses the editor entirely — and calling that a
+ * reference would hand a graph edge, a resolution and an apply refusal to a member §14.2 says can
+ * never point anywhere. It is a corrupt literal, and the honest classification is `literal`.
  */
 export function memberShape(accepts: MemberAccepts, value: unknown): MemberShape {
   if (typeof value !== "string") return "literal";
+  if (accepts === "literal") return "literal";
   if (isReference(value)) return "reference";
   if (accepts !== "full") return "literal";
   return looksLikeExpression(value) ? "expression" : "literal";
+}
+
+/**
+ * Brace-shaped strings sitting on members that can never point anywhere (§14.2).
+ *
+ * The value half of the `memberShape` rule above, for the one caller that does not go through the
+ * slot list: `collectReferences` walks `$value` blind, so a `{a.b}` written into a grid's `pattern`
+ * by hand would otherwise become a real graph edge. These are subtracted there rather than the
+ * walker being made member-aware, because the walker is also the export's and the delete check's and
+ * has no business knowing about composite schemas.
+ */
+export function strayMemberReferences(token: Pick<Token, "$type" | "$value">): string[] {
+  const strays: string[] = [];
+  for (const slot of memberSlots(token)) {
+    if (slot.accepts !== "literal") continue;
+    if (typeof slot.value !== "string") continue;
+    const target = referenceTarget(slot.value);
+    if (target !== null) strays.push(target);
+  }
+  return strays;
 }
 
 /** The members of this token that hold a pointer or a formula rather than a value. */
@@ -198,6 +225,32 @@ export function hasNonLiteralMember(token: Pick<Token, "$type" | "$value">): boo
 /** A stable key for one slot, so a caller can look a member's resolution up by address. */
 export function memberKey(keyPath: Array<string | number>): string {
   return keyPath.join(".");
+}
+
+/**
+ * The keys a slot's Figma binding could be filed under in `$extensions…figma.boundVariables`, most
+ * specific first — §14.7's "do these two disagree?" lookup.
+ *
+ * `shadowBoundVariables` (`styleValues.ts`) writes a **flat** key when the style has one visible
+ * shadow and a `shadows.<index>.` prefixed one when it has several. A slot in a two-layer stack is
+ * `[1, "blur"]`, and looking that up by the bare `blur` would read the *first* layer's binding
+ * against the second layer's authored value and report a disagreement that isn't there — the two
+ * layers share every field name they have.
+ *
+ * Both forms are offered for index 0 of a single-layer stack, because `memberSlots` prefixes any
+ * array — including a one-element one — while the writer does not.
+ */
+export function memberBindingKeys(slot: MemberSlot, layers: number): string[] {
+  const head = slot.keyPath[0];
+  if (typeof head !== "number") return [slot.key];
+  const rest = slot.keyPath.slice(1).join(".");
+  const prefixed = `shadows.${head}.${rest}`;
+  return layers <= 1 ? [prefixed, rest] : [prefixed];
+}
+
+/** How many layers a composite's value holds — 1 for a bare object, the length for a list. */
+export function memberLayerCount(value: TokenValue | undefined): number {
+  return Array.isArray(value) ? value.length : 1;
 }
 
 // ---------------------------------------------------------------------------

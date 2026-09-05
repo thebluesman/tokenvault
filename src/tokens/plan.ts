@@ -67,6 +67,14 @@ export interface ApplyEntry {
   reason?: string;
   message?: string;
   /**
+   * The graph node whose loop blocked this row, when a *member* is the thing on the loop (§14.6).
+   *
+   * Only ever set alongside `member-cycle`, and only because the composite may be no part of the
+   * loop it is blocked by — `[ Show the loop ]` looks here first and falls back to this row's own
+   * node, which is the right answer for `alias-cycle` and `expression-cycle`.
+   */
+  cycleNode?: string;
+  /**
    * Set when `after` is a reference, so the dialog can render the pointer as the primary value
    * with the resolved literal muted beneath it (UX §5.6) rather than mistaking one for the other.
    */
@@ -451,9 +459,11 @@ function planEntry(entry: OverlayEntry, key: string, context: PlanContext): Appl
   const write = toFigmaValue(live.token, {
     resolveAlias: (path) => resolveAlias(path, live.token, context),
     evaluateExpression: (raw) => evaluateFor(raw, context),
-    memberOnCycle: (raw) => memberOnCycle(raw, live.token, context),
+    memberCycleNode: (raw) => memberCycleNode(raw, live.token, context),
   });
-  if (!write.ok) return { ...base, reason: write.reason, message: write.message };
+  if (!write.ok) {
+    return { ...base, reason: write.reason, message: write.message, cycleNode: write.cycleNode };
+  }
   return { ...base, status: "ready", write: write.write };
 }
 
@@ -538,22 +548,23 @@ function resolveAlias(
 }
 
 /**
- * Whether what a composite member points at sits on a loop — UX §14.6's reason line.
+ * The node whose loop a composite member is waiting on, or `null` — UX §14.6's reason line.
  *
  * Asked of the same cycle index every other checkpoint asks (ADR-0007 §3), so the apply dialog and
  * the editor can never disagree about what a loop is. Two ways to be on one, and both count: the
- * member's own edge closes a loop, or the token it lands on is itself on one — a member waiting on a
- * loop has no value either way.
+ * token the member lands on is itself on a loop — in which case *that* is the node to show, and it
+ * is routinely not this token — or the member's own edge closes one, in which case this token is on
+ * it and is the node to show.
  */
-function memberOnCycle(raw: string, source: Token, context: PlanContext): boolean {
+function memberCycleNode(raw: string, source: Token, context: PlanContext): string | null {
   const from = sourceNode(source, context);
   for (const path of referencePathsOf(raw)) {
     const target = context.aliasIndex.get(normalizePathKey(path));
     if (target === undefined) continue;
-    if (context.cycles.nodes.has(target.node)) return true;
-    if (from !== null && context.cycles.edges.has(cycleEdgeKey(from, target.node))) return true;
+    if (context.cycles.nodes.has(target.node)) return target.node;
+    if (from !== null && context.cycles.edges.has(cycleEdgeKey(from, target.node))) return from;
   }
-  return false;
+  return null;
 }
 
 /** The graph node the token being written *is*, or `null` when it isn't in the effective tree. */

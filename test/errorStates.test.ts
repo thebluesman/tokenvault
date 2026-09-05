@@ -171,9 +171,12 @@ test("a blocked cycle row can open the loop", () => {
     true
   );
   // Keyed by `(setId, path)`, never by path alone — a sibling instance at the same path in another
-  // set is on its own loop or on none, and must never be handed this row's.
-  assert.equal(/cycleContaining\(context\.cycles, cycleNodeKey\(setId, path\)\)/.test(dialog), true);
-  assert.equal(/cycleFor\(entry\.set, entry\.path\)/.test(dialog), true);
+  // set is on its own loop or on none, and must never be handed this row's. A `member-cycle` row
+  // overrides that with the node the plan recorded, because the composite can be blocked by a loop
+  // it is no part of (§14.6).
+  assert.equal(/entry\.cycleNode \?\? cycleNodeKey\(entry\.set, entry\.path\)/.test(dialog), true);
+  assert.equal(/cycleContaining\(context\.cycles, node\)/.test(dialog), true);
+  assert.equal(/cycleFor\(entry\)/.test(dialog), true);
 });
 
 test("the crash screen carries the sentence about the user's edits", () => {

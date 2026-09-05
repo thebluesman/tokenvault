@@ -222,7 +222,11 @@ export function pickerGroups(
     seen.add(key);
 
     const resolved = resolveValue(target.token, context);
-    const preview = previewOf(target.token);
+    // The resolution is already in hand one line up, so the picker's composite rows read
+    // `Urbanist 20/24 · 500` like every other surface rather than `Urbanist —/24 · 500` for a member
+    // that resolves perfectly well. `previewOf`'s no-context contract is for callers that genuinely
+    // have none — a diff, a fixture — and this is not one of them.
+    const preview = previewOf(target.token, resolved.kind === "composite" ? resolved.value : undefined);
     const row: PickerRow = {
       path: target.path,
       preview:
