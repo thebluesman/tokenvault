@@ -1,8 +1,9 @@
 # UX: Panel size and colour swatches (Phase 10)
 
-**Status: Provisional 2026-09-07.** §9 carries four open questions. Three of them are numbers
-(§9.1, §9.3) and the build can start on the recommendations if Shyam would rather not stop to pick;
-**§9.2 is a scope question that changes what issue #36 is**, and it should be answered first.
+**Status: Settled 2026-09-07.** All four §9 questions answered by Shyam: (a) for §9.2 — the tree
+stays, no table rewrite, revisit only as its own future phase if it turns out to be needed — and the
+three numeric recommendations in §9.1, §9.3, §9.4 confirmed as written. This doc is now
+implementation-ready for `@frontend-engineer`.
 **Owner:** `@ux-designer`
 **Covers:** Issues [#35](https://github.com/thebluesman/tokenvault/issues/35) (resizable window) and
 [#36](https://github.com/thebluesman/tokenvault/issues/36) (colour swatches in the token list).
@@ -376,48 +377,27 @@ To be applied when the build lands, not before — same precedent as
 
 ---
 
-## 9. Questions for Shyam
+## 9. Decisions (Shyam, 2026-09-07)
 
-**§9.2 should be answered before the build starts.** The other three are numbers with
-recommendations attached, and the build can proceed on the recommendation if the answer is "fine."
+### 9.1 The three window numbers (§3.2) — Settled
 
-### 9.1 The three window numbers (§3.2)
+`640 × 720` default, `400 × 480` minimum, no maximum, as recommended.
 
-Default `640 × 720`, minimum `400 × 480`, no maximum.
+### 9.2 Does "the table/columns token view" mean an actual table? (§1, §3.4) — Settled
 
-The one worth a second look is **height**. 720 is chosen to fit a 900px-tall laptop viewport without
-Figma clamping it, and height is what actually hurts the tree (§3.1) — 640 shows ~20 rows out of
-~1,027. Going to 800 would show ~40, at the cost of covering more of the artboard the user is
-applying tokens to. **Recommendation: 640 × 720, min 400 × 480, no max.**
+**(a) The existing merged tree.** Issues #35 and #36 are scoped exactly as written in this doc — no
+table rewrite. §5's collapsed-group strip stands. If a real sortable table turns out to be wanted
+later, that is its own future phase with its own UX doc and its own re-litigation of
+`local-editor.md` §4.2's merged-row design — not a change to this doc or to #35/#36.
 
-### 9.2 Does "the table/columns token view" mean an actual table? (§1, §3.4)
+### 9.3 The strip cap (§5.5) — Settled
 
-Both issues name a view that doesn't exist. Two readings:
+Six dots, then `+N`, as recommended.
 
-- **(a) It means the existing merged tree** — issues #35 and #36 are then exactly as scoped here,
-  and this doc is complete.
-- **(b) It means a real table** — path / value / type / source as sortable columns, replacing the
-  disclosure tree. That is a rewrite of the Tokens tab, it reopens `local-editor.md` §4.2's merged-
-  row design (which exists specifically because 11 sets don't fit in columns), and it is its own
-  issue with its own doc. It is also not obviously an improvement: a flat sortable table loses the
-  group hierarchy that the strip in §5 exists to summarise.
+### 9.4 Does the extra width earn a new column? (§3.4) — Settled
 
-**Recommendation: (a).** If the answer is (b), §5 should be held — a collapsed-group strip has no
-meaning in a view with no collapsed groups.
-
-### 9.3 The strip cap (§5.5)
-
-Six dots, then `+N`. Six matches the reference screenshot and leaves a 9–11 step ramp reading
-`■■■■■■ +4`. Eight would show most of a full ramp and cost ~20px of row; four would fit at any width
-but turns most ramps into a number. **Recommendation: 6.**
-
-### 9.4 Does the extra width earn a new column? (§3.4)
-
-§3.4 says no — nothing new appears at width, because a control materialising when you drag a handle
-is a magic trick. But the honest counter-argument is that `$description` currently lives only in the
-detail overlay, and it is the one field a wider panel could genuinely surface. This is a
-product-feel call, not a layout one, and it is a separate ticket either way. **Recommendation: no
-for #35; file it separately if the wider panel makes the absence obvious in use.**
+No — not part of #35. `$description` stays in the detail overlay. File separately later if the
+wider panel makes its absence an obvious pain point in use.
 
 ---
 
