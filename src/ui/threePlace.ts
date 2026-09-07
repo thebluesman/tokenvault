@@ -175,7 +175,10 @@ export const NEVER_DOES: string[] = [
 ];
 
 export function renderHowItWorks(): HTMLElement {
-  const wrap = el("div");
+  // `measure` caps the line length — `panel-size-and-swatches.md` §3.4. The panel is resizable now,
+  // and body copy running the full width of a 1,400px window is unreadable; centring it in the space
+  // would be worse, so it caps and stays left-aligned.
+  const wrap = el("div", "measure");
   wrap.appendChild(diagram(null));
 
   for (const block of HOW_IT_WORKS) {

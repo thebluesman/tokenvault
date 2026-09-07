@@ -66,10 +66,27 @@ export function truncateReference(path: string, max = 24): string {
  * `Urbanist 20/24`; leaving it out renders the raw file, which is what a caller with no resolution
  * context (a diff, a fixture) actually wants.
  */
-export function previewOf(token: Token, resolved?: TokenValue): Preview {
+export interface PreviewOptions {
+  /**
+   * How many characters a reference path may keep — UX `panel-size-and-swatches.md` §3.4.
+   *
+   * Defaults to the 24 the fixed 460px panel had room for. The resizable panel spends its extra
+   * width here **first**, before the token name grows, because the reference path is the thing that
+   * was losing information: `{…palette.red-warm.50}` is where two similar palettes differ. It is a
+   * budget, not a layout mode — one number, no breakpoints, and nothing appears or disappears with
+   * it (§3.4).
+   */
+  referenceMax?: number;
+}
+
+export function previewOf(
+  token: Token,
+  resolved?: TokenValue,
+  options: PreviewOptions = {}
+): Preview {
   const reference = referenceTarget(token.$value);
   if (reference !== null) {
-    return { text: `{${truncateReference(reference)}}`, reference };
+    return { text: `{${truncateReference(reference, options.referenceMax)}}`, reference };
   }
 
   const value = resolved ?? token.$value;

@@ -901,7 +901,18 @@ export function pathsUnder(prefix: string): Row[] {
 
 /** What one value line comes out as under the active theme. The render path's single question. */
 export function resolutionFor(line: Line): Resolution {
-  return resolveToken(line.entry, model.resolve);
+  return resolutionOf(line.entry);
+}
+
+/**
+ * The same question asked of a bare token rather than a value line.
+ *
+ * The collapsed-group swatch strip (`strip.ts`) has a `FlatToken` and no `Line`, and it must get its
+ * colour from **this** call rather than one of its own — UX `panel-size-and-swatches.md` §5.4: if the
+ * two ever diverged, expanding a group would change the colours the dots just showed.
+ */
+export function resolutionOf(entry: FlatToken): Resolution {
+  return resolveToken(entry, model.resolve);
 }
 
 /**

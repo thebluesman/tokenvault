@@ -535,6 +535,31 @@ function firstFailure(message: { report: { outcomes: Array<{ ok: boolean; messag
   return failed[0]?.message ?? "Figma refused the write.";
 }
 
+/**
+ * Reports the panel's new size back so it can be remembered — UX `panel-size-and-swatches.md` §3.3.
+ *
+ * The iframe is the only side that learns its own size, so the report starts here. **Debounced**,
+ * because a drag fires `resize` continuously and the other end of this message is a
+ * quota-constrained store (ADR-0004 §1, §10): one write when the drag settles, not one per frame.
+ *
+ * There is no copy, no toast and no setting attached to any of this (§6). A window that resizes and
+ * remembers its size should say nothing about either.
+ */
+const RESIZE_DEBOUNCE_MS = 250;
+let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+
+window.addEventListener("resize", () => {
+  if (resizeTimer !== null) clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    resizeTimer = null;
+    send({
+      type: "window-resized",
+      width: window.innerWidth,
+      height: window.innerHeight,
+    });
+  }, RESIZE_DEBOUNCE_MS);
+});
+
 // If the reply never comes, an unthemed panel beats a blank one (`appearance.ts`).
 installFirstPaintFailsafe();
 

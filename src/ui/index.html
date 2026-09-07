@@ -486,7 +486,20 @@
       }
       /* §7.1's strip. One drawing, three placements — the highlighted place is the only thing that
          differs between them, and it borrows the panel's own text colour rather than adding one. */
+      /*
+        A prose measure — `panel-size-and-swatches.md` §3.4.
+
+        The panel resizes without breakpoints and without layout modes: extra width is spent on
+        breathing room, never built on. Body copy is the one thing that gets actively worse with more
+        of it, so the prose surfaces (`How Tokenvault works`, the crash screen, the three-place
+        explainer) cap at roughly 64 characters and stay **left-aligned** — centring them in the
+        leftover space would be worse than either extreme.
+      */
+      .measure {
+        max-width: 64ch;
+      }
       .three-place-strip {
+        max-width: 64ch;
         border: 1px solid var(--border);
         border-radius: 4px;
         padding: 8px;
@@ -904,6 +917,12 @@
         background-size: 6px 6px;
         background-position: 0 0, 0 3px, 3px -3px, -3px 0;
       }
+      /*
+        The wrapper is the 12px slot itself, so an **empty** one is the reserved slot of
+        `panel-size-and-swatches.md` §4.3: a cycle draws no mark, and its `—` still lands in the same
+        column as every sibling's hex. Nothing to paint, which is why `.reserved` adds no properties
+        of its own — the class exists so the markup says what the empty box is for.
+      */
       .swatch-wrap {
         flex: none;
         position: relative;
@@ -921,6 +940,49 @@
         background-image: none;
         box-shadow: none;
         border: 1px dashed var(--border);
+      }
+      /*
+        The collapsed-group swatch strip — `panel-size-and-swatches.md` §5.3, `dark-mode.md` §6.3.
+
+        8px squares, not circles: the row-level chip is a 12px rounded square, and a summary made of
+        the same shape at a smaller size reads as *"the same thing, less of it."* Two departures from
+        the 12px chip, both forced by the size:
+
+        - **No checkerboard.** At 8px the 6px checker squares are one-and-a-bit squares of noise. The
+          dot sits on `--checker-a` — the panel's own ground — as a flat base, so a semi-transparent
+          token still composites against the right surface; it just doesn't advertise its alpha,
+          which is not readable at 8px anyway.
+        - **The ring stays**, and matters more here than at 12px: it is 1px of an 8px box, and it is
+          what stops a `#000000` shade being a hole in a dark panel.
+
+        `min-width: 0` and `overflow: hidden` are what make it §5.1's first element to yield — the
+        name, the flag and the count all outrank a preview.
+      */
+      .strip {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        min-width: 0;
+        overflow: hidden;
+        /* The lopsided shrink factor *is* §5.1's precedence rule: when the row runs out of width the
+           strip gives up its space long before the group name gives up a character. Proportional
+           shrinking — the default — would trade one for the other, and the name outranks a preview. */
+        flex: 0 100 auto;
+      }
+      .strip-dot {
+        flex: none;
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+        background-color: var(--checker-a);
+        box-shadow: inset 0 0 0 1px var(--swatch-ring);
+      }
+      /* A footnote on the strip, not a control: muted, same weight as the right-hand count. */
+      .strip-more {
+        flex: none;
+        margin-left: 2px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
       }
       .menu-btn {
         flex: none;

@@ -15,7 +15,7 @@ Not a hypothetical token file. The Phase 3 fixture is a real capture of the Foli
 |---|---|---|
 | **1,316 tokens** in one import | `$import-report.json` counts | A flat list is unusable. Grouping and search are load-bearing, not nice-to-have. |
 | **11 sets** across 4 collections + 4 style kinds | `$manifest.json` | Sets overlap on path: `Theme/Light` and `Theme/Dark` hold the same 289 dotted paths with different values. A merged browser (§10.2) has to fold those into one row instead of listing them twice. |
-| Panel is **460 × 640 px** | `src/code.ts` `figma.showUI` | No two-pane master/detail. One column, with the editor as an overlay. |
+| Panel is **minimum 400px wide, resizable** | `src/code.ts` `figma.showUI` | No two-pane master/detail. One column, with the editor as an overlay. **Amended 2026-09-07** (issue #35): the panel was a fixed 460 × 640; it now opens at 640 × 720, remembers whatever size it was left at, and can be dragged down to 400 × 480. The constraint this row states is unchanged and is now the *minimum* rather than the whole story — see `panel-size-and-swatches.md` §3.4 for why extra width buys breathing room and never a second pane. |
 | Token paths are **6–7 segments deep** (`folio.ref.palette.transparent.red-warm.50.30`) | `theme/light.json` | Full paths don't fit on a row. The tree has to carry the prefix so the row only shows the leaf. |
 | **132 unconfirmed subtypes**, **13 flagged**, **3 partial** | report counts | Import-quality state has to be visible *inside* the browser, not only on the post-scan report screen. **Amended 2026-09-05** (issue #22): this row sized the queue and never specified a shape for it, so the Import tab's bulk controls got built without a spec. `onboarding-polish.md` §5 is now that spec — grouped by the guess, with a per-group confirm, a count in every bulk label, a confirm strip above 20 rows and a toast undo. |
 | Many `$value`s are already references (`{folio.ref.palette.red-warm.50}`) | `theme/light.json` | Aliasing is Phase 7, but aliased *data* exists in Phase 4. The editor must render references honestly without pretending it can resolve or edit them. |
@@ -94,6 +94,12 @@ The problem the merge creates, and which the rest of §4 exists to solve: `Theme
 
 ### 4.1 Layout
 
+The sketch below is the **minimum-width rendering** — the panel at 400px, which since issue #35 is
+the narrowest it goes rather than roughly the only width it has. It is drawn at the minimum on
+purpose: the panel is resizable, so 400px is still reachable, and every layout argument in this doc
+has to hold there (`panel-size-and-swatches.md` §3.4). Extra width goes to the value line's
+truncation budget first and the token name second; nothing new appears at any width.
+
 ```
 ┌──────────────────────────────────────────────┐
 │ Folio design system            Import│Tokens │  header (existing)
@@ -167,7 +173,7 @@ Counts in the popover are **token counts per set** (they sum to 1,316), which is
 
 Nested disclosure rows following the DTCG group nesting exactly, since a node is a group iff it has no `$value` (`isToken` in `paths.ts`). Groups merge by name across sets, the same way paths do: `folio.color.border` is one group row even though four sets contribute tokens under it.
 
-- **Group rows**: caret, segment name, descendant **path** count on the right. A `⚑` badge if any descendant has a report entry, in any set.
+- **Group rows**: caret, segment name, descendant **path** count on the right. A `⚑` badge if any descendant has a report entry, in any set. **Amended 2026-09-07** (issue #36): a **collapsed** group whose colour tokens are its own direct children also carries a swatch strip — 8px dots between the name and the `⚑`, capped at six with a `+N`. A group of groups gets none, and neither does an expanded one. `panel-size-and-swatches.md` §5.2 is the rule and §5 the whole surface.
 - **Token rows**: the two shapes in §4.2.
 - Default expansion: top level expanded, everything below collapsed. At ~1,027 rows, opening fully expanded is a wall of text.
 - Expansion state persists while the panel is open. It resets on rescan (the tree may not have the same shape).
@@ -177,7 +183,7 @@ Nested disclosure rows following the DTCG group nesting exactly, since a node is
 
 | `$type` | Preview | Notes |
 |---|---|---|
-| `color` | 12px swatch (checkerboard behind, alpha is real — `#C33A2E33`) + hex, monospace | Reference values show the swatch as an outline, not a fill — we can't resolve it in Phase 4. **Amended 2026-09-04 — see the note below; once references resolve, a reference's swatch renders like any other.** |
+| `color` | 12px swatch (checkerboard behind, alpha is real — `#C33A2E33`) + hex, monospace | Reference values show the swatch as an outline, not a fill — we can't resolve it in Phase 4. **Amended 2026-09-04 — see the note below; once references resolve, a reference's swatch renders like any other.** **Amended 2026-09-07** (issue #36): the swatch occupies a **fixed 12px slot on every colour line, whether or not a mark is drawn in it**, so values sit in one column and a valueless row reads as absence rather than as a different kind of row. Non-colour lines reserve nothing. Three cases have no colour to show: a **cycle** draws no mark at all (the reserved slot plus `—` and `⚑ cycle` is the whole signal); a **dangling reference** and a **wrong-type reference** — one that resolves, but to a non-colour — share the dashed outline, because from the swatch's point of view they are the same fact and the flag beside it already says which. `panel-size-and-swatches.md` §4.2, §4.3. |
 | `number` | `16` + subtype tag (`spacing`, `radius`, …) | Subtype tag is muted; `default`-sourced ones get the existing `.badge.needs` amber treatment. |
 | `boolean` | `true` / `false`, monospace | |
 | `string` | truncated, quoted | |
@@ -219,7 +225,7 @@ The swatch shows the colour; the `↗` and the value text say where it came from
 
 Tokens Studio puts everything in a modal. We diverge for scalars because the dominant Phase 4 task is "nudge a spacing value" and a modal round-trip for one number is three clicks too many in a 460px panel. We keep the overlay for composites because typography carries 5 editable fields plus 11 read-only `text` extras, which cannot be a row.
 
-"Overlay", not "modal": it slides over the full panel, keeps the tree's scroll position, and has a back arrow. At 460×640 a centred modal with a dimmed backdrop wastes a third of the panel on chrome.
+"Overlay", not "modal": it slides over the full panel, keeps the tree's scroll position, and has a back arrow. At the panel's minimum width a centred modal with a dimmed backdrop wastes a third of the panel on chrome.
 
 ### 5.2 Per-type editors
 

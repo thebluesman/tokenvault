@@ -499,6 +499,19 @@ against exactly the surface it will look like in use — which is more correct t
 
 `.swatch.outlined` (dashed, no fill — the "no colour" case) needs nothing beyond `--border`.
 
+**The 8px dot** — added 2026-09-07 by issue #36's collapsed-group swatch strip
+(`panel-size-and-swatches.md` §5.3). It takes exactly one of the two decorations above and drops the
+other, and the split falls straight out of the size:
+
+- **The ring is kept**, and it matters *more* here than at 12px: it is 1px of an 8px box, so it is a
+  larger share of the mark, and it is the same argument unchanged — it is what stops a `#000000`
+  shade in a collapsed ramp being a hole in a dark panel. Same `--swatch-ring`, same inset shadow.
+- **The checkerboard is dropped.** At 8px the 6px checker squares are one-and-a-bit squares of noise
+  — legible as texture, not as alpha. The dot sits on `--checker-a` (the panel's own ground) as a
+  flat base instead, so a semi-transparent token still composites against the surface it will look
+  like in use; it just no longer advertises that it has alpha. Alpha is not readable at 8px, and
+  pretending otherwise costs legibility for every opaque token in the strip.
+
 ### 6.4 The hover filter flips direction
 
 `button.primary:hover` and `button.danger:hover` darken by `filter: brightness(0.93 / 0.92)`. On a
