@@ -28,6 +28,7 @@ import type { FlatToken } from "./view";
 import { collectReferences } from "./references";
 import { referencesInExpression } from "./expr";
 import { valueShape } from "./expr";
+import { memberShape, nonLiteralMembers, strayMemberReferences } from "./members";
 import { normalizePathKey } from "./paths";
 
 // ---------------------------------------------------------------------------
@@ -81,12 +82,49 @@ export interface ReferenceGraph {
  * manufacture a cycle.
  */
 export function outgoingPaths(token: Token): string[] {
-  if (valueShape(token) !== "expression") return collectReferences(token);
+  if (valueShape(token) !== "expression") {
+    // A composite's members are ordinary value fields (UX §14.1), so a member's expression is a
+    // dependency exactly as a whole token's is. Its references are invisible to `collectReferences`
+    // for the same reason a whole-token expression's are — `isReference` is anchored — so they are
+    // collected here. Member *references* need no special case: the `$value` walk already finds them,
+    // and finding them twice is what a second collector would achieve.
+    return withoutStrays(collectReferences(token), token).concat(memberExpressionPaths(token));
+  }
 
   // `collectReferences` already returns exactly the `boundVariables` half here: it walks `$value`
   // through `isReference`, which is anchored and refuses an expression string outright (§1). So the
   // two halves compose by concatenation rather than needing the value half subtracted.
   return referencesInExpression(token.$value as string).concat(collectReferences(token));
+}
+
+/**
+ * Drops the brace-shaped strings sitting on members that can never point anywhere (§14.2).
+ *
+ * `collectReferences` walks `$value` blind — correctly, since it is also the export's and the delete
+ * check's walker — so a `{a.b}` hand-written into a grid's `pattern` arrives here looking exactly
+ * like a real edge. One occurrence is removed per stray rather than every match of the path, so a
+ * token that *also* points at that path from a legitimate member keeps its edge.
+ */
+function withoutStrays(paths: string[], token: Token): string[] {
+  const strays = strayMemberReferences(token);
+  if (strays.length === 0) return paths;
+
+  const remaining = paths.slice();
+  for (const stray of strays) {
+    const at = remaining.indexOf(stray);
+    if (at !== -1) remaining.splice(at, 1);
+  }
+  return remaining;
+}
+
+/** Every operand of every member expression — the sub-key half of ADR-0007 §3's edge set (§14.9). */
+function memberExpressionPaths(token: Token): string[] {
+  const paths: string[] = [];
+  for (const slot of nonLiteralMembers(token)) {
+    if (memberShape(slot.accepts, slot.value) !== "expression") continue;
+    paths.push(...referencesInExpression(slot.value as string));
+  }
+  return paths;
 }
 
 export interface GraphOptions {

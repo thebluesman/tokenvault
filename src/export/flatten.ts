@@ -25,9 +25,11 @@
 // has no mid-edit, and shipping a stylesheet with `{a.b}` in it to a consumer is worse than not
 // shipping one.
 
-import type { Token } from "../tokens/types";
+import type { Token, TokenValue } from "../tokens/types";
 import type { FlatToken } from "../tokens/view";
+import type { Resolution } from "../tokens/resolve";
 import { buildResolveContext, resolveToken } from "../tokens/resolve";
+import { memberShape, withMemberValue } from "../tokens/members";
 import { cycleSummary } from "../tokens/graph";
 import { collectValueReferences, isReference } from "../tokens/references";
 import { normalizePathKey } from "../tokens/paths";
@@ -137,6 +139,33 @@ export function flattenTheme(all: FlatToken[], theme: ExportTheme): FlattenResul
       continue;
     }
 
+    // A composite with pointers in it — UX §14. Every failure kind a whole token can have, a member
+    // can have too, and each one fails the build for the same reason as its whole-token twin: the
+    // CSS equivalent of "no value at all" is not emitting the file.
+    if (resolution.kind === "composite") {
+      const bad = memberDiagnostics(entry, resolution, theme.name);
+      if (bad !== null) {
+        diagnostics.push(bad);
+        continue;
+      }
+      // Members `members.ts` does not model — a `{…}` sitting somewhere the table has no row for —
+      // still get the existence check the whole-value reference got, so nothing reaches the CSS
+      // verbatim just because it was written in a slot the editor would have refused.
+      const stray = danglingSubReferences(entry, "literal", context.stack);
+      if (stray.length > 0) {
+        diagnostics.push({
+          kind: "dangling-reference",
+          theme: theme.name,
+          path: entry.path,
+          setId: entry.setId,
+          message: `"${entry.path}" references ${stray.map((one) => `"${one}"`).join(", ")}, which theme "${theme.name}" does not define.`,
+        });
+        continue;
+      }
+      tokens.push(exportToken(entry, memberFlattened(entry, resolution)));
+      continue;
+    }
+
     const shape = valueShape(entry.token);
     // A reference keeps its `{path}` string — Style Dictionary resolves it, and it has just been
     // proved resolvable above. An expression takes the number the evaluator produced. Everything
@@ -158,15 +187,81 @@ export function flattenTheme(all: FlatToken[], theme: ExportTheme): FlattenResul
       continue;
     }
 
-    const token: ExportToken["token"] = { $type: entry.token.$type, $value: value };
-    if (entry.token.$description !== undefined && entry.token.$description.length > 0) {
-      token.$description = entry.token.$description;
-    }
-    tokens.push({ path: entry.path, segments: entry.segments.slice(), setId: entry.setId, token });
+    tokens.push(exportToken(entry, value));
   }
 
   tokens.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return { theme, tokens, diagnostics };
+}
+
+function exportToken(entry: FlatToken, value: TokenValue): ExportToken {
+  const token: ExportToken["token"] = { $type: entry.token.$type, $value: value };
+  if (entry.token.$description !== undefined && entry.token.$description.length > 0) {
+    token.$description = entry.token.$description;
+  }
+  return { path: entry.path, segments: entry.segments.slice(), setId: entry.setId, token };
+}
+
+/**
+ * The first member that has no value, as the diagnostic that fails the build — UX §14, issue #26.
+ *
+ * One diagnostic per token rather than one per member: a CI log that lists five members of one
+ * broken typography token reads as five problems, and the fix is the same edit either way.
+ */
+function memberDiagnostics(
+  entry: FlatToken,
+  resolution: Resolution,
+  theme: string
+): ExportDiagnostic | null {
+  for (const member of resolution.members ?? []) {
+    const kind = member.resolution.kind;
+    if (kind === "cycle") {
+      return {
+        kind: "reference-cycle",
+        theme,
+        path: entry.path,
+        setId: entry.setId,
+        message: `"${entry.path}" has \`${member.slot.label}\` on a reference loop, so it has no value to export.`,
+      };
+    }
+    if (kind === "unresolved") {
+      return {
+        kind: "dangling-reference",
+        theme,
+        path: entry.path,
+        setId: entry.setId,
+        message: `"${entry.path}" has \`${member.slot.label}\` pointing at "${member.resolution.target ?? "?"}", which theme "${theme}" does not define.`,
+      };
+    }
+    if (kind === "error") {
+      return {
+        kind: "expression-error",
+        theme,
+        path: entry.path,
+        setId: entry.setId,
+        message: `"${entry.path}" could not evaluate \`${member.slot.label}\`: ${member.resolution.error?.message ?? "unknown error"}`,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * The composite Style Dictionary is handed: member **expressions** become numbers, member
+ * **references** keep their `{path}` string.
+ *
+ * Exactly the whole-token rule (§the module header), one level down. Style Dictionary resolves DTCG
+ * references itself and rewriting them would be work that can only introduce bugs; it has no idea
+ * what `{a} * 2` means, so that one is evaluated here by the same evaluator the apply path uses.
+ */
+function memberFlattened(entry: FlatToken, resolution: Resolution): TokenValue {
+  let value = entry.token.$value;
+  for (const member of resolution.members ?? []) {
+    if (memberShape(member.slot.accepts, member.slot.value) !== "expression") continue;
+    if (member.resolution.value === undefined) continue;
+    value = withMemberValue(value, member.slot.keyPath, member.resolution.value);
+  }
+  return value;
 }
 
 /**

@@ -28,6 +28,14 @@ import { emptyCycleIndex } from "./graph";
 import type { CycleIndex } from "./graph";
 import { evaluate, expressionReferences, parseExpression, valueShape } from "./expr";
 import { isReference, referenceTarget } from "./references";
+import type { MemberAccepts, MemberSlot, MemberType } from "./members";
+import {
+  isCompositeValue,
+  memberShape,
+  nonLiteralMembers,
+  refuseSubKeyReference,
+  withMemberValue,
+} from "./members";
 import { normalizePathKey } from "./paths";
 
 // ---------------------------------------------------------------------------
@@ -136,6 +144,14 @@ export type ResolutionKind =
   | "expression"
   /** On a cycle. **No value, ever** (§7.1). */
   | "cycle"
+  /**
+   * A composite with at least one member that points or computes — UX §14.
+   *
+   * Its own kind rather than a `literal` with extra baggage, because the interesting answer is
+   * per-member: a typography token whose `fontSize` is on a loop still knows its font family, and
+   * §14.6's rule is that **the member is valueless, not the token**.
+   */
+  | "composite"
   /** The path names no token in the active theme's stack. Warns; the value still stands. */
   | "unresolved"
   /** Parse failure, non-numeric operand, division by zero. */
@@ -156,6 +172,20 @@ export interface Resolution {
   expression?: string;
   cycle?: Cycle;
   error?: ExprError;
+  /**
+   * Present on `composite` only: one entry per member that holds a pointer or a formula, in
+   * declaration order.
+   *
+   * A member whose resolution has no `value` is the `—` slot of §14.6 — never a zero, never the last
+   * good number, and never an omitted slot, which would read as a resolved value one member short.
+   */
+  members?: MemberResolution[];
+}
+
+/** One member's own answer, addressed the way `members.ts` addresses it. */
+export interface MemberResolution {
+  slot: MemberSlot;
+  resolution: Resolution;
 }
 
 /**
@@ -166,10 +196,79 @@ export interface Resolution {
  */
 export function resolveToken(entry: FlatToken, context: ResolveContext): Resolution {
   const node = graphNodeKey(entry.setId, entry.path);
-  if (context.cycles.nodes.has(node)) {
-    return { kind: "cycle", cycle: cycleContaining(context, node) };
+  const onCycle = context.cycles.nodes.has(node);
+
+  // A composite is the first thing in the panel that can be *partly* on a loop (UX §14.6), so it is
+  // asked member by member before the whole-token answer is given. The whole-token cycle still
+  // applies when nothing in the value accounts for it — a loop closed through `boundVariables`
+  // provenance, which is read-only and has no member field to blame.
+  const composite = resolveComposite(entry.token, context, node);
+  if (composite !== null) {
+    if (!onCycle) return composite;
+    const blamed = (composite.members ?? []).some((member) => member.resolution.kind === "cycle");
+    if (blamed) return composite;
   }
+
+  if (onCycle) return { kind: "cycle", cycle: cycleContaining(context, node) };
   return resolveValue(entry.token, context);
+}
+
+/**
+ * A composite's members, each resolved as the ordinary value it is (§14.1).
+ *
+ * Returns `null` when the token is not a composite with pointers in it, so the caller falls through
+ * to the scalar path unchanged. The substituted `value` carries the resolved literal wherever there
+ * is one and the **raw string** wherever there isn't: §7.1's no-fallback rule reaches down here
+ * intact, and a caller that needs to know which slots are blank reads `members` rather than trying
+ * to tell a resolved value from an unresolved one by looking at it.
+ */
+function resolveComposite(
+  token: Pick<Token, "$type" | "$value">,
+  context: ResolveContext,
+  node: string
+): Resolution | null {
+  if (!isCompositeValue(token.$value)) return null;
+  const slots = nonLiteralMembers(token);
+  if (slots.length === 0) return null;
+
+  const members: MemberResolution[] = [];
+  let value = token.$value as TokenValue;
+
+  for (const slot of slots) {
+    const shape = memberShape(slot.accepts, slot.value);
+    // A reference is type-agnostic to resolve — `valueShape` reads the braces, not the `$type` — and
+    // only an expression needs the `number` the grammar requires (ADR-0007 §1).
+    const asToken = { $type: "number" as Token["$type"], $value: slot.value as TokenValue };
+    let resolution = resolveValue(asToken, context);
+
+    // An operand on a loop reaches `evaluate` as an error rather than as a cycle, because the
+    // evaluator has no vocabulary for one. Re-flagged here so the member renders §7.2's block and
+    // the `—` slot, rather than an error message about arithmetic.
+    if (
+      shape === "expression" &&
+      resolution.kind === "error" &&
+      resolution.error?.reason === "operand-cycle"
+    ) {
+      // **The loop is the operand's, not the composite's.** A typography token whose `lineHeight`
+      // is `{space.a} * 2` where `space.a` self-cycles is not itself a cycle participant, so asking
+      // for the loop at *this* token's node returns nothing — and a `cycle` resolution with no
+      // `cycle` renders as a silent blank, which is precisely the bare-blank §7.2 forbids. The
+      // composite's own node stays as the fallback for the case where the member's edge is what
+      // closes the loop.
+      resolution = {
+        kind: "cycle",
+        cycle: operandCycle(slot.value as string, context, node),
+        expression: slot.value as string,
+      };
+    }
+
+    members.push({ slot, resolution });
+    if (resolution.value !== undefined) {
+      value = withMemberValue(value, slot.keyPath, resolution.value);
+    }
+  }
+
+  return { kind: "composite", value, members };
 }
 
 /** The token's value, once it is known not to be on a cycle. Exported for candidate previews. */
@@ -194,6 +293,22 @@ export function resolveValue(
   const evaluated = evaluate(expression, (path) => operand(path, context));
   if (!evaluated.ok) return { kind: "error", expression, error: evaluated.error };
   return { kind: "expression", expression, value: evaluated.value };
+}
+
+/**
+ * The loop an expression's operands lead into, for §7.2's block under the member's field.
+ *
+ * `followReference` answers both ways an operand can be waiting on a loop — the token it names is on
+ * one, or the chain from it walks into one — and it is the same walk `operand` already did, so the
+ * two can never disagree about which loop that is. `fallback` is the composite's own node, which is
+ * the answer when the member's own edge is what closes the loop.
+ */
+function operandCycle(raw: string, context: ResolveContext, fallback: string): Cycle | undefined {
+  for (const path of referencePathsOf(raw)) {
+    const followed = followReference(path, context, new Set());
+    if (followed !== null && followed.cycle !== undefined) return followed.cycle;
+  }
+  return cycleContaining(context, fallback);
 }
 
 /** The loop a node sits on, for the block to render (§7.2). */
@@ -326,6 +441,25 @@ export interface AuthorInput {
   context: ResolveContext;
   /** Every theme's stack, for rule 4's "which themes does this dangle in". */
   themeStacks?: Array<{ name: string; paths: Set<string> }>;
+  /**
+   * Set when the field being committed is one member of a composite — UX §14.4.
+   *
+   * The four rules are unchanged; what changes is what rule 2 compares against. The check reads the
+   * **member's** type, from `members.ts`'s table, because "this token is a typography" would be true
+   * and useless next to a `fontSize` field.
+   */
+  member?: { key: string; type: MemberType; accepts: MemberAccepts };
+}
+
+/** The `$type`s a member's field will take, per §14.2. */
+function expectedTypesFor(type: MemberType): Set<string> {
+  if (type === "number-or-string") return new Set(["number", "string"]);
+  return new Set([type]);
+}
+
+/** `a number`, `a number or a string` — the phrase rule 2's copy needs after "takes". */
+function describeMemberType(type: MemberType): string {
+  return type === "number-or-string" ? "a number or a string" : `a ${type}`;
 }
 
 /**
@@ -340,16 +474,31 @@ export interface AuthorInput {
 export function checkAuthoredValue(input: AuthorInput): AuthorOutcome {
   const { entry, raw, context } = input;
   const trimmed = raw.trim();
+  const member = input.member;
 
   if (isReference(trimmed)) {
+    // §14.2's two literal-only members refuse by name, ahead of every other rule: `pattern` decides
+    // which fields the object has, so a pointer there is not a wrong value but a wrong idea.
+    if (member !== undefined) {
+      const refusal = refuseSubKeyReference(member.key, member.accepts, trimmed);
+      if (refusal !== null) return { ok: false, reason: "member-literal-only", message: refusal };
+    }
     return checkReference(trimmed, input);
   }
 
   // An expression evaluates to a number, so it can only ever be a `number` token's value
-  // (ADR-0007 §1). The per-type editors route literals away before they reach here, so a
-  // non-`number` token arriving with a formula is refused rather than committed as a string that
-  // `toFigma` would then have to refuse at the write boundary instead.
-  if (entry.token.$type !== "number") {
+  // (ADR-0007 §1) or a numeric member's (§14.2). The per-type editors route literals away before
+  // they reach here, so anything else arriving with a formula is refused rather than committed as a
+  // string that `toFigma` would then have to refuse at the write boundary instead.
+  if (member !== undefined) {
+    if (member.accepts !== "full") {
+      return {
+        ok: false,
+        reason: "expression-on-non-number",
+        message: `Expressions work out to a number, so \`${member.key}\` can't hold one. Point it at a token with {…}, or type ${describeMemberType(member.type)} value.`,
+      };
+    }
+  } else if (entry.token.$type !== "number") {
     return {
       ok: false,
       reason: "expression-on-non-number",
@@ -461,25 +610,37 @@ function checkReference(value: string, input: AuthorInput): AuthorOutcome {
   // perfectly good edit (or wave through a bad one) on iteration order. Refusing only when no set
   // defines it compatibly matches rule 4's posture — the theme decides, and where the theme has not
   // decided we do not invent an answer.
+  // A member field asks the same question of its own type (§14.4): only the second sentence changes,
+  // because "this token is a typography" is true and useless next to a `fontSize` field.
+  const member = input.member;
+  const accepted = member === undefined ? new Set([entry.token.$type]) : expectedTypesFor(member.type);
+  const subject =
+    member === undefined
+      ? `This token is a ${entry.token.$type}, so it can't point there.`
+      : `\`${member.key}\` takes ${describeMemberType(member.type)}, so it can't point there.`;
+
   const inStack = context.stack.get(key);
   if (inStack !== undefined) {
-    if (inStack.token.$type !== entry.token.$type) {
+    if (!accepted.has(inStack.token.$type)) {
       return {
         ok: false,
         reason: "reference-type-mismatch",
-        message: `${target} is a ${inStack.token.$type}. This token is a ${entry.token.$type}, so it can't point there.`,
+        message: `${target} is a ${inStack.token.$type}. ${subject}`,
       };
     }
   } else {
     const types = context.everywhereTypes.get(key) ?? new Set([anywhere.token.$type]);
-    if (!types.has(entry.token.$type)) {
+    const compatible = Array.from(types).some((one) => accepted.has(one));
+    if (!compatible) {
       return {
         ok: false,
         reason: "reference-type-mismatch",
         message:
           types.size === 1
-            ? `${target} is a ${anywhere.token.$type}. This token is a ${entry.token.$type}, so it can't point there.`
-            : `${target} is a ${listTypes(Array.from(types))} depending on the set. None of them is a ${entry.token.$type}, so this token can't point there.`,
+            ? `${target} is a ${anywhere.token.$type}. ${subject}`
+            : member === undefined
+              ? `${target} is a ${listTypes(Array.from(types))} depending on the set. None of them is a ${entry.token.$type}, so this token can't point there.`
+              : `${target} is a ${listTypes(Array.from(types))} depending on the set. None of them is what \`${member.key}\` takes, so it can't point there.`,
       };
     }
   }
@@ -597,7 +758,52 @@ export function graphReport(
     const node = graphNodeKey(entry.setId, entry.path);
     if (context.cycles.nodes.has(node)) continue;
 
-    const resolved = resolveValue(entry.token, context);
+    const resolved = resolveToken(entry, context);
+
+    // A composite reports per member (§14.6): the token as a whole is fine, and naming the member is
+    // the difference between a report the user can act on and one that says "this typography is
+    // wrong".
+    if (resolved.kind === "composite") {
+      for (const member of resolved.members ?? []) {
+        if (member.resolution.kind === "cycle") {
+          // A member can be on a loop the *token* is not on — `lineHeight: "{space.a} * 2"` where
+          // `space.a` self-cycles — so the `continue` above never fired and this is the only place
+          // the field's missing value is reported. Without it a build report calls the token clean
+          // while one of its fields renders `—`.
+          const cycle = member.resolution.cycle;
+          const summary = cycle === undefined ? "" : cycleSummary(context.graph, cycle);
+          entries.push({
+            kind: "reference-cycle",
+            reason: cycle !== undefined && cycle.nodes.length === 1 ? "self-reference" : "circular-reference",
+            message:
+              summary.length === 0
+                ? `\`${member.slot.label}\` is on a loop, so it has no value. Editing any token in the loop breaks it.`
+                : `\`${member.slot.label}\` is on a loop: ${summary}. Nothing in the loop has a value, because each one is waiting on the next. Editing any one of them breaks it.`,
+            path: entry.path,
+            set: entry.setId,
+          });
+        } else if (member.resolution.kind === "unresolved") {
+          entries.push({
+            kind: "unresolved-in-theme",
+            reason: "active-theme",
+            message: `\`${member.slot.label}\` points at ${member.resolution.target ?? "a token"}, which has no value in the active theme. Nothing is broken — this field just has no value while that theme is on.`,
+            path: entry.path,
+            set: entry.setId,
+            omitted: member.resolution.target === undefined ? undefined : [member.resolution.target],
+          });
+        } else if (member.resolution.kind === "error") {
+          entries.push({
+            kind: "expression-error",
+            reason: member.resolution.error?.reason ?? "expression-error",
+            message: `\`${member.slot.label}\`: "${String(member.slot.value)}" can't be worked out: ${member.resolution.error?.message ?? "no reason recorded"}`,
+            path: entry.path,
+            set: entry.setId,
+          });
+        }
+      }
+      // No `continue`: the per-theme sweep below still applies, and `outgoingPaths` already sees
+      // member edges, so rule 4 covers a member that resolves here and dangles in another theme.
+    }
 
     if (resolved.kind === "error") {
       entries.push({
