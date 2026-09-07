@@ -76,23 +76,43 @@ test("a resolved colour swatch is painted one way, whatever the value was writte
   // treatment it used to get made the ends of a scale (near-white, near-black) read as the wrong
   // colour, and the `↗` plus the value text already say "pointer".
   //
-  // There is no DOM harness here, so the guarantee is structural: both branches of `appendValue`
-  // build their chip through the single `colorSwatch` helper. This pins that — a second hand-rolled
-  // `swatch-fill` in the token list is how the two treatments drifted apart the first time.
-  const tokensTs = readFileSync(join(UI, "tokens.ts"), "utf8");
+  // There is no DOM harness here, so the guarantee is structural, and since
+  // `edit-view-redesign.md` §4.3 it is stronger than "one helper per file": the whole panel builds
+  // every colour chip through `swatchNode` in `swatch.ts`. The card's value shell reuses that call
+  // rather than paralleling it (§12), so a second hand-rolled `swatch-fill` anywhere under `src/ui`
+  // is the drift this pins — it is how the two treatments came apart the first time.
+  const swatchTs = readFileSync(join(UI, "swatch.ts"), "utf8");
 
   assert.equal(
-    tokensTs.split('"swatch-fill"').length - 1,
+    swatchTs.split('"swatch-fill"').length - 1,
     1,
-    "the token list builds more than one swatch fill — route both value branches through colorSwatch"
+    "swatch.ts builds more than one swatch fill — `swatchNode` is meant to be the only one"
   );
+  for (const name of readdirSync(UI)) {
+    if (!name.endsWith(".ts") || name === "swatch.ts") continue;
+    const text = readFileSync(join(UI, name), "utf8");
+    assert.equal(
+      text.indexOf('"swatch-fill"'),
+      -1,
+      `${name} hand-rolls a swatch fill — ask swatchNode() instead (edit-view-redesign.md §12)`
+    );
+    for (const fade of text.split("\n").filter((line) => /\.opacity\s*=/.test(line))) {
+      // Line-level, because a *button* may legitimately dim (the blocked delete control does). What
+      // must never happen again is a fade applied to a chip.
+      assert.equal(
+        /swatch|fill|chip/i.test(fade),
+        false,
+        `${name} fades a swatch — full opacity, literal or reference alike: ${fade.trim()}`
+      );
+    }
+  }
   assert.equal(
-    /\.opacity\s*=/.test(tokensTs),
+    /\.opacity\s*=/.test(swatchTs),
     false,
-    "a swatch in the token list is never faded — full opacity, literal or reference alike"
+    "swatch.ts fades a chip — issue #28 retired the faded reference treatment"
   );
   assert.equal(
-    tokensTs.indexOf('"swatch outlined"') !== -1,
+    swatchTs.indexOf('"swatch outlined"') !== -1,
     true,
     "the dashed chip is still the mark for a reference that resolves to no colour at all"
   );

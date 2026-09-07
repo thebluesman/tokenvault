@@ -180,10 +180,12 @@ test("the cycle row reserves the swatch slot, and only on a colour row", () => {
     tokensTs.indexOf('if (resolution.kind === "cycle") {'),
     tokensTs.indexOf('container.appendChild(el("span", "badge needs", "⚑ cycle"));')
   );
+  // The reservation is `swatchNode({ kind: "none" })` since `edit-view-redesign.md` §12 folded the
+  // three chip helpers into the one function the card's value shell also asks.
   assert.equal(
-    cycleBranch.indexOf("reservedSwatchSlot()") !== -1,
+    /swatchNode\(\{ kind: "none" \}\)/.test(cycleBranch),
     true,
-    "the cycle row no longer reserves the 12px slot — its `—` will sit 12px left of its siblings"
+    "the cycle row no longer reserves the slot — its `—` will sit a chip-width left of its siblings"
   );
   assert.equal(
     cycleBranch.indexOf("isColor") !== -1,
@@ -191,7 +193,7 @@ test("the cycle row reserves the swatch slot, and only on a colour row", () => {
     "the cycle row's reservation is no longer gated on the colour type"
   );
   assert.equal(
-    /else if \(isColor\) \{\s*container\.appendChild\(reservedSwatchSlot\(\)\);/.test(tokensTs),
+    /mark\.kind !== "none" \|\| isColor/.test(tokensTs),
     true,
     "the no-mark case no longer reserves the slot for a colour row"
   );

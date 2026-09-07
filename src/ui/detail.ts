@@ -7,12 +7,29 @@
 // One overlay covers **all of a path's sets** (§5.1). Opening a separate one per set would make
 // the user back out and re-enter to compare `Light` against `Dark`, which is the thing the merged
 // view was chosen to make easy.
+//
+// Restyled as **the token card** in Phase 10 — `edit-view-redesign.md`. The surface did not change:
+// still the full-panel overlay, still not a modal and not a second pane (§3.1, and
+// `panel-size-and-swatches.md` §3.4 makes it a constraint rather than a preference). What changed is
+// everything inside `.panel-body`:
+//
+//   - **Labels sit above their fields**, not in an 84px gutter beside them — ~90px of value width
+//     recovered at the 400px floor for ~14px of height per field (§4.1).
+//   - **One card for a single-set path**, one bordered section per set for a multi-set one (§3.2).
+//   - **`.value-shell`**: one new class, one bordered row holding the swatch, the input and any
+//     trailing control. No new colour, no new badge, and the swatch is `swatchMark()` (§4.3, §12).
+//   - **The Figma section is one disclosure** with the Source line promoted into its summary, so
+//     collapsing never hides provenance (§6).
+//   - **A pinned footer** holding `Done` and the path-level `Apply all N sets`. No Save and no
+//     Cancel: there is no draft buffer for one to act on (§7.2).
 
 import type {
   DimensionValue,
   GridValue,
+  Referable,
   ShadowValue,
   SubtypeSelection,
+  Token,
   TokenValue,
   TypographyValue,
 } from "../tokens/types";
@@ -83,11 +100,23 @@ import {
   revert,
   send,
 } from "./state";
+import {
+  autoExpandFigma,
+  collapsedLayers,
+  figmaSummary,
+  hasFigmaSection,
+  memberLabel,
+  pairMembers,
+  scopesLine,
+  valueLabel,
+} from "./card";
+import { isColorValue, swatchMark, swatchNode } from "./swatch";
 import { isConnected } from "./git";
 import { openApplyDialog } from "./applyDialog";
 import { openDeleteInFigma } from "./deleteFigma";
 import { button, closePopover, copy, el, isPopoverOpen, popover, toast } from "./dom";
 import { describeValue } from "../tokens/format";
+import { previewOf } from "../tokens/preview";
 import { normalizePathKey } from "../tokens/paths";
 
 const panelEl = document.getElementById("panel") as HTMLElement;
@@ -95,6 +124,23 @@ const panelEl = document.getElementById("panel") as HTMLElement;
 let openKey: string | null = null;
 let focusSet: string | undefined;
 let navigate: (path: string) => void = () => undefined;
+
+/**
+ * Which Figma disclosures the user has opened or shut by hand, keyed by `path\u0000setId`.
+ *
+ * In memory, cleared on `closeDetail`, and deliberately **not** `clientStorage` (§6.2, §12): the
+ * store is quota-constrained (ADR-0004 §1) and which accordion you last poked is a per-glance
+ * preference, not user data. `undefined` means "nobody has touched this one", which is what lets
+ * §6.2's auto-expand decide instead.
+ */
+const figmaOpen = new Map<string, boolean>();
+
+/** Same shape, same lifetime, for a shadow layer the user expanded past §5.6's collapse rule. */
+const layerOpen = new Map<string, boolean>();
+
+function stateKey(line: Line, suffix = ""): string {
+  return `${line.entry.path}\u0000${line.entry.setId}${suffix}`;
+}
 
 export function setNavigator(fn: (path: string) => void): void {
   navigate = fn;
@@ -112,6 +158,8 @@ export function closeDetail(): void {
   focusSet = undefined;
   pendingRender = false;
   blockedPanel = false;
+  figmaOpen.clear();
+  layerOpen.clear();
   panelEl.classList.add("hidden");
   panelEl.textContent = "";
 }
@@ -185,12 +233,32 @@ function renderNow(): void {
   panelEl.textContent = "";
   panelEl.classList.remove("hidden");
 
+  // The title bar **is** the name field (§10.1). The full dotted path in mono with `Copy path`
+  // beside it is the reference's own item 1, and rendering an editable input that refuses everything
+  // typed into it would be worse than rendering none: ADR-0004 defines no rename op.
   const head = el("div", "panel-head");
   const back = button("←");
   back.title = "Back to the tree";
   back.addEventListener("click", closeDetail);
   head.appendChild(back);
-  head.appendChild(el("div", "title", row.row.path));
+
+  const headMain = el("div", "head-main");
+  headMain.appendChild(el("div", "title", row.row.path));
+  // §3.2 — a single-set path drops the `.set-section` box and its `h3`, so the badges that lived in
+  // the `h3` have to reappear here or they are lost (§12). The `$type` badge is not among them: on a
+  // single-set card the value field's own label carries the type (§4.2).
+  const single = row.lines.length === 1;
+  if (single) {
+    const line = row.lines[0];
+    const meta = el("div", "head-meta");
+    const code = el("span", "mono", line.set.code);
+    code.title = line.set.label;
+    meta.appendChild(code);
+    if (line.edited) meta.appendChild(el("span", "badge", "edited"));
+    for (const flag of line.flags) meta.appendChild(el("span", "badge needs", flag.kind));
+    headMain.appendChild(meta);
+  }
+  head.appendChild(headMain);
 
   const copyPath = button("Copy path");
   copyPath.addEventListener("click", () => copy(row.row.path, "the token path"));
@@ -198,21 +266,13 @@ function renderNow(): void {
   panelEl.appendChild(head);
 
   const body = el("div", "panel-body");
-  // Phase 5's whole job was to remove Phase 4's "editing changes nothing on the canvas" sentence.
-  // What replaces it has to be equally precise about the *new* boundary: edits are still local
-  // until applied, and applying is still not committing anything (git sync is Phase 6).
-  body.appendChild(
-    el(
-      "p",
-      "empty",
-      "Editing changes the local token tree. Use Apply to write it into Figma — nothing is committed anywhere until git sync lands in Phase 6."
-    )
-  );
+  for (const line of row.lines) body.appendChild(renderCard(row, line, single));
 
-  for (const line of row.lines) body.appendChild(renderSetSection(row, line));
-
+  // Destructive path-level actions stay at the bottom of the scroll. They do **not** belong in a
+  // permanently visible footer next to `Done` (§7.2).
   body.appendChild(renderPathActions(row));
   panelEl.appendChild(body);
+  panelEl.appendChild(renderFooter(row));
 
   if (focusSet !== undefined) {
     const target = body.querySelector(`[data-set-section="${cssEscape(focusSet)}"]`);
@@ -227,17 +287,84 @@ function cssEscape(value: string): string {
 
 // ---------------------------------------------------------------------------
 
-function renderSetSection(row: Row, line: Line): HTMLElement {
-  const section = el("div", "set-section");
+/**
+ * The pinned footer — `edit-view-redesign.md` §7.2.
+ *
+ * **There is no Save and nothing for one to do.** Every field commits to the `clientStorage` overlay
+ * on blur (ADR-0004 §2), so a Save button would mean inventing a draft buffer — and a card that can
+ * be abandoned unsaved makes `local-editor.md` §5.4's "local edits" promise conditional. No Cancel
+ * either: `←` has been the exit since Phase 4.
+ *
+ * What is pinned instead is the thing that actually writes, which is `git-sync.md` §7.2's pattern in
+ * the same `.panel-foot` class: the body scrolls against the panel and the write verb never scrolls
+ * out of reach.
+ */
+function renderFooter(row: Row): HTMLElement {
+  const foot = el("div", "panel-foot");
+
+  // Replaces Phase 4's standing paragraph at the top of the body, which still promised git sync was
+  // coming in Phase 6 — it landed 2026-09-03. Rendered only when something on this path is edited;
+  // silent otherwise, and commit state lives on the Repo tab's own chip now.
+  if (row.lines.some((line) => line.edited)) {
+    foot.appendChild(el("div", "note", "Edits are local until you Apply."));
+  }
+
+  const actions = el("div", "foot-row");
+  if (row.lines.length > 1 && row.lines.some((line) => line.edited)) {
+    const apply = button(`Apply all ${row.lines.length} sets`, "primary");
+    apply.addEventListener("click", () => applyLines(row.lines, `Apply ${row.row.path}`));
+    actions.appendChild(apply);
+  }
+  // The reference's Save position, doing the reference's Save gesture — *I'm finished here* — without
+  // claiming to write anything. Identical in effect to `←`.
+  const done = button("Done", "primary");
+  done.addEventListener("click", closeDetail);
+  actions.appendChild(done);
+  foot.appendChild(actions);
+  return foot;
+}
+
+/**
+ * One token card — `edit-view-redesign.md` §3.2, §5.
+ *
+ * `bare` is the single-set path: **no `.set-section` box and no `h3`**, because a border, 8px of
+ * padding each side and a heading restating a set the title already implies is pure redundancy on
+ * two-thirds of paths (§3.2). Multi-set keeps one bordered section per set — with three on screen the
+ * set is the thing you are locating — and the `h3` is also where two sets disagreeing on `$type`
+ * shows up (`local-editor.md` §4.2).
+ *
+ * Section order is §5's matrix, and a row absent from a type's column simply is not rendered: nothing
+ * here draws a placeholder for a section it does not have.
+ */
+function renderCard(row: Row, line: Line, bare: boolean): HTMLElement {
+  const section = el("div", bare ? "card" : "set-section");
   section.setAttribute("data-set-section", line.entry.setId);
 
-  const heading = el("h3");
-  heading.appendChild(el("span", "mono", line.set.code));
-  heading.appendChild(el("span", "badge", line.entry.token.$type));
-  if (line.edited) heading.appendChild(el("span", "badge", "edited"));
-  for (const flag of line.flags) heading.appendChild(el("span", "badge needs", flag.kind));
-  section.appendChild(heading);
-  section.title = line.set.label;
+  if (!bare) {
+    const heading = el("h3");
+    heading.appendChild(el("span", "mono", line.set.code));
+    heading.appendChild(el("span", "badge", line.entry.token.$type));
+    if (line.edited) heading.appendChild(el("span", "badge", "edited"));
+    for (const flag of line.flags) heading.appendChild(el("span", "badge needs", flag.kind));
+    section.appendChild(heading);
+    section.title = line.set.label;
+  }
+
+  // §4.6's precedence, unchanged and all of it **above** the value field: the cycle block first,
+  // because the loop is the thing in the error state rather than this token
+  // (`references-math-themes.md` §7.3b), then conflict, then drift, then the in-sync line, then
+  // `editBlockedReason`.
+  const cycle = onCycle(line) ? resolutionFor(line).cycle : undefined;
+  if (cycle !== undefined) {
+    section.appendChild(
+      cycleBlock(cycle, getModel().resolve, {
+        navigate: (path: string) => {
+          closeDetail();
+          navigate(path);
+        },
+      })
+    );
+  }
 
   if (line.conflict !== undefined) section.appendChild(renderConflict(line));
   else if (line.drift !== undefined) section.appendChild(renderDrift(line));
@@ -248,13 +375,17 @@ function renderSetSection(row: Row, line: Line): HTMLElement {
   const blocked = editBlockedReason(line);
   if (blocked !== null) section.appendChild(el("div", "empty", blocked));
 
-  section.appendChild(renderValueEditor(line));
+  section.appendChild(typedEditor(line));
+
+  // §4.6 — flag messages used to render after the actions toolbar, at the very bottom of the
+  // section, detached from the field they describe. *"Points at folio.ref.palette.red-warm.50, which
+  // isn't in any set"* is a sentence about the value field directly above it.
+  for (const flag of line.flags) section.appendChild(el("div", "field-note", flag.message));
+
   section.appendChild(renderDescription(line));
 
-  const subtype = renderSubtype(line);
-  if (subtype !== null) section.appendChild(subtype);
-
-  section.appendChild(renderProvenance(line));
+  const figma = renderFigmaSection(line);
+  if (figma !== null) section.appendChild(figma);
 
   const actions = el("div", "toolbar");
   if (line.edited) {
@@ -279,10 +410,6 @@ function renderSetSection(row: Row, line: Line): HTMLElement {
   // consequences.
   actions.appendChild(deleteInFigmaButton([line]));
   section.appendChild(actions);
-
-  for (const flag of line.flags) {
-    section.appendChild(el("div", "empty", flag.message));
-  }
 
   return section;
 }
@@ -445,29 +572,13 @@ function renderInSync(): HTMLElement {
 // Value editors — §5.2
 // ---------------------------------------------------------------------------
 
-function renderValueEditor(line: Line): HTMLElement {
-  // §7.3b — a token on a loop shows the block first, because the loop is the thing in the error
-  // state rather than this token. The editor still follows it: *"editing any one of them breaks
-  // it"* is only true if one of them can be edited, and this is one of them.
-  const cycle = onCycle(line) ? resolutionFor(line).cycle : undefined;
-  if (cycle !== undefined) {
-    const wrap = el("div");
-    wrap.appendChild(
-      cycleBlock(cycle, getModel().resolve, {
-        navigate: (path: string) => {
-          closeDetail();
-          navigate(path);
-        },
-      })
-    );
-    wrap.appendChild(typedEditor(line));
-    return wrap;
-  }
-
-  return typedEditor(line);
-}
-
-/** The per-type editor, once the cycle block (if any) has had its say. */
+/**
+ * The per-type editor, once the cycle block (if any) has had its say.
+ *
+ * The editor renders even on a loop: *"editing any one of them breaks it"*
+ * (`references-math-themes.md` §7.3b) is only true if one of them can be edited, and this is one of
+ * them.
+ */
 function typedEditor(line: Line): HTMLElement {
   const token = line.entry.token;
   switch (token.$type) {
@@ -570,11 +681,16 @@ function acceptedTypes(type: string, member: MemberField | undefined): Set<strin
 function unifiedField(
   line: Line,
   options: {
-    label?: string;
+    /** `null` renders no label at all — the boolean's pointer shell, which borrows the one above it. */
+    label?: string | null;
     /** Parses and commits a literal for this `$type`. Returns an error message or `null`. */
     commitLiteral?: (raw: string) => string | null;
-    /** Extra control beside the input — the colour swatch. */
+    /** Trailing control inside the shell — `px`/`em`, the subtype select, `Auto` (§4.4). */
     trailing?: (input: HTMLInputElement, reference: boolean) => HTMLElement | null;
+    /** Leading control inside the shell — the colour swatch, and nothing else (§4.3). */
+    leading?: (input: HTMLInputElement, reference: boolean) => HTMLElement | null;
+    /** A muted line under the shell, for a field whose label went elsewhere (§5.3). */
+    hint?: string;
     initial?: string;
     placeholder?: string;
     member?: MemberField;
@@ -593,8 +709,18 @@ function unifiedField(
           ? "string"
           : member.type;
   const wrap = el("div");
+  // §4.1 — the label sits **above** the control, not in an 84px gutter beside it. That is ~90px of
+  // width recovered on every value, every resolve line and every dotted path at the 400px floor, for
+  // ~14px of height, and height is the cheap axis now the panel opens 720 tall.
   const row = el("div", "field");
-  row.appendChild(el("label", undefined, options.label ?? "Value"));
+  if (options.label !== null) {
+    row.appendChild(el("label", undefined, options.label ?? "Value"));
+  }
+
+  // §4.3's one new class, and the only one: a bordered flex row that looks like the text input it
+  // contains. **No trailing chevron** — the reference's is its value-type dropdown, which is exactly
+  // the mode toggle `references-math-themes.md` §4.1 refused.
+  const shell = el("div", "value-shell");
 
   const initial = options.initial ?? String(token.$value);
   const accepted = acceptedTypes(type, member);
@@ -602,14 +728,16 @@ function unifiedField(
   input.type = "text";
   input.value = initial;
   input.className = "inline-edit";
-  input.style.flex = "1";
   if (options.placeholder !== undefined) input.placeholder = options.placeholder;
 
   const note = el("div", "field-note hidden");
   const extra = el("div");
 
+  // The amber goes on the *shell*, not the input: inside `.value-shell` the input has no border of
+  // its own to colour (§12), so the refusal would be invisible if it stayed where Phase 7 put it.
   const clearNotes = (): void => {
     input.classList.remove("invalid");
+    shell.classList.remove("invalid");
     note.classList.add("hidden");
     note.textContent = "";
     extra.textContent = "";
@@ -617,6 +745,7 @@ function unifiedField(
 
   const showAmber = (message: string): void => {
     input.classList.add("invalid");
+    shell.classList.add("invalid");
     note.classList.remove("hidden");
     note.classList.add("warn");
     note.textContent = message;
@@ -624,6 +753,7 @@ function unifiedField(
 
   const showGrey = (message: string): void => {
     input.classList.remove("invalid");
+    shell.classList.remove("invalid");
     note.classList.remove("hidden");
     note.classList.remove("warn");
     note.textContent = message;
@@ -781,59 +911,95 @@ function unifiedField(
     );
   }
 
-  row.appendChild(input);
-  const trailing = options.trailing?.(input, isReference(member === undefined ? token.$value : initial));
-  if (trailing !== null && trailing !== undefined) row.appendChild(trailing);
+  const reference = isReference(member === undefined ? token.$value : initial);
+  const leading = options.leading?.(input, reference);
+  if (leading !== null && leading !== undefined) shell.appendChild(leading);
+  shell.appendChild(input);
+  const trailing = options.trailing?.(input, reference);
+  if (trailing !== null && trailing !== undefined) shell.appendChild(trailing);
+  row.appendChild(shell);
 
   wrap.appendChild(row);
   wrap.appendChild(live);
   wrap.appendChild(note);
   wrap.appendChild(extra);
+  if (options.hint !== undefined) wrap.appendChild(el("div", "field-note", options.hint));
   renderLive();
 
-  const footer =
-    member === undefined ? pointerFooter(line, setField) : memberFooter(member, initial);
-  if (footer !== null) wrap.appendChild(footer);
+  if (member === undefined) {
+    // A scalar card shows the pointer footer whenever the value is non-literal, as it has since
+    // Phase 7. It has one field, so there is nothing to scope it to (§4.5).
+    const footer = pointerFooter(line, setField);
+    if (footer !== null) wrap.appendChild(footer);
+  } else {
+    // §4.5 — a composite shows it under the field that has **focus**, and nowhere else. A typography
+    // token with three referenced members would otherwise carry six buttons.
+    attachMemberFooter(wrap, input, initial);
+    const cycle = memberCycle(member);
+    if (cycle !== null) wrap.appendChild(cycle);
+  }
 
   return wrap;
 }
 
 /**
- * `Go to target` and the cycle block, for one member.
+ * `Go to target` for one member, rendered under **the focused field only** — §4.5, §12.
  *
- * The same two affordances a scalar pointer gets, minus *Use the resolved value instead*: a member's
- * resolved value is a dimension object, not a string a field can be pre-filled with, and offering a
- * button that writes `[object Object]` would be worse than not offering one.
+ * One container for the whole card, moved to whichever field has focus, rather than a hidden one per
+ * member: a node can only be in one place, so the move *is* the exclusivity. The same two affordances
+ * a scalar pointer gets, minus *Use the resolved value instead* — a member's resolved value is a
+ * dimension object, not a string a field can be pre-filled with, and a button that writes
+ * `[object Object]` is worse than no button.
+ *
+ * Unfocused referenced members still carry their resolve line, and the target path *inside* that line
+ * is a tap target that navigates — which is `Go to target` without a button.
  */
-function memberFooter(member: MemberField, initial: string): HTMLElement | null {
-  const wrap = el("div");
-  const target = pointerTarget(initial);
+const memberFooterHost = el("div", "toolbar member-footer");
 
-  if (target !== null && getModel().byPath.has(normalizePathKey(target))) {
-    const bar = el("div", "toolbar");
+function attachMemberFooter(wrap: HTMLElement, input: HTMLInputElement, initial: string): void {
+  input.addEventListener("focus", () => {
+    memberFooterHost.textContent = "";
+    const target = pointerTarget(initial);
+    if (target === null || !getModel().byPath.has(normalizePathKey(target))) {
+      memberFooterHost.remove();
+      return;
+    }
     const go = button("Go to target");
+    // The field keeps focus through the click, so the deferred blur teardown below never races the
+    // navigation it was about to perform.
+    go.addEventListener("mousedown", (event) => event.preventDefault());
     go.addEventListener("click", () => {
       closeDetail();
       navigate(target);
     });
-    bar.appendChild(go);
-    wrap.appendChild(bar);
-  }
+    memberFooterHost.appendChild(go);
+    wrap.appendChild(memberFooterHost);
+  });
 
-  // §14.6 — a cycled member renders the block **under its own field**, and every other member of the
-  // composite still edits normally. Same block, same copy, one component (§7.2).
-  if (member.resolution?.kind === "cycle" && member.resolution.cycle !== undefined) {
-    wrap.appendChild(
-      cycleBlock(member.resolution.cycle, getModel().resolve, {
-        navigate: (path: string) => {
-          closeDetail();
-          navigate(path);
-        },
-      })
-    );
-  }
+  input.addEventListener("blur", () => {
+    // Deferred for the same reason the commit is: focus lands on the next field a tick later, and
+    // tearing the footer down synchronously would fight a click that is still in flight.
+    window.setTimeout(() => {
+      if (document.activeElement === input) return;
+      if (memberFooterHost.contains(document.activeElement)) return;
+      memberFooterHost.textContent = "";
+      memberFooterHost.remove();
+    }, 0);
+  });
+}
 
-  return wrap.childNodes.length === 0 ? null : wrap;
+/**
+ * §14.6 — a cycled member renders the block **under its own field**, always, while every other member
+ * of the composite still edits normally. Not focus-scoped: a loop is a state, not an affordance.
+ */
+function memberCycle(member: MemberField): HTMLElement | null {
+  if (member.resolution?.kind !== "cycle" || member.resolution.cycle === undefined) return null;
+  return cycleBlock(member.resolution.cycle, getModel().resolve, {
+    navigate: (path: string) => {
+      closeDetail();
+      navigate(path);
+    },
+  });
 }
 
 
@@ -853,13 +1019,15 @@ function fieldRow(label: string, control: HTMLElement): HTMLElement {
 function committingInput(
   initial: string,
   commit: (raw: string) => string | null,
-  options: { note?: string } = {}
-): { field: HTMLElement; input: HTMLInputElement } {
+  options: { note?: string; multiline?: boolean } = {}
+): { field: HTMLElement; input: HTMLInputElement | HTMLTextAreaElement } {
   const wrap = el("div");
-  const input = el("input") as HTMLInputElement;
-  input.type = "text";
+  // A variant, not a fork (§12): commit, revert and the amber note are identical, and the only
+  // behavioural difference is the Enter binding, which the control forces (§7.1).
+  const input = options.multiline === true ? el("textarea", "desc-input") : el("input", "inline-edit");
+  if (input instanceof HTMLInputElement) input.type = "text";
+  if (input instanceof HTMLTextAreaElement) input.rows = 2;
   input.value = initial;
-  input.className = "inline-edit";
 
   const note = el("div", "field-note", options.note ?? "");
   note.style.margin = "2px 0 0";
@@ -877,8 +1045,14 @@ function committingInput(
     }
   };
 
-  input.addEventListener("keydown", (event) => {
+  // Cast because `input` is a union of two element types, which collapses `addEventListener` to its
+  // bare-`Event` overload. The handler is the same handler either way — that is §12's "a variant, not
+  // a fork" holding at the type level too.
+  input.addEventListener("keydown", ((event: KeyboardEvent) => {
     if (event.key === "Enter") {
+      // In a textarea Enter must insert a newline — `$description` is a string and DTCG permits
+      // them — so ⌘/Ctrl+Enter is what commits there (§7.1). Blur still commits either way.
+      if (options.multiline === true && !event.metaKey && !event.ctrlKey) return;
       event.preventDefault();
       run();
     } else if (event.key === "Escape") {
@@ -887,7 +1061,7 @@ function committingInput(
       note.classList.add("hidden");
       input.blur();
     }
-  });
+  }) as EventListener);
   input.addEventListener("blur", run);
 
   wrap.appendChild(input);
@@ -900,48 +1074,83 @@ function colorEditor(line: Line): HTMLElement {
   const literal = valueShape(token) === "literal" ? String(token.$value) : "";
 
   return unifiedField(line, {
-    label: "Hex",
+    // The `$type`, sentence case (§4.2). `Hex` is gone: the hex expectation is carried by the
+    // refusal copy on a bad commit, at the moment the user is looking at the problem.
+    label: valueLabel("color"),
     commitLiteral: (raw) => {
       const parsed = parseHexColor(raw);
       if (!parsed.ok) return parsed.message;
       return editValue(line, parsed.value);
     },
-    trailing: (input, reference) => {
-      // The hex field is the source of truth; the native picker is a convenience that writes into
-      // it. 8-digit hex has no `<input type=color>` representation, so alpha is typed, never picked.
-      const picker = el("input") as HTMLInputElement;
-      picker.type = "color";
-      picker.className = "unit";
-
-      if (reference) {
-        // §4.1 — while the value is a reference the swatch is **inert and shows the resolved
-        // colour**. A colour picker that silently converted a pointer into a hex value is the exact
-        // silent flattening this phase exists to prevent, so clicking it only focuses the field.
-        const resolved = resolvedLiteralFor(line);
-        picker.value = resolved !== null && resolved.length >= 7 ? resolved.slice(0, 7) : "#000000";
-        picker.disabled = true;
-        const shell = el("span");
-        shell.appendChild(picker);
-        shell.addEventListener("click", () => input.focus());
-        return shell;
-      }
-
-      picker.value = literal.length >= 7 ? literal.slice(0, 7) : "#000000";
-      picker.addEventListener("change", () => {
-        const alpha = literal.length === 9 ? literal.slice(7) : "";
-        const parsed = parseHexColor(picker.value + alpha);
-        if (!parsed.ok) return;
-        const error = editValue(line, parsed.value);
-        if (error !== null) toast(error);
-      });
-      return picker;
-    },
+    leading: (input, reference) => colorChip(line, input, reference, literal),
   });
+}
+
+/**
+ * The swatch inside the value shell — §4.3, §12.
+ *
+ * `swatchMark()` and `swatchNode()`, the exact call and the exact classes the tree row makes, under
+ * the same `resolutionFor(line)`. A third swatch treatment would be a third vocabulary in a panel
+ * whose whole argument is that it has one of everything — and if this chip and the row's chip ever
+ * disagreed, the failure `panel-size-and-swatches.md` §5.4 exists to prevent would have reappeared
+ * one surface over.
+ *
+ * The native `<input type="color">` stays as the **hidden mechanism** behind the chip rather than
+ * being restyled into looking like one. Clicking the chip opens it; on a reference the chip is inert
+ * and the click focuses the text field instead, because a picker that silently converted a pointer
+ * into a hex value is the exact flattening Phase 7 exists to prevent (`references-math-themes.md`
+ * §4.1). The text field remains the source of truth — 8-digit hex has no `<input type=color>`
+ * representation, so alpha is typed, never picked.
+ */
+function colorChip(
+  line: Line,
+  input: HTMLInputElement,
+  reference: boolean,
+  literal: string
+): HTMLElement {
+  const chip = swatchNode(swatchMark(line.entry.token, resolutionFor(line)));
+  chip.classList.add("shell-swatch");
+
+  if (reference) {
+    chip.title = "This value points at another token. Edit the field to change it.";
+    chip.addEventListener("click", () => input.focus());
+    return chip;
+  }
+
+  const picker = el("input") as HTMLInputElement;
+  picker.type = "color";
+  picker.className = "hidden-picker";
+  picker.value = literal.length >= 7 ? literal.slice(0, 7) : "#000000";
+  // The picker is a child of the chip, so its own click must not bubble back into the chip's handler
+  // and reopen it.
+  picker.addEventListener("click", (event) => event.stopPropagation());
+  picker.addEventListener("change", () => {
+    const alpha = literal.length === 9 ? literal.slice(7) : "";
+    const parsed = parseHexColor(picker.value + alpha);
+    if (!parsed.ok) return;
+    const error = editValue(line, parsed.value);
+    if (error !== null) toast(error);
+  });
+
+  chip.title = "Pick a colour";
+  chip.appendChild(picker);
+  chip.addEventListener("click", () => {
+    // `showPicker` where the engine has it, a forwarded click where it doesn't — either way the
+    // native input is never the visible chip.
+    const open = (picker as unknown as { showPicker?: () => void }).showPicker;
+    if (typeof open === "function") open.call(picker);
+    else picker.click();
+  });
+  return chip;
 }
 
 function numberEditor(line: Line): HTMLElement {
   const extension = line.entry.token.$extensions?.["com.tokenvault"];
   return unifiedField(line, {
+    label: valueLabel("number"),
+    // §5 — the subtype sits **in the value shell**, not in a row of its own, and directly under the
+    // value rather than down with description: it changes how the number is read.
+    trailing: () => subtypeControl(line),
     commitLiteral: (raw) => {
       const parsed = parseNumberValue(raw);
       if (!parsed.ok) return parsed.message;
@@ -981,10 +1190,15 @@ function booleanEditor(line: Line): HTMLElement {
     });
     segmented.appendChild(control);
   }
-  wrap.appendChild(fieldRow("Value", segmented));
+  // §5.3 — a two-state value does not deserve six sections. One `Boolean` label over the segmented
+  // group, and the pointer shell below it loses its own `Points at` label and gains a muted hint
+  // instead: four lines total, not seven. Both mechanisms stay, because you cannot type `{` into a
+  // segmented control.
+  wrap.appendChild(fieldRow(valueLabel("boolean"), segmented));
   wrap.appendChild(
     unifiedField(line, {
-      label: "Points at",
+      label: null,
+      hint: "or point at another boolean token",
       initial: reference ? String(token.$value) : "",
       commitLiteral: () =>
         "Type a token path in braces, like {folio.flag.on}, or pick true / false above.",
@@ -995,6 +1209,8 @@ function booleanEditor(line: Line): HTMLElement {
 
 function stringEditor(line: Line): HTMLElement {
   return unifiedField(line, {
+    label: valueLabel("string"),
+    trailing: () => subtypeControl(line),
     commitLiteral: (raw) => {
       const parsed = parseStringValue(raw);
       if (!parsed.ok) return parsed.message;
@@ -1095,8 +1311,13 @@ function typographyEditor(line: Line): HTMLElement {
       placeholder
     );
 
-  wrap.appendChild(field("fontFamily", "fontFamily", value.fontFamily));
-  wrap.appendChild(field("fontWeight", "fontWeight", String(value.fontWeight)));
+  // §5.5 — the labels are humanised (`Font size`, not `fontSize`). They are display strings only:
+  // copy *about the JSON* keeps the schema key in mono, so rule 2's refusal is still
+  // "`fontSize` takes a number, so it can't point there", the `boundVariables` rows still read
+  // `fontSize → {…}`, and §14.7's disagreement line still names `fontSize`. The label says what the
+  // field is; the copy says what the file holds.
+  wrap.appendChild(field("fontFamily", memberLabel("fontFamily"), value.fontFamily));
+  wrap.appendChild(field("fontWeight", memberLabel("fontWeight"), String(value.fontWeight)));
 
   // The unit picker stays where it was, beside the field — but only while the member holds a
   // literal: `px` or `em` is meaningless next to a dotted path, and the unit the value comes out
@@ -1110,7 +1331,7 @@ function typographyEditor(line: Line): HTMLElement {
   };
 
   for (const key of ["fontSize", "letterSpacing"] as const) {
-    wrap.appendChild(field(key, key, formatDimension(value[key]), unitFor(key)));
+    wrap.appendChild(field(key, memberLabel(key), formatDimension(value[key]), unitFor(key)));
   }
 
   // Three states, not two (ADR-0003 §3): a number, a dimension, or absent when Figma said Auto.
@@ -1119,7 +1340,7 @@ function typographyEditor(line: Line): HTMLElement {
   wrap.appendChild(
     field(
       "lineHeight",
-      "lineHeight",
+      memberLabel("lineHeight"),
       formatDimension(value.lineHeight),
       () => {
         // "Auto" sits beside the field and is unaffected by what the field holds (§14.2's last
@@ -1158,10 +1379,43 @@ function shadowEditor(line: Line): HTMLElement {
     if (error !== null) toast(error);
   };
 
+  // §5.6 — with one or two layers everything is expanded, because two stacked layers is a shadow you
+  // read as a whole. With three or more, layer 1 stays expanded and the rest fold to their `.subhead`
+  // with a swatch and the tree's own one-line preview, which is where the height actually goes.
+  const collapsed = new Set(collapsedLayers(list.length));
+
   list.forEach((shadow, index) => {
     const box = el("div", "subrow");
     const head = el("div", "subhead");
-    head.appendChild(el("span", "grow", `Shadow ${index + 1}`));
+    const layerKey = stateKey(line, ` shadow ${index}`);
+    const open = layerOpen.get(layerKey) ?? !collapsed.has(index);
+
+    if (collapsed.has(index)) {
+      const toggle = button(`${open ? "▾" : "▸"} Shadow ${index + 1}`, "layer-toggle");
+      toggle.addEventListener("click", () => {
+        layerOpen.set(layerKey, !open);
+        renderNow();
+      });
+      head.appendChild(toggle);
+      if (open) head.appendChild(el("span", "grow"));
+      else {
+        // Reuses `previewOf` and the shared swatch node — no new vocabulary, and no new string (§8).
+        // A layer whose colour is a pointer has no literal colour to paint, which is the outlined
+        // mark's existing meaning (`panel-size-and-swatches.md` §4.2).
+        head.appendChild(
+          swatchNode(
+            isColorValue(shadow.color)
+              ? { kind: "color", color: shadow.color }
+              : { kind: "outlined" }
+          )
+        );
+        head.appendChild(
+          el("span", "mono grow", previewOf({ $type: "shadow", $value: shadow } as Token).text)
+        );
+      }
+    } else {
+      head.appendChild(el("span", "grow", `Shadow ${index + 1}`));
+    }
 
     if (index > 0) {
       const up = button("↑");
@@ -1190,18 +1444,41 @@ function shadowEditor(line: Line): HTMLElement {
     const at = (field: string): Array<string | number> =>
       Array.isArray(line.entry.token.$value) ? [index, field] : [field];
 
-    for (const field of ["offsetX", "offsetY", "blur", "spread", "color"] as const) {
-      box.appendChild(
-        memberValueField(
-          line,
-          { key: field, label: field, ...shadowMemberSpec(field) },
-          at(field),
-          field === "color" ? shadow.color : formatDimension(shadow[field]),
-          (raw) => apply(field, raw),
-          resolutions
-        )
-      );
+    if (!open) {
+      wrap.appendChild(box);
+      return;
     }
+
+    const shadowField = (field: ShadowField): HTMLElement =>
+      memberValueField(
+        line,
+        { key: field, label: memberLabel(field), ...shadowMemberSpec(field) },
+        at(field),
+        field === "color"
+          ? shadow.color
+          : formatDimension(shadow[field] as Referable<DimensionValue | number>),
+        (raw) => apply(field, raw),
+        resolutions
+      );
+
+    // §5.6 — `Offset X` / `Offset Y` on one line, `Blur` / `Spread` on the next, each ~190px at the
+    // 400px floor and ample for a number. **A pair collapses to two full-width stacked rows the
+    // moment either member holds a non-literal value**, because a dotted path needs the whole width;
+    // a literal dimension is stored as a number or a `{value, unit}`, so a string here *is* the
+    // pointer-or-formula case.
+    const numeric: ShadowField[] = ["offsetX", "offsetY", "blur", "spread"];
+    for (const group of pairMembers(numeric, (key) => typeof shadow[key as ShadowField] === "string")) {
+      if (group.length === 1) {
+        box.appendChild(shadowField(group[0] as ShadowField));
+        continue;
+      }
+      const pair = el("div", "field-pair");
+      for (const key of group) pair.appendChild(shadowField(key as ShadowField));
+      box.appendChild(pair);
+    }
+
+    // `Color` and `Inset` stay full-width always (§5.6).
+    box.appendChild(shadowField("color"));
 
     const inset = el("select") as HTMLSelectElement;
     inset.appendChild(new Option("drop", "false"));
@@ -1211,7 +1488,7 @@ function shadowEditor(line: Line): HTMLElement {
       const error = apply("inset", inset.value);
       if (error !== null) toast(error);
     });
-    box.appendChild(fieldRow("inset", inset));
+    box.appendChild(fieldRow(memberLabel("inset"), inset));
 
     wrap.appendChild(box);
   });
@@ -1252,7 +1529,11 @@ function gridEditor(line: Line): HTMLElement {
       next[index] = setGridPattern(grid, pattern.value as GridValue["pattern"]);
       writeOrToast(next);
     });
-    box.appendChild(fieldRow("pattern", pattern));
+    // §5.7 asks for `Pattern` as a trailing select "in the first shell". It stays its own stacked
+    // row: which fields the card even *has* depends on this select (`references-math-themes.md`
+    // §14.2 — it decides which keys exist), so parking it inside `alignment`'s or `sectionSize`'s
+    // shell would put the control that rebuilds the card inside one of the things it rebuilds.
+    box.appendChild(fieldRow(memberLabel("pattern"), pattern));
 
     const apply = (field: GridField, raw: string): string | null => {
       const parsed = setGridField(grid, field, raw);
@@ -1262,37 +1543,52 @@ function gridEditor(line: Line): HTMLElement {
       return write(next);
     };
 
-    for (const field of gridFieldsFor(grid.pattern)) {
-      const raw =
-        field === "alignment"
-          ? grid.alignment ?? ""
-          : field === "count"
-            ? grid.count === undefined
-              ? ""
-              : String(grid.count)
-            : formatDimension(grid[field]);
+    const rawOf = (field: GridField): string =>
+      field === "alignment"
+        ? grid.alignment ?? ""
+        : field === "count"
+          ? grid.count === undefined
+            ? ""
+            : String(grid.count)
+          : formatDimension(grid[field]);
 
+    const gridField = (field: GridField): HTMLElement => {
+      const raw = rawOf(field);
       // `alignment` names one of Figma's own enum values and takes no pointer (§14.2), so it stays
       // the plain input it was — a picker on it would offer paths the field then refuses.
       if (gridMemberSpec(field).accepts === "literal") {
         const input = committingInput(raw, (typed) => apply(field, typed));
         input.input.placeholder = "empty = absent";
-        box.appendChild(fieldRow(field, input.field));
-        continue;
+        return fieldRow(memberLabel(field), input.field);
       }
 
-      box.appendChild(
-        memberValueField(
-          line,
-          { key: field, label: field, ...gridMemberSpec(field) },
-          [index, field],
-          raw,
-          (typed) => apply(field, typed),
-          resolutions,
-          undefined,
-          "empty = absent"
-        )
+      return memberValueField(
+        line,
+        { key: field, label: memberLabel(field), ...gridMemberSpec(field) },
+        [index, field],
+        raw,
+        (typed) => apply(field, typed),
+        resolutions,
+        undefined,
+        "empty = absent"
       );
+    };
+
+    // Only the fields valid for the current pattern render, and switching pattern still *removes*
+    // keys rather than zeroing them (`local-editor.md` §5.2). The literal-only ones stay full-width;
+    // the numeric ones pair two-up under §5.6's rule, unpairing when either holds a pointer.
+    const fields = gridFieldsFor(grid.pattern);
+    const literalOnly = fields.filter((field) => gridMemberSpec(field).accepts === "literal");
+    const numeric = fields.filter((field) => gridMemberSpec(field).accepts !== "literal");
+    for (const field of literalOnly) box.appendChild(gridField(field));
+    for (const group of pairMembers(numeric, (key) => typeof grid[key as GridField] === "string")) {
+      if (group.length === 1) {
+        box.appendChild(gridField(group[0] as GridField));
+        continue;
+      }
+      const pair = el("div", "field-pair");
+      for (const key of group) pair.appendChild(gridField(key as GridField));
+      box.appendChild(pair);
     }
 
     wrap.appendChild(box);
@@ -1306,11 +1602,21 @@ function gridEditor(line: Line): HTMLElement {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * §7.1 — a two-row textarea, label above, placeholder `Optional description`.
+ *
+ * `none` read like a value; `Optional description` says what the field is for. Newlines are preserved
+ * rather than stripped: `$description` is a string and DTCG permits them, and the tree row and the
+ * push diff already truncate to one line. No character counter, no markdown, no validation — it is an
+ * optional string.
+ */
 function renderDescription(line: Line): HTMLElement {
-  const field = committingInput(line.entry.token.$description ?? "", (raw) =>
-    editDescription(line, raw)
+  const field = committingInput(
+    line.entry.token.$description ?? "",
+    (raw) => editDescription(line, raw),
+    { multiline: true }
   );
-  field.input.placeholder = "none";
+  field.input.placeholder = "Optional description";
   return fieldRow("Description", field.field);
 }
 
@@ -1321,14 +1627,14 @@ function renderDescription(line: Line): HTMLElement {
  * homes that could disagree, and it is why a subtype change doesn't count toward the
  * **Local edits · N** chip.
  */
-function renderSubtype(line: Line): HTMLElement | null {
+function subtypeControl(line: Line): HTMLElement | null {
   const type = line.entry.token.$type;
   if (type !== "number" && type !== "string") return null;
   const extension = line.entry.token.$extensions?.["com.tokenvault"];
   const variableId = extension?.figma?.variableId;
   if (variableId === undefined) return null;
 
-  const select = el("select") as HTMLSelectElement;
+  const select = el("select", "subtype") as HTMLSelectElement;
   select.appendChild(new Option("auto-detect", "__reset"));
   select.appendChild(new Option("untagged", "untagged"));
   for (const subtype of type === "number" ? NUMBER_SUBTYPES : STRING_SUBTYPES) {
@@ -1340,83 +1646,128 @@ function renderSubtype(line: Line): HTMLElement | null {
     send({ type: "set-subtypes", subtypes: { [variableId]: chosen } });
   });
 
-  const row = fieldRow("Subtype", select);
-  if (extension?.subtypeSource === "default") {
-    row.appendChild(el("span", "badge needs", "guessed"));
-  }
-  return row;
+  if (extension?.subtypeSource !== "default") return select;
+
+  // The `guessed` badge follows the select, and the shell wraps rather than overflowing when there is
+  // no room for both at 400px (§5).
+  const group = el("span", "subtype-group");
+  group.appendChild(select);
+  group.appendChild(el("span", "badge needs", "guessed"));
+  return group;
 }
 
 /**
- * Source, `boundVariables` and the `text` extras — read-only, always shown, never editable (§5.2).
+ * The Figma section — one disclosure holding all of the read-only provenance (§6).
  *
- * `boundVariables` is shown because it is why a text style's numbers look "already aliased";
- * hiding it makes the value editor look broken.
+ * `local-editor.md` §5.2's rule is *provenance is always shown*, and that survives a collapsed
+ * accordion because **the Source line is promoted into the always-visible summary row** (§6.1): the
+ * ids, the scopes and the bindings fold away; where the token came from never does.
+ *
+ * Collapsed by default, because this is reference material and the editable fields are the point —
+ * *except* when it explains a value the user is looking at (§6.2). Two triggers, both of them
+ * `local-editor.md` §5.2's own reasoning honoured rather than overridden: a populated
+ * `boundVariables` is why a text style's numbers look "already aliased", and hiding the reason makes
+ * the value editor look broken; and §14.7's disagreement line only exists to explain which of two
+ * values applies.
+ *
+ * One level of disclosure inside, with one exception: `boundVariables` is a plain sub-block, because
+ * nested disclosures at 400px are a maze, while the `text` extras keep theirs — eleven rows of Figma
+ * internals nobody reads is exactly what a disclosure is for.
+ *
+ * `null` when there is no provenance at all (§8): nothing here renders an empty container, and
+ * `editBlockedReason`'s existing sentence already explains what a missing binding means for editing.
  */
-function renderProvenance(line: Line): HTMLElement {
+function renderFigmaSection(line: Line): HTMLElement | null {
   const figma = line.entry.token.$extensions?.["com.tokenvault"]?.figma ?? {};
-  const wrap = el("div", "provenance");
+  if (!hasFigmaSection(figma)) return null;
+
+  const bound = figma.boundVariables ?? {};
+  const boundKeys = Object.keys(bound).sort();
+  const disagreements = valueDisagreements(line, bound);
+
+  const details = el("details", "figma-section") as HTMLDetailsElement;
+  const key = stateKey(line);
+  details.open =
+    figmaOpen.get(key) ??
+    autoExpandFigma({ bound: boundKeys.length > 0, disagreement: disagreements.length > 0 });
+  details.addEventListener("toggle", () => figmaOpen.set(key, details.open));
+
+  const summary = el("summary");
+  summary.appendChild(el("span", undefined, "Figma"));
+  const source = figmaSummary(figma, line.set.label);
+  if (source !== null) summary.appendChild(el("span", "muted", `· ${source}`));
+  details.appendChild(summary);
+
+  const body = el("div", "provenance");
 
   if (figma.variableId !== undefined) {
-    wrap.appendChild(el("div", undefined, `Source  Variable · ${line.set.label}`));
-    wrap.appendChild(el("div", "mono", `${figma.variableId} · mode ${figma.modeId ?? "?"}`));
-    if (figma.scopes !== undefined && figma.scopes.length > 0) {
-      wrap.appendChild(el("div", undefined, `Scopes  ${figma.scopes.join(", ")}`));
-    }
+    body.appendChild(el("div", "mono", `${figma.variableId} · mode ${figma.modeId ?? "?"}`));
   } else if (figma.styleId !== undefined) {
-    wrap.appendChild(el("div", undefined, `Source  Style · ${figma.styleType ?? "?"}`));
-    wrap.appendChild(el("div", "mono", figma.styleId));
+    body.appendChild(el("div", "mono", figma.styleId));
     if (figma.fontStyle !== undefined) {
-      wrap.appendChild(el("div", undefined, `Figma font style  ${figma.fontStyle}`));
+      body.appendChild(el("div", undefined, `Figma font style  ${figma.fontStyle}`));
     }
   }
 
-  const bound = figma.boundVariables ?? {};
-  const boundKeys = Object.keys(bound);
-  if (boundKeys.length > 0) {
-    const details = el("details");
-    details.appendChild(el("summary", undefined, `${boundKeys.length} bound Variables`));
-    for (const key of boundKeys.sort()) {
-      details.appendChild(el("div", "mono", `${key} → ${bound[key]}`));
-    }
-    wrap.appendChild(details);
+  // Read-only, humanised by a mechanical transform, and **omitted entirely when absent** (§6.3) —
+  // no `None`, no dash. Comma-separated and wrapping, never badges: `local-editor.md` §9 keeps
+  // `.badge` for state, and a scope is not a state. No checkboxes and no write-back: `scopes` are
+  // read every import and never edited.
+  const scopes = scopesLine(figma.scopes);
+  if (scopes !== null) body.appendChild(el("div", undefined, `Scopes  ${scopes}`));
 
-    // §14.7 — the two can now both exist, so the overlay says which one applies. Only when they
-    // **disagree**: re-authoring what Figma already bound is the common case, and two lines agreeing
-    // needs no commentary. Grey, not amber, for the same reason §6.2's resolve line is grey —
-    // nothing is broken and nothing needs the user.
-    // Keyed by the slot's full address, not its bare name: two shadow layers both have a `blur`, and
-    // `shadowBoundVariables` files a multi-layer binding as `shadows.<index>.<field>` for exactly
-    // that reason. A bare-name lookup would read layer 1's binding against layer 2's authored value
-    // and announce a disagreement that doesn't exist.
-    const layers = memberLayerCount(line.entry.token.$value);
-    for (const slot of nonLiteralMembers(line.entry.token)) {
-      const binding = firstDefined(bound, memberBindingKeys(slot, layers));
-      if (binding === undefined) continue;
-      const authored = String(slot.value);
-      if (String(binding) === authored) continue;
-      wrap.appendChild(
-        el(
-          "div",
-          "muted",
-          `Figma binds \`${slot.label}\` to ${String(binding)}. This token's own value points at ${authored}, and that's what applies.`
-        )
-      );
+  if (boundKeys.length > 0) {
+    // `Bound in Figma`, not `N bound Variables`: the count was doing nothing and the phrase reads as
+    // a fact rather than as a file listing (§8).
+    body.appendChild(el("div", "sub-head", "Bound in Figma"));
+    for (const bindingKey of boundKeys) {
+      body.appendChild(el("div", "mono", `${bindingKey} → ${bound[bindingKey]}`));
     }
+    // §14.7 — grey, not amber, and only when the two disagree. Keeps the schema key in mono, because
+    // this is copy *about the JSON* and never routed through §5.5's label map.
+    for (const message of disagreements) body.appendChild(el("div", "muted", message));
   }
 
   const extras = figma.text ?? {};
   const extraKeys = Object.keys(extras);
   if (extraKeys.length > 0) {
-    const details = el("details");
-    details.appendChild(el("summary", undefined, `${extraKeys.length} Figma text properties`));
-    for (const key of extraKeys.sort()) {
-      details.appendChild(el("div", "mono", `${key}: ${String(extras[key])}`));
+    const inner = el("details");
+    inner.appendChild(el("summary", undefined, `${extraKeys.length} Figma text properties`));
+    for (const extraKey of extraKeys.sort()) {
+      inner.appendChild(el("div", "mono", `${extraKey}: ${String(extras[extraKey])}`));
     }
-    wrap.appendChild(details);
+    body.appendChild(inner);
   }
 
-  return wrap;
+  details.appendChild(body);
+  return details;
+}
+
+/**
+ * §14.7's lines — where Figma's own binding and the token's authored value disagree about a member.
+ *
+ * Only when they **disagree**: re-authoring what Figma already bound is the common case, and two
+ * lines agreeing needs no commentary.
+ *
+ * Keyed by the slot's full address, not its bare name: two shadow layers both have a `blur`, and
+ * `shadowBoundVariables` files a multi-layer binding as `shadows.<index>.<field>` for exactly that
+ * reason. A bare-name lookup would read layer 1's binding against layer 2's authored value and
+ * announce a disagreement that doesn't exist.
+ */
+function valueDisagreements(line: Line, bound: Record<string, unknown>): string[] {
+  if (Object.keys(bound).length === 0) return [];
+  const layers = memberLayerCount(line.entry.token.$value);
+  const messages: string[] = [];
+  for (const slot of nonLiteralMembers(line.entry.token)) {
+    const binding = firstDefined(bound, memberBindingKeys(slot, layers));
+    if (binding === undefined) continue;
+    const authored = String(slot.value);
+    if (String(binding) === authored) continue;
+    messages.push(
+      `Figma binds \`${slot.label}\` to ${String(binding)}. This token's own value points at ${authored}, and that's what applies.`
+    );
+  }
+  return messages;
 }
 
 /** The first of `keys` the map actually carries — `memberBindingKeys`' most-specific-first order. */
@@ -1434,11 +1785,8 @@ function firstDefined(map: Record<string, unknown>, keys: string[]): unknown {
 function renderPathActions(row: Row): HTMLElement {
   const section = el("div", "toolbar");
   if (row.lines.length > 1) {
-    if (row.lines.some((line) => line.edited)) {
-      const apply = button(`Apply all ${row.lines.length} sets`, "primary");
-      apply.addEventListener("click", () => applyLines(row.lines, `Apply ${row.row.path}`));
-      section.appendChild(apply);
-    }
+    // `Apply all N sets` has moved to the pinned footer (§7.2). What stays here is destructive, and
+    // destructive actions do not belong in a permanently visible footer next to `Done`.
     section.appendChild(
       deleteButton(row.lines, {
         action: `Delete from all ${row.lines.length} sets`,

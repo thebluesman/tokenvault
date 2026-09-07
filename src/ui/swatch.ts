@@ -14,6 +14,7 @@
 import type { Token } from "../tokens/types";
 import type { Resolution } from "../tokens/resolve";
 import { previewOf } from "../tokens/preview";
+import { el } from "./dom";
 
 export type SwatchMark =
   /** Paint this colour. A literal and a resolved reference are indistinguishable here (issue #28). */
@@ -74,4 +75,34 @@ export function swatchMark(token: Token, resolution: Resolution): SwatchMark {
   }
 
   return { kind: "none" };
+}
+
+/**
+ * The mark, as nodes — one function, so the tree row and the card's value shell cannot diverge.
+ *
+ * `edit-view-redesign.md` §4.3 and §12 are explicit about this: the swatch inside `.value-shell` is
+ * *this* call and these classes, not a parallel treatment. Two implementations of a colour chip is
+ * the failure `panel-size-and-swatches.md` §5.4 exists to prevent, reappearing one surface over.
+ *
+ * `{ kind: "none" }` renders the reserved slot rather than nothing — a cycle draws no mark, and its
+ * `—` still has to land in the same column as its siblings' hex (§4.3). Callers on a non-colour row
+ * simply don't ask.
+ */
+export function swatchNode(mark: SwatchMark): HTMLElement {
+  if (mark.kind === "color") {
+    const wrap = el("span", "swatch-wrap");
+    wrap.appendChild(el("span", "swatch"));
+    const fill = el("span", "swatch-fill");
+    fill.style.background = mark.color;
+    wrap.appendChild(fill);
+    return wrap;
+  }
+  if (mark.kind === "outlined") {
+    const wrap = el("span", "swatch-wrap");
+    wrap.appendChild(el("span", "swatch outlined"));
+    return wrap;
+  }
+  // Nothing to paint, which is why `.reserved` adds no properties of its own — the class exists so
+  // the markup says what the empty box is for.
+  return el("span", "swatch-wrap reserved");
 }
