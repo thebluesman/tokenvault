@@ -14,7 +14,8 @@ fixtures in `test/fixtures/`, not against a hypothetical schema.
 | [`error-states.md`](error-states.md) | 9 — Scan failure, crash, unreadable overlay | Implemented |
 | [`dark-mode.md`](dark-mode.md) | 10 — Dark mode | Settled — Phase 10 |
 | [`onboarding-polish.md`](onboarding-polish.md) | 10 — PAT setup, subtype queue, first-run counts, three-place explainer | Settled — Phase 10 |
-| [`panel-size-and-swatches.md`](panel-size-and-swatches.md) | 10 — Resizable window, colour swatch states, collapsed-group strip | Provisional — four open questions in §9 |
+| [`panel-size-and-swatches.md`](panel-size-and-swatches.md) | 10 — Resizable window, colour swatch states, collapsed-group strip | Settled 2026-09-07 — all four §9 questions answered |
+| [`edit-view-redesign.md`](edit-view-redesign.md) | 10 — The token card: restyling the edit overlay | Settled 2026-09-07 — all five §10 questions answered |
 | [`user-journeys.md`](user-journeys.md) | 1–9 — Narrative survey | Published (not a spec; informs Phase 10 scoping) |
 
 **Status vocabulary.** *Provisional* — written ahead of the build, open questions still in the doc.
@@ -78,4 +79,19 @@ breakpoint, and no column layout — the merged-row design in `local-editor.md` 
 own argument (11 sets don't fit in columns at any width), not on the old width argument. The doc is
 **Provisional**: §9 holds four questions, and §9.2 — whether "the table/columns token view" the
 issues name means the existing tree or an actual table — should be answered before the build starts,
-because §5's collapsed-group strip has no meaning in a view with no collapsed groups.
+because §5's collapsed-group strip has no meaning in a view with no collapsed groups. **Settled the
+same day** — the tree stays, no table rewrite, and the three numeric recommendations were confirmed
+as written.
+
+A fourth Phase 10 doc landed 2026-09-07: [`edit-view-redesign.md`](edit-view-redesign.md), restyling
+the token detail overlay to the layout of Tokens Studio's own edit panel. Scoped by Shyam to **layout
+only — existing fields, no new schema or functionality**, so three of the reference's seven sections
+(Modify/PRO, editable variable-scope checkboxes, code syntax) are dropped rather than stubbed, and
+`scopes` stay read-only. The doc's load-bearing calls: the surface stays the **full-panel overlay**
+and only its internals change (§3.1); **inline editing in the tree survives** (§3.3); field **labels
+move above their fields**, buying ~90px of value width at the 400px floor (§4.1); the reference's
+collapsible **Figma section** becomes the home for the provenance blob, with the Source line promoted
+to its summary so collapsing never hides it (§6); and there is **no Save button**, because every field
+already commits to the overlay on blur and Save's honest analogue is Apply (§7.2). **Settled the same
+day** — all five §10 questions answered, including no rename (the title bar's path display is the
+name field) and labels moving above every field.
