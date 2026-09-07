@@ -959,12 +959,13 @@ function outlinedSwatch(): HTMLElement {
 }
 
 /**
- * The 12px slot with nothing drawn in it — UX `panel-size-and-swatches.md` §4.3.
+ * The swatch-sized slot with nothing drawn in it — UX `panel-size-and-swatches.md` §4.3.
  *
  * A cycle has no value, so it has no colour and gets no mark; but its `—` still has to sit in the
  * same column as every sibling's hex, or it reads as a different *kind* of row rather than as
- * absence. Colour rows only: giving every row in the tree a permanent 12px indent to serve colour
- * rows is the wrong trade at 400px.
+ * absence. The slot takes its width from `--swatch-size`, so it followed the chip from 12px to 16px
+ * without a second number to keep in step. Colour rows only: giving every row in the tree a permanent
+ * chip-wide indent to serve colour rows is the wrong trade at 400px.
  */
 function reservedSwatchSlot(): HTMLElement {
   return el("span", "swatch-wrap reserved");
@@ -973,11 +974,11 @@ function reservedSwatchSlot(): HTMLElement {
 /**
  * A collapsed group's dots — §5.3.
  *
- * 8px squares rather than circles: the row-level chip is a 12px rounded square, and the same shape
- * smaller reads as *"the same thing, less of it."* Two departures from the 12px chip, both forced by
- * the size and both in the stylesheet — the checkerboard is dropped (at 8px the 6px checker is one
- * and a bit squares of noise) and the ring is kept (1px of an 8px box is a lot, and it is what stops
- * a `#000000` shade being a hole in a dark panel).
+ * 8px squares with a full-strength ring, deliberately *unlike* the row chip since 2026-09-07 (that
+ * became a 16px circle with a faint ring — `local-editor.md` §4.5): a tiny circle at a faint ring
+ * opacity is a smudge, where a small hard square is a legible tick. All three departures live in the
+ * stylesheet — the shape and ring above, plus the dropped checkerboard (at 8px the checker is one and
+ * a bit squares of noise). This function only decides *which colours*, never how they are drawn.
  */
 function swatchStrip(strip: GroupStripModel): HTMLElement {
   const wrap = el("span", "strip");

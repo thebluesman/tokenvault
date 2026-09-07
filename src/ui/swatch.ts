@@ -1,14 +1,15 @@
 // What mark a colour token gets — UX `panel-size-and-swatches.md` §4.2, §5.4.
 //
-// One function, asked by two surfaces: the 12px chip on a value line and the 8px dot in a collapsed
-// group's strip. That is deliberate and it is §5.4's whole point — if the strip worked out its own
-// colours, expanding a group could show six colours that disagree with the six dots you clicked to
-// see them. Both callers ask this; neither decides for itself.
+// One function, asked by two surfaces: the 16px circular chip on a value line and the 8px square dot
+// in a collapsed group's strip. The two look different on purpose (`local-editor.md` §4.5, amended
+// 2026-09-07) but must never disagree about *colour*, which is §5.4's whole point — if the strip
+// worked out its own colours, expanding a group could show six colours that disagree with the six
+// dots you clicked to see them. Both callers ask this; neither decides for itself.
 //
 // The three no-colour cases (§4.2) collapse to two answers here, because from the swatch's point of
 // view a cycle, a dangling reference and a reference that lands on a number are all *"this colour
-// token has no colour to show."* The `⚑ cycle` / `⚠` flag beside it is what says which; a 12px
-// square cannot carry that distinction and is not asked to.
+// token has no colour to show."* The `⚑ cycle` / `⚠` flag beside it is what says which; a 16px
+// chip cannot carry that distinction and is not asked to.
 
 import type { Token } from "../tokens/types";
 import type { Resolution } from "../tokens/resolve";
@@ -23,7 +24,7 @@ export type SwatchMark =
    * No mark at all.
    *
    * Two different situations, and the caller tells them apart by the token's `$type` rather than by
-   * asking again: a cycle on a **colour** token still reserves the 12px slot so its `—` lines up
+   * asking again: a cycle on a **colour** token still reserves the chip-wide slot so its `—` lines up
    * with its siblings' hex (§4.3), while a non-colour token has no slot to reserve.
    */
   | { kind: "none" };
