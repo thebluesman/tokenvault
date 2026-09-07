@@ -217,6 +217,14 @@ async function rememberWindowSize(width: number, height: number): Promise<void> 
     figma.ui.resize(size.width, size.height);
   }
 
+  // A drag that ends where it started writes nothing, and neither does a report that is only a
+  // hairline off what we believe is on screen. The dead zone is a **creep guard**: the iframe reports
+  // its own viewport, which can round differently from the number `showUI` was given, and persisting
+  // that difference every session would walk the panel a pixel or two smaller each time it opened.
+  // No user resizes by two pixels on purpose.
+  if (Math.abs(size.width - storedWindowSize.width) <= 2 && Math.abs(size.height - storedWindowSize.height) <= 2) {
+    return;
+  }
   if (sameWindowSize(size, storedWindowSize)) return;
   storedWindowSize = size;
   try {
