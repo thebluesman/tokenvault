@@ -14,6 +14,7 @@ fixtures in `test/fixtures/`, not against a hypothetical schema.
 | [`error-states.md`](error-states.md) | 9 — Scan failure, crash, unreadable overlay | Implemented |
 | [`dark-mode.md`](dark-mode.md) | 10 — Dark mode | Settled — Phase 10 |
 | [`onboarding-polish.md`](onboarding-polish.md) | 10 — PAT setup, subtype queue, first-run counts, three-place explainer | Settled — Phase 10 |
+| [`panel-size-and-swatches.md`](panel-size-and-swatches.md) | 10 — Resizable window, colour swatch states, collapsed-group strip | Provisional — four open questions in §9 |
 | [`user-journeys.md`](user-journeys.md) | 1–9 — Narrative survey | Published (not a spec; informs Phase 10 scoping) |
 
 **Status vocabulary.** *Provisional* — written ahead of the build, open questions still in the doc.
@@ -65,3 +66,16 @@ publishing stays on the table**). Two of the four gaps turned out to be partly m
 survey — the bulk subtype controls already exist, and the first chip has never read `132 local` —
 so that doc's §9.1 corrects `user-journeys.md` in place and §9.2 lists the amendments `git-sync.md`
 and `local-editor.md` take when the build lands.
+
+Phase 10 gained a third doc on 2026-09-07: [`panel-size-and-swatches.md`](panel-size-and-swatches.md),
+covering issues #35 (resizable window) and #36 (colour swatches). Both tickets were filed off a UX
+discussion rather than off the running panel, and in both cases the panel was further along than the
+ticket assumed — row-level colour swatches already ship, so #36's real work is the three *no-colour*
+cases (cycle, dangling, wrong-type) and the new collapsed-group swatch strip. Its load-bearing claim
+is §3.4: **a resizable window does not retire the 460px arguments in the other four docs**, because
+the minimum becomes the design target and 400px stays reachable. So there is no reflow, no
+breakpoint, and no column layout — the merged-row design in `local-editor.md` §4.2 stands on its
+own argument (11 sets don't fit in columns at any width), not on the old width argument. The doc is
+**Provisional**: §9 holds four questions, and §9.2 — whether "the table/columns token view" the
+issues name means the existing tree or an actual table — should be answered before the build starts,
+because §5's collapsed-group strip has no meaning in a view with no collapsed groups.
