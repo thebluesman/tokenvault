@@ -1,8 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { extractUserSubtypes, extractUserSubtypesFromFiles, resolveSubtype } from "../src/tokens/subtype";
-import type { TokenGroup } from "../src/tokens/types";
+import {
+  adoptUserSubtypes,
+  extractUserSubtypes,
+  extractUserSubtypesFromFiles,
+  resolveSubtype,
+} from "../src/tokens/subtype";
+import type { SubtypeSelection, TokenGroup } from "../src/tokens/types";
 
 test("OPACITY scope auto-tags opacity — the one rule PRD §6.1 names explicitly", () => {
   assert.deepEqual(resolveSubtype("number", ["OPACITY"], undefined), {
@@ -193,4 +198,61 @@ test("an untagged decision round-trips through the generated token files", () =>
     },
   };
   assert.deepEqual(extractUserSubtypes(untagged), { "VariableID:9:1": "untagged" });
+});
+
+// ---------------------------------------------------------------------------
+// Adoption — issue #23
+// ---------------------------------------------------------------------------
+
+test("adoption fills the gaps: a device with no answers takes every one of the repo's", () => {
+  const result = adoptUserSubtypes({}, { "VariableID:1:1": "duration", "VariableID:1:2": "easing" });
+  assert.deepEqual(result.subtypes, { "VariableID:1:1": "duration", "VariableID:1:2": "easing" });
+  assert.deepEqual(result.adopted, ["VariableID:1:1", "VariableID:1:2"]);
+  assert.deepEqual(result.kept, []);
+});
+
+test("a local answer is never overwritten by the repo's — it is kept and reported", () => {
+  const result = adoptUserSubtypes({ "VariableID:1:1": "radius" }, { "VariableID:1:1": "spacing" });
+  assert.deepEqual(result.subtypes, { "VariableID:1:1": "radius" });
+  assert.deepEqual(result.adopted, []);
+  assert.deepEqual(result.kept, ["VariableID:1:1"]);
+});
+
+test("agreement is neither an adoption nor a disagreement", () => {
+  const result = adoptUserSubtypes({ "VariableID:1:1": "radius" }, { "VariableID:1:1": "radius" });
+  assert.deepEqual(result.adopted, []);
+  assert.deepEqual(result.kept, []);
+});
+
+test("a local tag the repo says nothing about is left alone", () => {
+  const result = adoptUserSubtypes({ "VariableID:1:1": "duration" }, {});
+  assert.deepEqual(result.subtypes, { "VariableID:1:1": "duration" });
+  assert.deepEqual(result.adopted, []);
+});
+
+test("an untagged decision is adopted like any other — it is an answer, not an absence", () => {
+  const result = adoptUserSubtypes({}, { "VariableID:1:1": "untagged" });
+  assert.deepEqual(result.subtypes, { "VariableID:1:1": "untagged" });
+  assert.deepEqual(result.adopted, ["VariableID:1:1"]);
+});
+
+test("locally untagged beats a repo tag, the same as any other local answer", () => {
+  const result = adoptUserSubtypes({ "VariableID:1:1": "untagged" }, { "VariableID:1:1": "spacing" });
+  assert.deepEqual(result.subtypes, { "VariableID:1:1": "untagged" });
+  assert.deepEqual(result.kept, ["VariableID:1:1"]);
+});
+
+test("adoption does not mutate the store it was handed", () => {
+  const local: Record<string, SubtypeSelection> = { "VariableID:1:1": "radius" };
+  adoptUserSubtypes(local, { "VariableID:1:2": "spacing" });
+  assert.deepEqual(local, { "VariableID:1:1": "radius" });
+});
+
+test("the reports are sorted, so two devices reading the same repo agree on the order", () => {
+  const result = adoptUserSubtypes({}, {
+    "VariableID:1:9": "spacing",
+    "VariableID:1:2": "radius",
+    "VariableID:1:5": "duration",
+  });
+  assert.deepEqual(result.adopted, ["VariableID:1:2", "VariableID:1:5", "VariableID:1:9"]);
 });
