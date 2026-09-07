@@ -32,6 +32,7 @@ import {
   visibleRows,
 } from "./state";
 import { openDeleteInFigma } from "./deleteFigma";
+import { threePlaceStrip } from "./threePlace";
 import { hasMixedTypes } from "../tokens/view";
 import { previewOf } from "../tokens/preview";
 import { parseHexColor, parseNumberValue, parseStringValue } from "../tokens/edit";
@@ -1213,6 +1214,10 @@ function emptyState(edits: number): HTMLElement {
       )
     );
   } else {
+    // `onboarding-polish.md` §7.1 — the strip above, the existing copy untouched beneath it. This
+    // is the placement that explains the middle of the three places, which is the one a first-timer
+    // is least likely to work out on their own.
+    wrap.appendChild(threePlaceStrip("tokens"));
     wrap.appendChild(el("p", undefined, "No tokens yet."));
     wrap.appendChild(
       el("p", "empty", "Scan the file on the Import tab to read its Variables and Styles.")

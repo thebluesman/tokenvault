@@ -8,7 +8,18 @@
 import type { ImportPayload, UiToPluginMessage } from "../messages";
 import type { ReportEntry, ReportParticipant, SubtypeCandidate, SubtypeSelection } from "../tokens/types";
 import { NUMBER_SUBTYPES, STRING_SUBTYPES } from "../tokens/subtype";
-import { copy, el } from "./dom";
+import { countBands } from "../tokens/importCounts";
+import {
+  bulkUndoMessage,
+  confirmMap,
+  defaultOpenGroup,
+  groupCandidates,
+  needsConfirmStrip,
+  previousSelections,
+  type SubtypeGroup,
+} from "../tokens/subtypeGroups";
+import { button, copy, el, toast } from "./dom";
+import { threePlaceStrip } from "./threePlace";
 
 /** Dropdown sentinel for "clear my choice and auto-detect again" — distinct from "untagged". */
 const RESET = "__reset";
@@ -36,6 +47,9 @@ export function initImportView(sender: (message: UiToPluginMessage) => void): vo
 
 export function setImportPayload(next: ImportPayload): void {
   payload = next;
+  // A parked bulk write names a set of ids from the previous payload. Once a new build lands those
+  // ids may be confirmed, gone, or guessed differently, so the question it was asking is stale.
+  pendingBulk = null;
   renderImport();
 }
 
@@ -85,12 +99,34 @@ export function renderImport(): void {
   if (scanError !== null) contentEl.appendChild(renderScanError(scanError));
   else if (scanning && slowScan) contentEl.appendChild(renderSlowScan());
 
-  if (!payload) return;
+  if (!payload) {
+    if (scanError === null && !scanning) contentEl.appendChild(renderNeverScanned());
+    return;
+  }
 
   contentEl.appendChild(renderCounts(payload));
   contentEl.appendChild(renderSubtypes(payload.candidates));
   contentEl.appendChild(renderReport(payload.entries));
   contentEl.appendChild(renderFiles(payload));
+}
+
+/**
+ * The Import tab before anything has been read — UX `onboarding-polish.md` §7.1.
+ *
+ * This screen used to be genuinely blank: `renderImport` returned early with no payload, so a
+ * first-timer's first look at the plugin was an empty rectangle and a header button. The strip
+ * explains the system; the sentence under it explains the screen; the scan button in the header
+ * does the thing.
+ */
+function renderNeverScanned(): HTMLElement {
+  const wrap = el("div");
+  wrap.style.padding = "8px 0";
+  wrap.appendChild(threePlaceStrip("import"));
+  wrap.appendChild(el("p", undefined, "Nothing read from this file yet."));
+  wrap.appendChild(
+    el("p", "empty", "Press Scan file above to read this file's Variables and Styles.")
+  );
+  return wrap;
 }
 
 function renderScanError(message: string): HTMLElement {
@@ -151,7 +187,6 @@ export function setRetryHandler(handler: () => void): void {
 function renderCounts(data: ImportPayload): HTMLElement {
   const section = el("section");
   section.appendChild(el("h2", undefined, "Summary"));
-  const grid = el("div", "counts");
 
   if (data.fromCache) {
     section.appendChild(
@@ -167,41 +202,155 @@ function renderCounts(data: ImportPayload): HTMLElement {
     section.appendChild(el("p", "empty", `Figma file read at ${data.importedAt}`));
   }
 
-  const stats: Array<[string, number]> = [
-    ["Collections", data.counts.collections],
-    ["Modes", data.counts.modes],
-    ["Variables", data.counts.variables],
-    ["Styles", data.counts.styles ?? 0],
-    ["Tokens", data.counts.tokens],
-    // Of the token total, so a file whose styles all mirrored Variables reads as 0 rather than
-    // looking like the styles scan silently failed.
-    ["from styles", data.counts.styleTokens ?? 0],
-    ["Flagged", data.counts.flagged],
-    ["Partial", data.counts.partialTokens ?? 0],
-    ["Unconfirmed", data.counts.unconfirmedSubtypes],
-  ];
-
-  for (const [label, value] of stats) {
-    const box = el("div", "count");
-    box.appendChild(el("b", undefined, String(value)));
-    box.appendChild(el("span", undefined, label));
-    grid.appendChild(box);
+  // Banded rather than flat — UX `onboarding-polish.md` §6.1. Two headings, not two colours, and
+  // not one number changed: `Flagged` and `Partial` are import defects, `to confirm` is a job, and
+  // rendered at identical weight in one row all three read as *132 things went wrong*.
+  for (const band of countBands(data.counts)) {
+    section.appendChild(el("div", "band-head", band.heading));
+    const bandGrid = el("div", "counts");
+    for (const box of band.boxes) {
+      const cell = el("div", "count");
+      cell.appendChild(el("b", undefined, String(box.value)));
+      cell.appendChild(el("span", undefined, box.label));
+      bandGrid.appendChild(cell);
+    }
+    section.appendChild(bandGrid);
   }
 
-  section.appendChild(grid);
   return section;
+}
+
+// ---------------------------------------------------------------------------
+// The subtype queue — UX `onboarding-polish.md` §5
+// ---------------------------------------------------------------------------
+
+/** Which guess groups are open. Seeded to the largest on first render, then the user's own. */
+let openGroups: Set<string> | null = null;
+
+/** A bulk write waiting on §5.2's confirm strip. `null` when nothing is pending. */
+let pendingBulk: {
+  ids: string[];
+  /** The subtype every id becomes, or `null` for "confirm each row's own guess". */
+  subtype: SubtypeSelection | null;
+  question: string;
+  consequence: string;
+  verb: string;
+} | null = null;
+
+function cancelBulk(): void {
+  pendingBulk = null;
+  renderImport();
+}
+
+/**
+ * Runs a bulk write, or asks first — §5.2.
+ *
+ * Under the threshold it goes straight through, with the toast as the way back. Over it, the write
+ * is parked and `git-sync.md` §10.4's inline confirm strip appears in place: it is the single most
+ * consequential control on this tab and it shipped with none of the protections the panel gives to
+ * far smaller actions.
+ */
+function bulkWrite(
+  updates: Record<string, SubtypeSelection | null>,
+  subtype: SubtypeSelection | null,
+  question: (count: number) => string,
+  consequence: (count: number) => string,
+  verb: (count: number) => string
+): void {
+  const ids = Object.keys(updates);
+  if (ids.length === 0) return;
+
+  if (needsConfirmStrip(ids.length)) {
+    pendingBulk = {
+      ids,
+      subtype,
+      question: question(ids.length),
+      consequence: consequence(ids.length),
+      verb: verb(ids.length),
+    };
+    renderImport();
+    return;
+  }
+  commitBulk(updates, subtype);
+}
+
+/** Sends the write and offers the inverse map back for ten seconds (§5.2, §11). */
+function commitBulk(
+  updates: Record<string, SubtypeSelection | null>,
+  subtype: SubtypeSelection | null
+): void {
+  const ids = Object.keys(updates);
+  // Captured **before** the write, from the candidates the panel is currently showing: the inverse
+  // of this map for exactly these ids. Not a snapshot of every stored tag.
+  const inverse = previousSelections(payload?.candidates ?? [], ids);
+  pendingBulk = null;
+  send({ type: "set-subtypes", subtypes: updates });
+  toast(bulkUndoMessage(ids.length, subtype), {
+    label: "Undo",
+    run: () => send({ type: "set-subtypes", subtypes: inverse }),
+  });
+}
+
+function setAllMap(
+  candidates: SubtypeCandidate[],
+  chosen: SubtypeSelection
+): Record<string, SubtypeSelection | null> {
+  const updates: Record<string, SubtypeSelection | null> = {};
+  for (const candidate of candidates) {
+    if (isSelectable(chosen, candidate.tokenType)) updates[candidate.variableId] = chosen;
+  }
+  return updates;
+}
+
+/** `Set all N … to…`, for the whole shown list or for one group. */
+function setAllSelect(candidates: SubtypeCandidate[], label: string): HTMLSelectElement {
+  const select = el("select") as HTMLSelectElement;
+  select.appendChild(new Option(label, ""));
+  select.appendChild(new Option("untagged", "untagged"));
+  for (const subtype of NUMBER_SUBTYPES) select.appendChild(new Option(subtype, subtype));
+  for (const subtype of STRING_SUBTYPES) select.appendChild(new Option(subtype, subtype));
+  select.disabled = scanning || pendingBulk !== null;
+  select.addEventListener("change", () => {
+    const chosen = select.value as SubtypeSelection | "";
+    select.value = "";
+    if (chosen === "") return;
+    bulkWrite(
+      setAllMap(candidates, chosen),
+      chosen,
+      (count) => `Set ${count} variable${count === 1 ? "" : "s"} to ${chosen}?`,
+      () => "You can change any of them afterwards, one at a time or in bulk.",
+      (count) => `Set ${count}`
+    );
+  });
+  return select;
 }
 
 function renderSubtypes(candidates: SubtypeCandidate[]): HTMLElement {
   const section = el("section");
   const unconfirmed = candidates.filter((candidate) => candidate.needsConfirmation);
+  // "to confirm", matching the count box above it (§6.1): it names a job of the user's rather than
+  // a defect state of a token.
   section.appendChild(
-    el("h2", undefined, `Number & string types — ${unconfirmed.length} unconfirmed`)
+    el("h2", undefined, `Number & string types — ${unconfirmed.length} to confirm`)
   );
 
   if (candidates.length === 0) {
     section.appendChild(el("p", "empty", "No number or string variables in this file."));
     return section;
+  }
+
+  const shown = onlyUnconfirmed ? unconfirmed : candidates;
+
+  // §5.4's paragraph, and half of §6.1's fix: the two things that make accepting a hundred guesses
+  // a reasonable thing to do. Without it, `Confirm all 132` is a button nobody sane presses.
+  if (unconfirmed.length > 0) {
+    section.appendChild(
+      el(
+        "p",
+        "empty",
+        "These are guesses, not errors. Tokenvault read Figma's scopes to guess each one. Accepting them all is fine — you can change any token's type later from its detail panel."
+      )
+    );
   }
 
   const toolbar = el("div", "toolbar");
@@ -212,54 +361,146 @@ function renderSubtypes(candidates: SubtypeCandidate[]): HTMLElement {
   filterBox.checked = onlyUnconfirmed;
   filterBox.addEventListener("change", () => {
     onlyUnconfirmed = filterBox.checked;
+    pendingBulk = null;
     renderImport();
   });
   filterLabel.appendChild(filterBox);
   filterLabel.appendChild(document.createTextNode("Only unconfirmed"));
   toolbar.appendChild(filterLabel);
 
-  const shown = onlyUnconfirmed ? unconfirmed : candidates;
+  // §5.2: the label carries the count, recomputed with the list. "Shown" is the product of a
+  // checkbox the user set two interactions ago, and a mass write that won't say how many rows it
+  // will touch is the one control on this tab that most needed to.
+  toolbar.appendChild(setAllSelect(shown, `Set all ${shown.length} shown to…`));
 
-  const bulkSelect = el("select");
-  bulkSelect.appendChild(new Option("Set all shown to…", ""));
-  bulkSelect.appendChild(new Option("untagged", "untagged"));
-  for (const subtype of NUMBER_SUBTYPES) bulkSelect.appendChild(new Option(subtype, subtype));
-  for (const subtype of STRING_SUBTYPES) bulkSelect.appendChild(new Option(subtype, subtype));
-  bulkSelect.disabled = scanning;
-  bulkSelect.addEventListener("change", () => {
-    const chosen = bulkSelect.value as SubtypeSelection | "";
-    if (chosen === "") return;
-    const updates: Record<string, SubtypeSelection | null> = {};
-    for (const candidate of shown) {
-      if (isSelectable(chosen, candidate.tokenType)) updates[candidate.variableId] = chosen;
-    }
-    bulkSelect.value = "";
-    if (Object.keys(updates).length > 0) send({ type: "set-subtypes", subtypes: updates });
-  });
-  toolbar.appendChild(bulkSelect);
-
-  const confirmAll = el("button", undefined, "Confirm all guesses as-is");
-  confirmAll.disabled = scanning || unconfirmed.length === 0;
+  // §5.4 — the primary, with the count in its label. On a well-scoped file most guesses are right,
+  // and the honest fast path is to take them and correct individuals from the detail panel.
+  const confirmAll = button(`Confirm all ${unconfirmed.length} guesses`, "primary");
+  confirmAll.disabled = scanning || unconfirmed.length === 0 || pendingBulk !== null;
   confirmAll.addEventListener("click", () => {
-    const updates: Record<string, SubtypeSelection | null> = {};
-    for (const candidate of unconfirmed) {
-      if (candidate.subtype !== undefined) updates[candidate.variableId] = candidate.subtype;
-    }
-    if (Object.keys(updates).length > 0) send({ type: "set-subtypes", subtypes: updates });
+    bulkWrite(
+      confirmMap(unconfirmed),
+      null,
+      (count) => `Confirm ${count} guess${count === 1 ? "" : "es"}?`,
+      () => "Each one keeps the type Tokenvault guessed for it. You can change any of them later.",
+      (count) => `Confirm ${count}`
+    );
   });
   toolbar.appendChild(confirmAll);
-
   section.appendChild(toolbar);
 
+  if (pendingBulk !== null) section.appendChild(renderBulkConfirm(pendingBulk));
+
   if (shown.length === 0) {
-    section.appendChild(el("p", "empty", "Every number variable has a confirmed or auto-detected type."));
+    // §5.5 — the queue has to visibly empty, and let you back in. `Only unconfirmed` is still
+    // checked, and an unlabelled checkbox is not a way back.
+    section.appendChild(
+      el("p", undefined, "Every number and string variable has a type.")
+    );
+    section.appendChild(
+      el("p", "empty", "You can change any of them from a token's detail panel.")
+    );
+    if (onlyUnconfirmed && candidates.length > 0) {
+      const showAll = button(`Show all ${candidates.length}`);
+      showAll.addEventListener("click", () => {
+        onlyUnconfirmed = false;
+        renderImport();
+      });
+      section.appendChild(showAll);
+    }
     return section;
   }
 
-  for (const candidate of shown) {
-    section.appendChild(renderCandidateRow(candidate));
+  const groups = groupCandidates(shown);
+  if (openGroups === null) {
+    const first = defaultOpenGroup(groups);
+    openGroups = new Set(first === null ? [] : [first]);
   }
+  for (const group of groups) section.appendChild(renderGroup(group));
   return section;
+}
+
+/** §5.2's guard, reusing `git-sync.md` §10.4's strip — its second use, and the shape it was made for. */
+function renderBulkConfirm(pending: NonNullable<typeof pendingBulk>): HTMLElement {
+  const strip = el("div", "confirm-strip");
+  strip.appendChild(el("div", undefined, pending.question));
+  strip.appendChild(el("div", "empty", pending.consequence));
+
+  const actions = el("div", "actions");
+  // Cancel is the quieter of the two: nothing here is destructive, so backing out must be at least
+  // as easy as going through.
+  const cancel = button("Cancel");
+  cancel.addEventListener("click", cancelBulk);
+  actions.appendChild(cancel);
+  actions.appendChild(el("span", "grow"));
+  const go = button(pending.verb, "primary");
+  go.addEventListener("click", () => {
+    const updates: Record<string, SubtypeSelection | null> = {};
+    if (pending.subtype === null) {
+      const byId = new Map((payload?.candidates ?? []).map((one) => [one.variableId, one]));
+      for (const id of pending.ids) {
+        const candidate = byId.get(id);
+        if (candidate?.subtype !== undefined) updates[id] = candidate.subtype;
+      }
+    } else {
+      for (const id of pending.ids) updates[id] = pending.subtype;
+    }
+    commitBulk(updates, pending.subtype);
+  });
+  actions.appendChild(go);
+  strip.appendChild(actions);
+  return strip;
+}
+
+/**
+ * One guess group — §5.3.
+ *
+ * A disclosure row, the same caret row `local-editor.md` §9 added for the tree, with a
+ * `.badge`-weight count and two controls on it. Collapsed by default except the largest: a 132-row
+ * wall is the thing being fixed, and opening one group shows the shape without rebuilding it.
+ */
+function renderGroup(group: SubtypeGroup): HTMLElement {
+  const wrap = el("div", "group");
+  const open = openGroups !== null && openGroups.has(group.key);
+
+  const head = el("div", "row group-head");
+  const caret = el("button", "caret-btn", `${open ? "▾" : "▸"} ${group.label}`);
+  caret.addEventListener("click", () => {
+    if (openGroups === null) openGroups = new Set();
+    if (open) openGroups.delete(group.key);
+    else openGroups.add(group.key);
+    renderImport();
+  });
+  head.appendChild(caret);
+  head.appendChild(el("span", "grow"));
+
+  // The button counts what the click would actually change, not how big the group is: with the
+  // `Only unconfirmed` filter off, a group can be mostly rows the user has already answered for.
+  const pendingConfirm = confirmMap(group.candidates);
+  const pendingConfirmCount = Object.keys(pendingConfirm).length;
+  if (group.confirmable && pendingConfirmCount > 0) {
+    const confirm = button(`Confirm ${pendingConfirmCount}`);
+    confirm.disabled = scanning || pendingBulk !== null;
+    confirm.addEventListener("click", () => {
+      bulkWrite(
+        pendingConfirm,
+        null,
+        (count) => `Confirm ${count} as ${String(group.subtype)}?`,
+        (count) => `All ${count} keep the type Tokenvault guessed. You can change any of them later.`,
+        (count) => `Confirm ${count}`
+      );
+    });
+    head.appendChild(confirm);
+  }
+  // `no guess` gets the set-all only: there is nothing to confirm, and it sorts last because it is
+  // the group that genuinely needs reading.
+  head.appendChild(setAllSelect(group.candidates, `Set all ${group.candidates.length} to…`));
+  wrap.appendChild(head);
+
+  if (open) {
+    for (const candidate of group.candidates) wrap.appendChild(renderCandidateRow(candidate));
+  }
+  return wrap;
 }
 
 function renderCandidateRow(candidate: SubtypeCandidate): HTMLElement {

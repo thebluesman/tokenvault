@@ -427,6 +427,98 @@
       .empty {
         color: var(--muted);
       }
+
+      /* ---- Onboarding polish (Phase 10, onboarding-polish.md) ---- */
+
+      /* §6.1 — two headings, not two colours. The band is what tells the reader which kind of
+         number they are looking at; making the second one amber would say "132 problems" louder
+         than the flat row said it by accident. */
+      .band-head {
+        color: var(--muted);
+        margin: 0 0 4px;
+      }
+      .counts + .band-head {
+        margin-top: 10px;
+      }
+      /* §5.3's group header — the same caret row the tree already has, with two controls on it. */
+      .group-head .caret-btn {
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+        padding: 0;
+        text-align: left;
+      }
+      .group-head .grow {
+        flex: 1;
+      }
+      /* §4.2's disclosure. Not a `<details>`: its open state has to survive a full re-render of the
+         settings body, which is driven by `draft.howOpen` rather than by the element. */
+      .disclosure {
+        margin: 6px 0;
+      }
+      .disclosure-head {
+        border: 0;
+        background: none;
+        color: var(--muted);
+        font: inherit;
+        cursor: pointer;
+        padding: 0;
+      }
+      .disclosure-body {
+        border-left: 2px solid var(--border);
+        padding: 4px 0 4px 8px;
+        margin-top: 4px;
+      }
+      .disclosure-body .step {
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+        padding: 3px 0;
+      }
+      .disclosure-body .step-n {
+        color: var(--muted);
+        min-width: 12px;
+      }
+      .disclosure-body .grow {
+        flex: 1;
+      }
+      /* §7.1's strip. One drawing, three placements — the highlighted place is the only thing that
+         differs between them, and it borrows the panel's own text colour rather than adding one. */
+      .three-place-strip {
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 8px;
+        margin-bottom: 10px;
+        background: var(--bg-subtle);
+      }
+      .three-place .tp-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+      }
+      .tp-place {
+        color: var(--muted);
+      }
+      .tp-place.on {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .tp-arrow,
+      .tp-back {
+        color: var(--muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 10px;
+      }
+      .tp-back {
+        margin-top: 3px;
+      }
+      .tp-line {
+        margin: 6px 0 0;
+      }
       .hidden {
         display: none !important;
       }

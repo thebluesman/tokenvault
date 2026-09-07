@@ -161,3 +161,37 @@ export function advanceBase(
   }
   return next;
 }
+
+/**
+ * Whether this push is the one that creates the tokens folder — UX `onboarding-polish.md` §6.3.
+ *
+ * True only when every file the panel wants to push is absent from the repo and there is nothing
+ * to pull or reconcile. That combination has exactly one cause: a first push into an empty folder,
+ * where *"12 changes"* would describe twelve files that have never existed. It is not a first-run
+ * mode and it does not change a number — the count is the same count, under a truer heading.
+ */
+export function isFirstPush(status: SyncStatus): boolean {
+  if (status.toPush.length === 0) return false;
+  if (status.toPull.length > 0 || status.diverged.length > 0) return false;
+  return status.toPush.every((file) => file.remoteSha === undefined);
+}
+
+/**
+ * The Review & push banner's sentence, or `null` when there is no banner to draw.
+ *
+ * The count and the claim have to be the same count. `isFirstPush` is a property of the whole
+ * `toPush` set, but the review screen lets the user uncheck files, so the banner is worded over the
+ * *checked* selection — and when that selection is empty there is no first push being described at
+ * all, so the banner goes away rather than announcing that zero files don't exist yet next to a
+ * disabled button.
+ */
+export function firstPushNote(
+  status: SyncStatus,
+  checkedCount: number,
+  branch: string
+): string | null {
+  if (!isFirstPush(status) || checkedCount === 0) return null;
+  const files = `${checkedCount} file${checkedCount === 1 ? "" : "s"}`;
+  const these = checkedCount === 1 ? "it doesn't exist" : "none of these exist";
+  return `${files} · ${these} in ${branch} yet. This first push creates ${checkedCount === 1 ? "it" : "them"}.`;
+}

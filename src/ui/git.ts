@@ -31,6 +31,7 @@ import type {
 } from "../git/types";
 import { GitError } from "../git/types";
 import { createClient, type GitClient } from "../git/api";
+import { analyzeToken, expiryStatus, type Expiry, type TokenCheck } from "../git/patSetup";
 import { blobSha } from "../git/blob";
 import { advanceBase, computeStatus, seedBlobShas } from "../git/diff";
 import { buildCommit, generateCommitMessage, type MessageFile } from "../git/commit";
@@ -868,6 +869,57 @@ export function disconnect(): void {
 /** `[ Test connection ]` — the branch list doubles as the cheapest possible proof of access. */
 export async function testConnection(): Promise<string[] | null> {
   return withToken("Testing…", (client) => client.getBranches());
+}
+
+// ---------------------------------------------------------------------------
+// The paste-time token check — UX `onboarding-polish.md` §4.3
+// ---------------------------------------------------------------------------
+
+/** What the settings screen renders under the token field: an answer, or a named failure. */
+export type PastedTokenResult =
+  | { ok: true; check: TokenCheck }
+  | { ok: false; failure: GitFailure };
+
+/**
+ * Asks GitHub what a **just-typed, not-yet-saved** credential may do — §4.3.
+ *
+ * Deliberately outside `withToken`: that function reads the *stored* credential, and the whole
+ * point of this check is to answer before anything is stored. The pasted string is a parameter,
+ * is handed straight to `createClient`, and goes out of scope when this returns — ADR-0006 §1's
+ * rule, held by the same mechanism, one function further out.
+ *
+ * The failure is returned rather than pushed onto `view.failure`. A pasted string that turns out to
+ * be a typo is not a broken connection, and it must not light the gear or the Repo tab for a
+ * connection the user is still in the middle of making.
+ */
+export async function checkPastedToken(
+  owner: string,
+  repo: string,
+  candidate: string
+): Promise<PastedTokenResult> {
+  try {
+    const client = createClient({ owner, repo, token: candidate });
+    const probe = await client.checkToken();
+    return { ok: true, check: analyzeToken(probe) };
+  } catch (error) {
+    return {
+      ok: false,
+      failure:
+        error instanceof GitError
+          ? error.failure
+          : { kind: "unknown", message: "Something went wrong talking to GitHub. Nothing was changed." },
+    };
+  }
+}
+
+/**
+ * Whether the stored token is about to lapse, or has — §4.4.
+ *
+ * Derived from `settings.patExpiresAt` on every read rather than cached, so a panel left open
+ * across midnight never reports yesterday's answer.
+ */
+export function tokenExpiry(): Expiry {
+  return expiryStatus(view.settings?.patExpiresAt, Date.now());
 }
 
 export function clearLastPull(): void {

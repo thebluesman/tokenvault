@@ -265,12 +265,16 @@ function renderChanged(body: HTMLElement, lines: Line[]): void {
   if (!model.driftKnown) {
     // §8's corollary, said out loud rather than rendered as a clean list: a "nothing has changed"
     // that actually meant "we had no baseline" is the worst possible lie for this feature to tell.
-    body.appendChild(el("p", undefined, "We don't know yet."));
+    // `onboarding-polish.md` §6.2 — the chip keeps its two words and the sentence goes here, one
+    // tap away. `Not compared` is correct, deliberate (ADR-0005 §8) and completely opaque to
+    // someone meeting it cold, so this branch is where a stranger is told what it is comparing
+    // *against*, in the panel's own vocabulary rather than the codebase's.
+    body.appendChild(el("p", undefined, "Nothing to compare against yet."));
     body.appendChild(
       el(
         "p",
         "empty",
-        "There's no earlier scan to compare this file against, so nothing can be said about what changed. Rescan to set the baseline."
+        "Tokenvault compares this file against the last time you applied tokens to it, or against your repo. You haven't done either yet, so there's nothing it can honestly call a change."
       )
     );
     return;

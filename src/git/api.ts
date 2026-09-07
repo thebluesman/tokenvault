@@ -23,6 +23,7 @@
 //      the reason `lastFour` is stored beside the token rather than derived from it at render time.
 
 import type { RateLimit, RemoteTree } from "./types";
+import type { TokenProbe } from "./patSetup";
 import { GitError } from "./types";
 import { treeEntries, type CommitRequest } from "./commit";
 
@@ -39,6 +40,13 @@ export interface GitClient {
   repo: string;
   /** Whatever the last response said about the hour's budget. `null` until a call has been made. */
   rateLimit(): RateLimit | null;
+  /**
+   * What GitHub says about the credential that made this call — UX `onboarding-polish.md` §4.3.
+   *
+   * One `GET /repos/{owner}/{repo}`, read for its `permissions` block and two response headers.
+   * The only endpoint that answers "may this token write here?" without attempting a write.
+   */
+  checkToken(): Promise<TokenProbe>;
   getBranches(): Promise<string[]>;
   getRef(branch: string): Promise<{ commitSha: string }>;
   getTree(branch: string): Promise<RemoteTree>;
@@ -60,6 +68,20 @@ export function createClient(options: ClientOptions): GitClient {
   let limit: RateLimit | null = null;
 
   async function call<T>(path: string, init?: RequestInit): Promise<T> {
+    return (await callWithHeaders<T>(path, init)).body;
+  }
+
+  /**
+   * The same request, with the response headers handed back.
+   *
+   * Only the token check wants them, and it wants two of them: `github-authentication-token-
+   * expiration` and `x-oauth-scopes`. Everything else goes through `call` and never sees a header,
+   * which keeps §1's rule — GitHub's response is never rendered — a one-place concern.
+   */
+  async function callWithHeaders<T>(
+    path: string,
+    init?: RequestInit
+  ): Promise<{ body: T; headers: Headers }> {
     let response: Response;
     try {
       response = await fetch(`${API}${path}`, {
@@ -82,10 +104,10 @@ export function createClient(options: ClientOptions): GitClient {
 
     readRateLimit(response);
     if (!response.ok) throw describeFailure(response, init?.method ?? "GET");
-    if (response.status === 204) return undefined as T;
+    if (response.status === 204) return { body: undefined as T, headers: response.headers };
 
     try {
-      return (await response.json()) as T;
+      return { body: (await response.json()) as T, headers: response.headers };
     } catch {
       throw new GitError({
         kind: "bad-json",
@@ -188,6 +210,29 @@ export function createClient(options: ClientOptions): GitClient {
     owner,
     repo,
     rateLimit: () => limit,
+
+    /**
+     * §4.3's paste-time check, as one request.
+     *
+     * The `permissions` block is GitHub's own report of what this credential may do with this
+     * repository, and it is the closest thing to a write-permission answer that does not involve
+     * writing. A fine-grained token scoped to Contents: **Read** comes back with `push: false`,
+     * which is exactly the case the whole section exists to catch. When the block is missing the
+     * caller downgrades to a warning rather than guessing — `patSetup.ts` `tokenVerdict`.
+     *
+     * A 401 or a 404 never reaches here: `describeFailure` has already turned them into §11's own
+     * copy, which is the correct answer for both and is unchanged by this phase.
+     */
+    async checkToken(): Promise<TokenProbe> {
+      const { body, headers } = await callWithHeaders<{
+        permissions?: { admin?: boolean; push?: boolean; pull?: boolean; maintain?: boolean };
+      }>(`/repos/${owner}/${repo}`);
+      return {
+        permissions: body.permissions ?? null,
+        expirationHeader: headers.get("github-authentication-token-expiration"),
+        scopesHeader: headers.get("x-oauth-scopes"),
+      };
+    },
 
     async getBranches(): Promise<string[]> {
       const branches = await call<Array<{ name: string }>>(
