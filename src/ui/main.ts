@@ -45,6 +45,7 @@ import {
   setSettingsCloseHandler,
 } from "./settings";
 import { onPipelineChange } from "./pipeline";
+import { RESIZE_DEBOUNCE_MS } from "../window";
 import {
   renderRepo,
   repoTabLabel,
@@ -545,7 +546,6 @@ function firstFailure(message: { report: { outcomes: Array<{ ok: boolean; messag
  * There is no copy, no toast and no setting attached to any of this (§6). A window that resizes and
  * remembers its size should say nothing about either.
  */
-const RESIZE_DEBOUNCE_MS = 250;
 let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
 window.addEventListener("resize", () => {

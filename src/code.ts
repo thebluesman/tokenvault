@@ -11,7 +11,7 @@ import type {
 } from "./messages";
 import type { RepoSettings, SyncState } from "./git/types";
 import type { WindowSize } from "./window";
-import { DEFAULT_WINDOW_SIZE, MIN_WINDOW_SIZE, clampWindowSize, sameWindowSize } from "./window";
+import { DEFAULT_WINDOW_SIZE, MIN_WINDOW_SIZE, clampWindowSize } from "./window";
 import type { TokenGroup } from "./tokens/types";
 import {
   PAT_KEY,
@@ -225,7 +225,6 @@ async function rememberWindowSize(width: number, height: number): Promise<void> 
   if (Math.abs(size.width - storedWindowSize.width) <= 2 && Math.abs(size.height - storedWindowSize.height) <= 2) {
     return;
   }
-  if (sameWindowSize(size, storedWindowSize)) return;
   storedWindowSize = size;
   try {
     await figma.clientStorage.setAsync(WINDOW_SIZE_KEY, size);

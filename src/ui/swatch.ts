@@ -14,6 +14,8 @@
 import type { Token } from "../tokens/types";
 import type { Resolution } from "../tokens/resolve";
 import { previewOf } from "../tokens/preview";
+import { HEX_COLOR } from "../tokens/edit";
+import { el } from "./dom";
 
 export type SwatchMark =
   /** Paint this colour. A literal and a resolved reference are indistinguishable here (issue #28). */
@@ -37,11 +39,13 @@ export type SwatchMark =
  * to answer §4.2's wrong-type case: a colour token pointing at a `string` token resolves to
  * `"Urbanist"`, and painting that as a colour renders an invisible chip that claims a colour is
  * there. This is the check that turns it into the dashed outline the design asks for.
+ *
+ * The pattern is `edit.ts`'s own, imported rather than restated: `parseHexColor` is what *writes* a
+ * colour value, so a value that commits and a value that paints have to agree about what a hex is.
+ * They did not until 2026-09-08 — this file carried its own copy, which differed on the `#`.
  */
-const COLOR_VALUE = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
-
 export function isColorValue(value: unknown): boolean {
-  return typeof value === "string" && COLOR_VALUE.test(value.trim());
+  return typeof value === "string" && HEX_COLOR.test(value.trim());
 }
 
 /**
@@ -74,4 +78,34 @@ export function swatchMark(token: Token, resolution: Resolution): SwatchMark {
   }
 
   return { kind: "none" };
+}
+
+/**
+ * The mark, as nodes — one function, so the tree row and the card's value shell cannot diverge.
+ *
+ * `edit-view-redesign.md` §4.3 and §12 are explicit about this: the swatch inside `.value-shell` is
+ * *this* call and these classes, not a parallel treatment. Two implementations of a colour chip is
+ * the failure `panel-size-and-swatches.md` §5.4 exists to prevent, reappearing one surface over.
+ *
+ * `{ kind: "none" }` renders the reserved slot rather than nothing — a cycle draws no mark, and its
+ * `—` still has to land in the same column as its siblings' hex (§4.3). Callers on a non-colour row
+ * simply don't ask.
+ */
+export function swatchNode(mark: SwatchMark): HTMLElement {
+  if (mark.kind === "color") {
+    const wrap = el("span", "swatch-wrap");
+    wrap.appendChild(el("span", "swatch"));
+    const fill = el("span", "swatch-fill");
+    fill.style.background = mark.color;
+    wrap.appendChild(fill);
+    return wrap;
+  }
+  if (mark.kind === "outlined") {
+    const wrap = el("span", "swatch-wrap");
+    wrap.appendChild(el("span", "swatch outlined"));
+    return wrap;
+  }
+  // Nothing to paint, which is why `.reserved` adds no properties of its own — the class exists so
+  // the markup says what the empty box is for.
+  return el("span", "swatch-wrap reserved");
 }

@@ -22,6 +22,7 @@ import { normalizePathKey } from "../src/tokens/paths";
 import { groupStrip, dotTitle, STRIP_CAP } from "../src/ui/strip";
 import type { StripRow } from "../src/ui/strip";
 import { swatchMark, isColorValue } from "../src/ui/swatch";
+import { parseHexColor } from "../src/tokens/edit";
 import { flat } from "./helpers";
 
 function token(type: Token["$type"], value: unknown): Token {
@@ -180,10 +181,12 @@ test("the cycle row reserves the swatch slot, and only on a colour row", () => {
     tokensTs.indexOf('if (resolution.kind === "cycle") {'),
     tokensTs.indexOf('container.appendChild(el("span", "badge needs", "⚑ cycle"));')
   );
+  // The reservation is `swatchNode({ kind: "none" })` since `edit-view-redesign.md` §12 folded the
+  // three chip helpers into the one function the card's value shell also asks.
   assert.equal(
-    cycleBranch.indexOf("reservedSwatchSlot()") !== -1,
+    /swatchNode\(\{ kind: "none" \}\)/.test(cycleBranch),
     true,
-    "the cycle row no longer reserves the 12px slot — its `—` will sit 12px left of its siblings"
+    "the cycle row no longer reserves the slot — its `—` will sit a chip-width left of its siblings"
   );
   assert.equal(
     cycleBranch.indexOf("isColor") !== -1,
@@ -191,7 +194,7 @@ test("the cycle row reserves the swatch slot, and only on a colour row", () => {
     "the cycle row's reservation is no longer gated on the colour type"
   );
   assert.equal(
-    /else if \(isColor\) \{\s*container\.appendChild\(reservedSwatchSlot\(\)\);/.test(tokensTs),
+    /mark\.kind !== "none" \|\| isColor/.test(tokensTs),
     true,
     "the no-mark case no longer reserves the slot for a colour row"
   );
@@ -481,5 +484,117 @@ test("the strip is computed at model-build time, not in paint()", () => {
     tokensTs.indexOf("const GROUP_HEIGHT = 24;") !== -1,
     true,
     "GROUP_HEIGHT changed — the strip fits inside the existing row, or the dots are too big (§10)"
+  );
+});
+
+// ---------------------------------------------------------------------------
+// `/code-review high`, 2026-09-08 — three more places the swatch could lie
+// ---------------------------------------------------------------------------
+
+test("a broken value under the active lens skips the dot — it never borrows another set's colour", () => {
+  // §5.4's fallback is for a path the lens has **nothing** for. When the lens *does* answer and its
+  // answer is a cycle, a dangler or a wrong type, substituting whatever some other set holds paints a
+  // dot that the expanded rows then contradict — the exact disagreement §5.4 exists to prevent.
+  const tokens = [
+    flat("color.loop", "Light", color("#ffffff")),
+    flat("color.loop", "Dark", color("{color.loop.self}")),
+    flat("color.loop.self", "Dark", color("{color.loop}")),
+    flat("color.dangling", "Light", color("#eeeeee")),
+    flat("color.dangling", "Dark", color("{nowhere.at.all}")),
+    flat("color.fine", "Dark", color("#111111")),
+  ];
+  const dark = model(tokens, ["Dark"]);
+  const strip = groupStrip(group(dark.tree, "color"), dark.input);
+  assert.deepEqual(
+    strip?.dots.map((dot) => dot.leaf),
+    ["fine"],
+    "a broken value under the lens fell back to the Light set's colour"
+  );
+
+  // And the legitimate fallback still fires, for the case it was written for: the Light-only path is
+  // not in the Dark stack at all, so the first contributing set answers.
+  const light = model(
+    [flat("color.shared", "Light", color("#ffffff")), flat("color.onlyLight", "Light", color("#c33a2e"))],
+    ["Dark"]
+  );
+  assert.deepEqual(groupStrip(group(light.tree, "color"), light.input)?.dots, [
+    { leaf: "onlyLight", color: "#c33a2e" },
+    { leaf: "shared", color: "#ffffff" },
+  ]);
+});
+
+test("nothing past the cap is resolved — `+N` is counted, not computed", () => {
+  // §10. A 50-shade ramp used to resolve all 50 to render six dots and `+44`, on every renderTree() —
+  // which is every filter keystroke, every theme switch and (until this pass) every frame of a drag.
+  const big = RAMP.concat(["800", "900", "950"]).map((step, index) =>
+    flat(`color.red.${step}`, "Light", color(`#${index}${index}${index}`))
+  );
+  const state = model(big);
+  let resolves = 0;
+  const counting = {
+    ...state.input,
+    resolve: (entry: FlatToken) => {
+      resolves += 1;
+      return state.input.resolve(entry);
+    },
+  };
+  const strip = groupStrip(group(state.tree, "color.red"), counting);
+  assert.equal(strip?.dots.length, STRIP_CAP);
+  assert.equal(strip?.overflow, big.length - STRIP_CAP, "`+N` stopped counting the children it skipped");
+  assert.equal(
+    resolves,
+    STRIP_CAP,
+    `the loop resolved ${resolves} children to paint ${STRIP_CAP} dots — it is resolving past the cap`
+  );
+});
+
+test("`+N` past the cap counts colour children, not every child", () => {
+  // The count is off the `$type` and the filtered-rows lookup, which are both free. A `number` child
+  // was never going to be a dot, and a hidden one is not in the group any more (§5.4).
+  const state = model([
+    ...RAMP.slice(0, 6).map((step) => flat(`color.red.${step}`, "Light", color("#111111"))),
+    flat("color.red.radius", "Light", token("number", 4)),
+    flat("color.red.700", "Light", color("#222222")),
+    flat("color.red.800", "Light", color("#333333")),
+  ]);
+  const strip = groupStrip(group(state.tree, "color.red"), state.input);
+  assert.equal(strip?.dots.length, STRIP_CAP);
+  assert.equal(strip?.overflow, 2, "the non-colour child past the cap was counted as a hidden colour");
+});
+
+test("the swatch's hex test is the commit path's own regex", () => {
+  // Two copies of this pattern is how a value that commits successfully renders as "no colour". The
+  // shapes must agree exactly; the `#` is the one deliberate difference, and it is deliberate in one
+  // direction only — `parseHexColor` normalises what was *typed*, `isColorValue` tests what is
+  // *stored*, and everything stored carries the `#`.
+  for (const value of ["#c33a2e", "#C33A2EFF", "#fff", "#ffff", "#c33a2eff"]) {
+    assert.equal(isColorValue(value), true, `${value} should paint`);
+    assert.equal(parseHexColor(value).ok, true, `${value} should commit`);
+  }
+  // Everything the commit path refuses, the swatch refuses too.
+  for (const value of ["#ff", "#fffff", "#ggg", "Urbanist", ""]) {
+    assert.equal(isColorValue(value), false, `${value} should not paint`);
+    assert.equal(parseHexColor(value).ok, false, `${value} should not commit`);
+  }
+  // The one asymmetry, stated so a future reader does not "fix" it: a bare `abc` commits (it is being
+  // normalised) and does not paint (a `string` token holding "abc" is not a colour — §4.2).
+  assert.equal(parseHexColor("c33a2e").ok, true);
+  assert.equal(isColorValue("c33a2e"), false);
+});
+
+test("the reference picker's swatch comes off the resolution, not off previewOf", () => {
+  // §5.4's unified treatment, at the one surface that still had its own answer: `previewOf` is pure
+  // over the token, so a pointer never carries a `swatch` and a candidate that is itself a colour
+  // reference showed no dot while the literal beside it did.
+  const valueFieldTs = readFileSync(join(process.cwd(), "src/ui/valueField.ts"), "utf8");
+  assert.equal(
+    /swatch: candidateSwatch\(target\.token, resolved\)/.test(valueFieldTs),
+    true,
+    "the picker row's swatch went back to preview.swatch — colour references lose their dot"
+  );
+  assert.equal(
+    /swatchMark\(token, resolved\)/.test(valueFieldTs),
+    true,
+    "candidateSwatch stopped asking the shared swatchMark"
   );
 });

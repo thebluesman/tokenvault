@@ -35,12 +35,13 @@ import {
 } from "./state";
 import { openDeleteInFigma } from "./deleteFigma";
 import { dotTitle, groupStrip } from "./strip";
-import { swatchMark } from "./swatch";
+import { swatchMark, swatchNode } from "./swatch";
 import { threePlaceStrip } from "./threePlace";
 import { hasMixedTypes } from "../tokens/view";
 import { previewOf } from "../tokens/preview";
 import { parseHexColor, parseNumberValue, parseStringValue } from "../tokens/edit";
 import { normalizePathKey } from "../tokens/paths";
+import { RESIZE_DEBOUNCE_MS } from "../window";
 import { button, clear, closePopover, copy, el, highlight, popover, toast } from "./dom";
 import { applyLines, closeDetail, deleteButton, openDetail, runDelete } from "./detail";
 
@@ -109,14 +110,25 @@ function measureReferenceBudget(): number {
   return Math.max(14, Math.min(64, 24 + Math.round((width - 460) / 7)));
 }
 
+/** Coalesces a drag into one rebuild — see `RESIZE_DEBOUNCE_MS`. */
+let budgetTimer: ReturnType<typeof setTimeout> | null = null;
+
 export function initTokens(): void {
   scrollEl.addEventListener("scroll", () => paint(false));
   window.addEventListener("resize", () => {
-    // A resize changes how many rows are in view, which is a repaint. It changes the *content* of a
-    // row only when the reference budget moves with it (§3.4) — so the full rebuild is spent on that
-    // and not on every frame of a drag.
-    if (measureReferenceBudget() === referenceBudget) paint(true);
-    else renderTree();
+    // A resize changes how many rows are in view, which is a repaint, and that stays immediate: it
+    // is the same work a scroll frame does and the panel would otherwise lag the drag.
+    paint(true);
+
+    // It changes the *content* of a row only when the reference budget moves with it (§3.4), and
+    // that is a **full tree rebuild** — so it is debounced on the same interval `main.ts` reports
+    // the new size on. Dragging the handle across the budget boundary used to rebuild the whole
+    // tree on every native resize event, which is visible stutter at 1,300 tokens.
+    if (budgetTimer !== null) clearTimeout(budgetTimer);
+    budgetTimer = setTimeout(() => {
+      budgetTimer = null;
+      if (measureReferenceBudget() !== referenceBudget) renderTree();
+    }, RESIZE_DEBOUNCE_MS);
   });
 }
 
@@ -939,39 +951,6 @@ function setCode(line: Line): HTMLElement {
 }
 
 /**
- * The one colour chip in the token list: checkerboard base under a full-opacity fill. Literal and
- * reference values share it, so the two cannot drift apart into different treatments (§4.5).
- */
-function colorSwatch(color: string): HTMLElement {
-  const wrap = el("span", "swatch-wrap");
-  wrap.appendChild(el("span", "swatch"));
-  const fill = el("span", "swatch-fill");
-  fill.style.background = color;
-  wrap.appendChild(fill);
-  return wrap;
-}
-
-/** The "no colour" chip: a dangling pointer, or one that lands on a non-colour (§4.2). */
-function outlinedSwatch(): HTMLElement {
-  const wrap = el("span", "swatch-wrap");
-  wrap.appendChild(el("span", "swatch outlined"));
-  return wrap;
-}
-
-/**
- * The swatch-sized slot with nothing drawn in it — UX `panel-size-and-swatches.md` §4.3.
- *
- * A cycle has no value, so it has no colour and gets no mark; but its `—` still has to sit in the
- * same column as every sibling's hex, or it reads as a different *kind* of row rather than as
- * absence. The slot takes its width from `--swatch-size`, so it followed the chip from 12px to 16px
- * without a second number to keep in step. Colour rows only: giving every row in the tree a permanent
- * chip-wide indent to serve colour rows is the wrong trade at 400px.
- */
-function reservedSwatchSlot(): HTMLElement {
-  return el("span", "swatch-wrap reserved");
-}
-
-/**
  * A collapsed group's dots — §5.3.
  *
  * 8px squares with a full-strength ring, deliberately *unlike* the row chip since 2026-09-07 (that
@@ -1015,7 +994,9 @@ function appendValue(container: HTMLElement, line: Line, row: Row): void {
   if (resolution.kind === "cycle") {
     // No mark, but the slot is reserved on a colour row so the `—` lands in the same column as every
     // sibling's hex (§4.2, §4.3).
-    if (isColor) container.appendChild(reservedSwatchSlot());
+    // No mark, but the slot is reserved on a colour row so the `—` lands in the same column as
+    // every sibling's hex (§4.2, §4.3).
+    if (isColor) container.appendChild(swatchNode({ kind: "none" }));
     const dash = el("span", "val readonly", "—");
     dash.title = "This token is part of a loop, so it has no value.";
     dash.addEventListener("click", (event) => {
@@ -1032,16 +1013,12 @@ function appendValue(container: HTMLElement, line: Line, row: Row): void {
   // full opacity with a solid ring, exactly like a literal (`local-editor.md` §4.5, amended by issue
   // #28): the `↗` and the value text already say "pointer", and fading the fill only made the ends
   // of a scale — near-white, near-black — read as the wrong colour.
+  // A pointer that resolves nowhere, or to a non-colour, gets one mark for both, because from here
+  // they are the same fact: this colour token has no colour to show. The flag says which (§4.2).
+  // A cycle gets the reserved slot, and only on a colour row: giving every row in the tree a
+  // permanent chip-wide indent to serve colour rows is the wrong trade at 400px.
   const mark = swatchMark(line.entry.token, resolution);
-  if (mark.kind === "color") {
-    container.appendChild(colorSwatch(mark.color));
-  } else if (mark.kind === "outlined") {
-    // A pointer that resolves nowhere, or to a non-colour — one mark for both, because from here
-    // they are the same fact: this colour token has no colour to show. The flag says which (§4.2).
-    container.appendChild(outlinedSwatch());
-  } else if (isColor) {
-    container.appendChild(reservedSwatchSlot());
-  }
+  if (mark.kind !== "none" || isColor) container.appendChild(swatchNode(mark));
 
   // A token with no overlay target has nothing to key an edit on (ADR-0004 §2), so it reads as
   // read-only here and says why when clicked — the alternative is an input that accepts a value

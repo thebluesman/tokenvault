@@ -1,6 +1,14 @@
 # UX: The token card — restyling the edit view (Phase 10)
 
-**Status: Settled 2026-09-07.** §10.1 and §10.3 — the two questions that shape the build — answered by
+**Status: Built 2026-09-07, live acceptance pending.** Implemented against this doc in full — issue #38,
+branch `phase-10-edit-view-card` — including §5.6's optional shadow-layer collapsing. §9's amendments are
+applied. §11's checklist needs a running panel at 400px and at 640 and has **not** been walked yet; nothing
+here is Implemented until it has. Two deviations, both noted in the code: §5.7's `Pattern`-as-trailing-select
+stays its own stacked row (the control decides which fields the card has, so it cannot live inside one of
+them), and §4.1's stacked labels are scoped to `#panel` rather than replacing `.field` outright, because
+`#settings` shares the class for its own label-beside-control rows.
+
+**Settled 2026-09-07.** §10.1 and §10.3 — the two questions that shape the build — answered by
 Shyam: display-only name (no rename), stacked labels everywhere. §10.2, §10.4 and §10.5 stand as
 recommended, unchallenged. Implementation-ready for `@frontend-engineer`. Everything here is layout,
 ordering and label copy over the fields that already ship — **no new schema, no new capability, no

@@ -12,7 +12,8 @@
 // Nothing in here knows about apply plans, git, or the overlay. It takes two values and a state.
 
 import type { TokenValue } from "../tokens/types";
-import { el, swatch } from "./dom";
+import { el } from "./dom";
+import { swatchNode } from "./swatch";
 import { truncateReference } from "../tokens/preview";
 import { describeValue } from "../tokens/format";
 
@@ -117,13 +118,11 @@ export function diffRow(
 
 export function appendValue(into: HTMLElement, value: TokenValue | undefined, isAfter: boolean): void {
   const text = describe(value);
+  // The same chip the tree row and the card's value shell draw — `swatchNode` is the panel's only
+  // colour chip (`edit-view-redesign.md` §12). This used to hand-roll its own wrapper and fill, which
+  // is one more place the treatment could drift from the other two.
   if (typeof value === "string" && /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(value)) {
-    const wrapper = el("span", "swatch-wrap");
-    wrapper.appendChild(swatch(value, false));
-    const fill = el("span", "swatch-fill");
-    fill.style.background = value;
-    wrapper.appendChild(fill);
-    into.appendChild(wrapper);
+    into.appendChild(swatchNode({ kind: "color", color: value }));
   }
   into.appendChild(el("span", isAfter ? "to" : undefined, text));
 }

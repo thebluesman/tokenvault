@@ -229,6 +229,14 @@ Tokens Studio puts everything in a modal. We diverge for scalars because the dom
 
 "Overlay", not "modal": it slides over the full panel, keeps the tree's scroll position, and has a back arrow. At the panel's minimum width a centred modal with a dimmed backdrop wastes a third of the panel on chrome.
 
+> **Amended 2026-09-07 — `edit-view-redesign.md` §3 (issue #38).** The overlay was restyled as **the token card**. The split above is unchanged; the surface is unchanged; only the overlay's internals moved.
+>
+> - **Still the full-panel overlay** (§3.1) — not a centred modal, not a second pane, and not a right-hand sidebar. The modal argument got *stronger*, not weaker: the floor moved from 460px to 400 (`panel-size-and-swatches.md` §3.2), and §3.4's one-layout-at-every-width is a hard constraint rather than a preference, so there is no width at which a second pane appears.
+> - **A single-set path drops the `.set-section` box and its `h3` entirely** (§3.2) — one plain card, fields directly in `.panel-body`. On roughly two-thirds of paths that border, its 8px of padding each side and a heading restating a set the title already implies were pure redundancy. The set code and the `edited` / flag badges move to one thin meta line under the title; the `$type` badge is dropped there, because the value field's own label now carries the type. **A multi-set path keeps one bordered section per set**, in `tokenSetOrder`, `h3` and all — with three sections on screen the set is the thing you are locating, and that line is also where two sets disagreeing on `$type` shows up (§4.2).
+> - **Inline editing in the tree survives, unchanged**, for `color`, `number`, `boolean` and `string` (§3.3). The argument for it was never about how the overlay looked: the dominant edit is *nudge a spacing value*, and restyling the card does not make that round trip cheaper.
+> - **Labels sit above their fields, everywhere in the card** (§4.1) — ~90px of value width recovered at the 400px floor for ~14px of height per field.
+> - **The footer is pinned**, holding `Done` and the path-level `Apply all N sets` (§7.2). There is no Save and no Cancel: every field commits to the overlay on blur, so there is no draft buffer for either to act on, and `←` has been the exit since Phase 4.
+
 ### 5.2 Per-type editors
 
 | `$type` | Control | Validation |
@@ -242,6 +250,14 @@ Tokens Studio puts everything in a modal. We diverge for scalars because the dom
 | `grid` | A repeatable list of grid rows: pattern (`columns`/`rows`/`grid`), and only the fields valid for that pattern. | Absent keys stay absent (ADR-0003 §3). Switching pattern to `grid` removes `count`/`alignment` rather than zeroing them. |
 
 **Read-only, always shown, never editable:**
+
+> **Amended 2026-09-07 — `edit-view-redesign.md` §6 (issue #38).** This material now lives in **one disclosure** at the bottom of the card, labelled `Figma`, collapsed by default.
+>
+> "Always shown" survives the collapse because **the Source line is promoted into the disclosure's always-visible summary row** — `Figma · Variable · Theme / Light`, `Figma · Style · TEXT`. The ids, the scopes and the bindings fold away; where the token came from never does.
+>
+> It **auto-expands** when it explains a value the user is looking at, and only then (§6.2): when `boundVariables` is populated — this section's own reasoning, honoured rather than overridden — or when §14.7's disagreement line fires. State is remembered while the panel is open and is deliberately not persisted.
+>
+> Two smaller changes inside: `boundVariables` becomes a plain sub-block headed **`Bound in Figma`** rather than its own nested `<details>` (nested disclosures at 400px are a maze, and the count in `N bound Variables` was doing nothing); the `text` extras keep theirs. `scopes` render **humanised by mechanical transform** — `ALL_FILLS` → `All fills` — still read-only, never badges, and the line is **omitted entirely** when a token has none. A token with no provenance at all renders no section, not an empty one.
 
 - **Source** — `Variable · Theme/Light` or `Style · TEXT`, with the id available on hover/copy. Every Phase 4 token has one, since every token came from import; there is no provenance-less `Local` state until token creation ships (§2).
 - **`boundVariables`** — for style-derived tokens, listed as `fontSize → {folio.typography.font-size.70}`. This is why a text style's numbers look "already aliased"; hiding it makes the value editor look broken.
@@ -422,6 +438,12 @@ Undo lives in the toast for 10 seconds; after that, the way back is *Undo all* o
 - The header's right slot holds the **Local edits · N** chip in Phase 4, and is where Phase 6's sync pill lands. Same slot, same role — "what state is my work in" — so the chip isn't a placeholder that gets evicted; it's the first occupant of a permanent one.
 
 Three things Phase 4 has to add: a **disclosure/caret row** for groups, a **colour swatch** with a checkerboard alpha backing, and the merged view's **value line** — an indented, slightly shorter variant of `.row` with no bottom border, so a path's stacked lines read as one block rather than three list items. The set code on it is a `.badge`-weight muted label, not a new colour: which set a value came from is neutral information, never a state that needs you.
+
+> **Amended 2026-09-07 — `edit-view-redesign.md` §4.3 (issue #38).** Those three gain a fourth: **`.value-shell`** — a bordered, radius-4 flex row holding a leading swatch, the text input and any trailing control (`px`/`em`, the subtype select, `Auto`), so that the whole field reads as one control.
+>
+> It introduces **no new colour and no new badge**. Its border, radius and background are the ones every text input already uses; the input inside it simply loses its own. Its swatch is `swatchMark()` + `.swatch-wrap` / `.swatch-fill` — the same call the tree row makes, under the same resolution — **not a new mark**, and the native `<input type="color">` stays the hidden mechanism behind the chip rather than being dressed up as one. It has **no trailing chevron**: the reference screenshot's is a value-type toggle, which `references-math-themes.md` §4.1 refused.
+>
+> One more thing it is not: the card adds no second class per type. Seven card shapes, one shell.
 
 ---
 

@@ -300,7 +300,8 @@
       select,
       input[type="text"],
       input[type="search"],
-      textarea.field {
+      textarea.field,
+      textarea.desc-input {
         font: inherit;
         padding: 2px 4px;
         border: 1px solid var(--border);
@@ -1119,19 +1120,55 @@
         padding: 8px 12px;
         border-bottom: 1px solid var(--border);
       }
-      #panel .panel-head .title {
+      /* The title bar *is* the name field — `edit-view-redesign.md` §10.1. The path in mono with
+         `Copy path` beside it is the token's identity; there is no editable Name input, because
+         ADR-0004 defines no rename op and a field that refuses everything typed into it is worse
+         than no field. */
+      #panel .panel-head .head-main {
         flex: 1;
+        min-width: 0;
+      }
+      #panel .panel-head .title {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
+      /* One thin meta line under the title, and only on a single-set card: it is where the set code
+         and the `edited` / flag badges the dropped `h3` used to carry reappear (§3.2, §12). Not the
+         `$type` badge — the value field's own label carries the type now (§4.2). */
+      #panel .panel-head .head-meta {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 2px;
+        font-size: 10px;
+        color: var(--muted);
+      }
       #panel .panel-body {
         flex: 1;
         min-height: 0;
         overflow: auto;
         padding: 12px;
+      }
+      /* The pinned footer — `Done` plus the path-level write verb (§7.2). At 400px the note wraps
+         *above* the buttons rather than sharing their line, which is why this is a column and not the
+         row `#repo` and `#settings` use. */
+      #panel .panel-foot {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+      }
+      #panel .panel-foot .foot-row {
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+      /* The single-set card: no border, no padding, no heading (§3.2). It exists as a class rather
+         than as a bare `div` so the markup says which of the two shapes it is. */
+      .card {
+        margin-bottom: 10px;
       }
       .set-section {
         border: 1px solid var(--border);
@@ -1166,8 +1203,118 @@
         flex: none;
         width: 52px;
       }
+      /*
+        Labels above their fields, everywhere in the overlay — `edit-view-redesign.md` §4.1, §10.3.
+
+        Scoped to `#panel` rather than replacing `.field` outright, because `#settings` uses the same
+        class for its own label-beside-control rows and restyling those is not this change. Inside the
+        card the 84px gutter and the 90px note margin below are one decision and move together (§12):
+        ~90px of width recovered on every value, every resolve line and every dotted path at the 400px
+        floor, for ~14px of height per field. Width is the scarce axis; height is not.
+
+        10px, `--muted`, sentence case — deliberately **not** uppercase. The panel's one uppercase
+        treatment is the path picker's group label, where it separates three groups of results, and
+        spending that distinction on fifteen field labels in a row would retire it.
+      */
+      #panel .field {
+        display: block;
+        margin-bottom: 8px;
+      }
+      #panel .field > label {
+        display: block;
+        width: auto;
+        margin-bottom: 4px;
+        font-size: 10px;
+        color: var(--muted);
+      }
+      /* A bare select in a card row — grid `pattern`, shadow `inset` — takes the field's full width,
+         so it lines up with the shells above and below it rather than sitting at its text width. */
+      #panel .field > select {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      /*
+        The value shell — §4.3, and the **one** new class this redesign adds.
+
+        A bordered flex row that looks like the text input it contains: the input inside it loses its
+        own border and background, so the swatch, the value and any trailing control read as one
+        field. The amber refusal moves to the shell for the same reason — the input has no border of
+        its own left to colour.
+
+        No trailing chevron. The reference screenshot's is its value-type dropdown, which is precisely
+        the mode toggle `references-math-themes.md` §4.1 refused; adding it here would reintroduce the
+        phase's one load-bearing rejection as decoration.
+      */
+      .value-shell {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 4px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--bg);
+      }
+      .value-shell:focus-within {
+        border-color: var(--accent);
+      }
+      .value-shell.invalid {
+        border-color: var(--warn);
+        background: var(--warn-bg);
+      }
+      .value-shell > input[type="text"] {
+        /* `8ch` rather than `0`, so the shell wraps a trailing control onto a second line at 400px
+           instead of squeezing the value down to nothing (§5's `guessed` badge case). */
+        flex: 1 1 8ch;
+        min-width: 8ch;
+        border: 0;
+        background: transparent;
+        padding: 2px 0;
+      }
+      .value-shell > input[type="text"]:focus {
+        outline: none;
+      }
+      /* The swatch inside the shell is the row chip: `swatchMark()` + `.swatch-wrap` / `.swatch-fill`,
+         the same call under the same resolution (§4.3, §12). Nothing here restyles it — this rule only
+         says it is a click target and must not shrink. */
+      .value-shell .shell-swatch {
+        cursor: pointer;
+      }
+      /* The native colour input stays as the hidden *mechanism* behind the chip rather than being
+         dressed up as one (§12). Not `display: none` — an unrendered input cannot be opened by
+         `showPicker()` in every engine. */
+      .hidden-picker {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+      }
+      /* Trailing controls stay trailing, inside the shell, at a fixed width (§4.4): 52px for a unit,
+         84px for a subtype. */
+      .value-shell .subtype,
+      .value-shell .subtype-group > select {
+        flex: none;
+        width: 84px;
+      }
+      .value-shell .subtype-group {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      /* §5.6's two-up member pairing. A static layout rule with one condition, and the condition is
+         handled in `card.ts` — by the time a pair reaches this rule it is a pair. */
+      .field-pair {
+        display: flex;
+        gap: 8px;
+      }
+      .field-pair > * {
+        flex: 1;
+        min-width: 0;
+      }
       .field-note {
-        margin: -3px 0 6px 90px;
+        margin: -3px 0 6px;
         /* Grey by default. Amber is `.warn`, and it is added only by a *refusal* — a value the user
            just committed on purpose (rule 4, the no-op nudge) needs nothing from them, and amber
            that appears on a correct action is how `⚑` stops meaning anything (UX §5.4, §6.5). */
@@ -1179,7 +1326,9 @@
       /* The resolve line — grey, and deliberately **not a badge** (UX §6.2). Nothing about an
          expression is amber unless it fails to parse or evaluate. */
       .resolve-line {
-        margin: -3px 0 6px 90px;
+        /* Aligned to the field's own left edge, which is also where the eye already is — the 90px
+           gutter went with the labels (§4.1, §12). */
+        margin: -3px 0 6px;
         color: var(--muted);
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
@@ -1259,10 +1408,50 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      /* Description — a two-row textarea, because newlines are preserved rather than stripped
+         (§7.1). `$description` is a string and DTCG permits them; the tree row and the push diff
+         already show the first line. */
+      textarea.desc-input {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        resize: vertical;
+      }
+      /*
+        The Figma section — one disclosure per card (§6.1).
+
+        The summary row carries `Figma · <Source>`, so collapsing folds away the ids, the scopes and
+        the bindings but never the provenance `local-editor.md` §5.2 promises is always shown.
+      */
+      .figma-section {
+        margin: 8px 0;
+        border-top: 1px solid var(--border);
+        padding-top: 6px;
+      }
+      .figma-section > summary {
+        cursor: pointer;
+        color: var(--muted);
+      }
       .provenance {
         color: var(--muted);
         margin-top: 6px;
         word-break: break-all;
+      }
+      /* `Bound in Figma` — a plain muted sub-heading rather than a nested `<details>`, because nested
+         disclosures at 400px are a maze (§6.1). The `text` extras keep theirs: eleven rows of Figma
+         internals nobody reads is exactly what a disclosure is for. */
+      .provenance .sub-head {
+        margin-top: 6px;
+      }
+      /* A collapsed shadow layer's own toggle — §5.6. Text, not a button: it sits in the `.subhead`
+         beside `↑` and `Remove`, which are the buttons. */
+      .subrow > .subhead .layer-toggle {
+        padding: 0;
+        border: 0;
+        background: none;
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
       }
       .conflict-box {
         border: 1px solid var(--border);
