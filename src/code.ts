@@ -10,6 +10,8 @@ import type {
   UiToPluginMessage,
 } from "./messages";
 import type { RepoSettings, SyncState } from "./git/types";
+import type { WindowSize } from "./window";
+import { DEFAULT_WINDOW_SIZE, MIN_WINDOW_SIZE, clampWindowSize, sameWindowSize } from "./window";
 import type { TokenGroup } from "./tokens/types";
 import {
   PAT_KEY,
@@ -136,13 +138,102 @@ const FILE_ID_PLUGIN_DATA_KEY = "tokenvault:file-id";
 const APPEARANCE_KEY = "tokenvault:appearance";
 
 /**
+ * The panel's last size (UX `panel-size-and-swatches.md` §3.3) — its own key, not per file.
+ *
+ * A physical per-machine preference, like where you put a palette: it is not synced to the repo, it
+ * is not in Settings, and it does not travel with a token tree. `{ width, height }`, a few bytes,
+ * on the same footing as `APPEARANCE_KEY` above.
+ */
+const WINDOW_SIZE_KEY = "tokenvault:window-size";
+
+/**
+ * Opens the panel at the size it was left at — §3.3.
+ *
+ * `showUI` waits on one `clientStorage` read, which is why it is in here rather than at module
+ * scope. The alternative is opening at the default and resizing a frame later, which is a visible
+ * jump every single launch. Message handlers are registered synchronously below and the handshake
+ * is UI-initiated, so nothing races this.
+ *
+ * **The clamp happens here, before `showUI`, not after** (§10). Figma would clamp an out-of-range
+ * size for us, but then the *stored* value stays wrong and the next session starts from the same
+ * bad number.
+ *
  * `themeColors: true` is what makes dark mode possible at all (UX `dark-mode.md` §2): Figma stamps
  * a `figma-light` / `figma-dark` class on the iframe's `<html>` and injects a `<style>` block of
  * `--figma-color-*` variables, both updating live when the editor theme changes with the panel
  * open. There is no other supported way for a plugin to learn Figma's theme. It changes nothing
  * else — not sizing, not messaging, not the `ui-ready` handshake.
  */
-figma.showUI(__html__, { width: 460, height: 640, themeColors: true });
+void openPanel();
+
+async function openPanel(): Promise<void> {
+  let size = { ...DEFAULT_WINDOW_SIZE };
+  try {
+    size = clampWindowSize(await figma.clientStorage.getAsync(WINDOW_SIZE_KEY));
+  } catch {
+    // An unreadable size is not worth a screen, a toast or a quarantine — there is no user data in
+    // it to recover (§3.3). Open at the default and carry on.
+  }
+  storedWindowSize = size;
+
+  // `resizable` is **not** in `@figma/plugin-typings` (1.99) and is not part of the documented
+  // `ShowUIOptions`. It is passed anyway, behind a fallback, because the panel must open either way:
+  // a Figma build that reads the flag gets the native handle issue #35 asks for, and one that
+  // refuses an unknown option gets the same window without it. Either way the resize *reporting*
+  // below is what remembers the size, so nothing here depends on the flag being honoured.
+  const options = { width: size.width, height: size.height, themeColors: true };
+  try {
+    figma.showUI(__html__, { ...options, resizable: true } as ShowUIOptions);
+  } catch {
+    figma.showUI(__html__, options);
+  }
+}
+
+/**
+ * What we believe is on screen, so a drag that ends where it started writes nothing.
+ *
+ * Resize events arrive continuously during a drag; the UI debounces them (`main.ts`) and this
+ * de-duplicates whatever still gets through, because ADR-0004 §1's quota is not somewhere to spend
+ * a write per frame.
+ */
+let storedWindowSize: WindowSize = { ...DEFAULT_WINDOW_SIZE };
+
+/**
+ * Records the size the user dragged the panel to — §3.3.
+ *
+ * The UI reports its own iframe size and has already clamped it, but the floor is enforced again
+ * here for the same reason it is enforced before `showUI`: this is the value that outlives the
+ * session, and the one place it can be wrong forever.
+ */
+async function rememberWindowSize(width: number, height: number): Promise<void> {
+  const size = clampWindowSize({ width, height });
+
+  // The minimum has to be *enforced* somewhere, and the iframe cannot resize itself — pushing back
+  // is the only mechanism available (§3.2's floor). Only past a couple of pixels of tolerance: the
+  // iframe's reported viewport and the window size Figma set can differ by a hairline, and treating
+  // that hairline as a violation would resize the panel in a loop for as long as it sat at the
+  // minimum.
+  if (width < MIN_WINDOW_SIZE.width - 2 || height < MIN_WINDOW_SIZE.height - 2) {
+    figma.ui.resize(size.width, size.height);
+  }
+
+  // A drag that ends where it started writes nothing, and neither does a report that is only a
+  // hairline off what we believe is on screen. The dead zone is a **creep guard**: the iframe reports
+  // its own viewport, which can round differently from the number `showUI` was given, and persisting
+  // that difference every session would walk the panel a pixel or two smaller each time it opened.
+  // No user resizes by two pixels on purpose.
+  if (Math.abs(size.width - storedWindowSize.width) <= 2 && Math.abs(size.height - storedWindowSize.height) <= 2) {
+    return;
+  }
+  if (sameWindowSize(size, storedWindowSize)) return;
+  storedWindowSize = size;
+  try {
+    await figma.clientStorage.setAsync(WINDOW_SIZE_KEY, size);
+  } catch {
+    // Nothing to tell the user: the panel is already the size they asked for, and the only cost is
+    // that the next launch starts from the previous one.
+  }
+}
 
 let snapshot: FileScan | null = null;
 let userSubtypes: Record<string, SubtypeSelection> = {};
@@ -1200,6 +1291,13 @@ let queue: Promise<void> = Promise.resolve();
 
 figma.ui.onmessage = (message: UiToPluginMessage) => {
   const run = async (): Promise<void> => {
+    // §3.3 — the panel's own geometry, and the only message in the plugin that touches neither the
+    // document, the tree nor the repo.
+    if (message.type === "window-resized") {
+      await rememberWindowSize(message.width, message.height);
+      return;
+    }
+
     if (message.type === "ui-ready") {
       userSubtypes = await loadUserSubtypes();
       pathRules = await loadPathRules();

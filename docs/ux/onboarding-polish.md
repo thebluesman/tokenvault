@@ -7,7 +7,7 @@ product-feel calls and none of them gates the build.
 **Covers:** `docs/ux/user-journeys.md` §13c gaps 11–14. PRD §6.4 (PAT auth), §6.7 (plugin panel),
 build plan §9 Phase 10. Issue #22.
 **Builds on:** `local-editor.md` (P4) §1 and §8, `git-sync.md` (P6) §5, §6.1 and §11,
-`error-states.md` (P9) §1. Same panel, same 460 × 640 px, same vocabulary. Read those first — this
+`error-states.md` (P9) §1. Same panel — **minimum 400px wide, resizable** since issue #35 (`panel-size-and-swatches.md` §3) — same vocabulary. Read those first — this
 doc extends them and does not restate them.
 **Depends on:** PR #31 (issue #23) being merged. §5.7 explains which sentence goes false without it.
 **Amends:** `user-journeys.md` §4.2, §13c and §14 (applied here — §9.1); `git-sync.md` §5.1, §5.2
@@ -29,7 +29,7 @@ partly wrong. Establishing that first, because it changes what there is to desig
 | **A confirmed subtype now travels via push/pull.** `adoptRepoSubtypes` runs before the rebuild on connect-adopt and after every pull. | PR #31 / issue #23 | The 132-row queue is a **first-machine** problem, not a per-machine one. That changes how much the grouping in §5.3 has to carry. |
 | **A read-only token is currently caught at first push.** `git-sync.md` §11's *"This token can only read the repo"* fires on a 403 from the write. | `git-sync.md` §11 | The single worst moment in Journey A, and the permission is knowable at paste time. §4.3. |
 
-And three constraints carried forward, all still load-bearing: 460 × 640 px; **no third badge
+And three constraints carried forward, all still load-bearing: a **minimum 400px** panel width; **no third badge
 colour**; and the panel's own vocabulary — *Changed in Figma* not "drift", *Uncommitted* not
 "unsaved", **Apply** writes the canvas, **Commit/Push** writes the repo, **Pull** writes neither.
 

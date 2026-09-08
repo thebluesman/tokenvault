@@ -132,7 +132,7 @@ export function crash(detail: CrashDetail): void {
   clear(crashEl);
   crashEl.classList.remove("hidden");
 
-  const card = el("div", "crash-card");
+  const card = el("div", "crash-card measure");
   card.appendChild(el("h2", undefined, "Something went wrong."));
   card.appendChild(
     el(

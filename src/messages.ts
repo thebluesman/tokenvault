@@ -181,6 +181,14 @@ export interface ApplyReport {
 
 export type UiToPluginMessage =
   | { type: "ui-ready" }
+  /**
+   * The panel was dragged to a new size — UX `panel-size-and-swatches.md` §3.3.
+   *
+   * Sent by the UI because the iframe is the only side that learns its own new size, debounced
+   * there because a drag fires continuously and the store this lands in is quota-constrained
+   * (ADR-0004 §1). Carries no token data and triggers no rebuild.
+   */
+  | { type: "window-resized"; width: number; height: number }
   /** Re-read the Figma file from scratch. */
   | { type: "scan" }
   /**

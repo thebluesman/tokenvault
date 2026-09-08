@@ -9,7 +9,8 @@
 // from `Theme/Light` is about 1,027 rows, most of them one line. Rendering all of them is a
 // visible stall on every filter keystroke, so only the window in view is in the DOM.
 
-import type { GroupNode, TreeNode } from "../tokens/view";
+import type { FlatToken, GroupNode, TreeNode } from "../tokens/view";
+import type { GroupStripModel } from "./strip";
 import type { OverlayEntry, OverlayTarget } from "../tokens/overlay";
 import type { TokenType } from "../tokens/types";
 import type { Line, Row } from "./state";
@@ -21,6 +22,7 @@ import {
   filters,
   getModel,
   resolutionFor,
+  resolutionOf,
   setActiveTheme,
   switchPageTheme,
   hiddenMatches,
@@ -32,6 +34,8 @@ import {
   visibleRows,
 } from "./state";
 import { openDeleteInFigma } from "./deleteFigma";
+import { dotTitle, groupStrip } from "./strip";
+import { swatchMark } from "./swatch";
 import { threePlaceStrip } from "./threePlace";
 import { hasMixedTypes } from "../tokens/view";
 import { previewOf } from "../tokens/preview";
@@ -67,6 +71,15 @@ interface Placed {
   height: number;
   depth: number;
   group?: GroupNode;
+  /**
+   * The collapsed group's swatch dots — UX `panel-size-and-swatches.md` §5.
+   *
+   * Held on the placement rather than worked out in `groupRow`, because `groupRow` runs from
+   * `paint()` on every scroll frame and this walks the group's children (§10). Present only on a
+   * collapsed group that has direct colour children; the placement is rebuilt whenever the filters,
+   * the theme lens or the expansion change, which is exactly when the dots could differ.
+   */
+  strip?: GroupStripModel;
   row?: Row;
 }
 
@@ -76,9 +89,35 @@ let placed: Placed[] = [];
 let bannerDismissed = false;
 let lastWindow = "";
 
+/**
+ * How many characters of a reference path a value line keeps — UX `panel-size-and-swatches.md` §3.4.
+ *
+ * The panel is resizable now, and this is the **first** thing extra width is spent on: a deep path
+ * loses its middle segments, which is exactly where two similar palettes differ. Recomputed once per
+ * tree render rather than per row — it reads the scroller's width, and a layout read per row per
+ * frame is what the virtualizer exists to avoid.
+ *
+ * It is a budget, not a layout mode. Nothing appears, disappears or reflows with it; the row is the
+ * same row at every width (§3.4 is a constraint, not a preference).
+ */
+let referenceBudget = 24;
+
+/** Anchored on the panel Phase 4 designed against: 24 characters at 460px, ~7px per character. */
+function measureReferenceBudget(): number {
+  const width = scrollEl.clientWidth;
+  if (width === 0) return 24;
+  return Math.max(14, Math.min(64, 24 + Math.round((width - 460) / 7)));
+}
+
 export function initTokens(): void {
   scrollEl.addEventListener("scroll", () => paint(false));
-  window.addEventListener("resize", () => paint(true));
+  window.addEventListener("resize", () => {
+    // A resize changes how many rows are in view, which is a repaint. It changes the *content* of a
+    // row only when the reference budget moves with it (§3.4) — so the full rebuild is spent on that
+    // and not on every frame of a drag.
+    if (measureReferenceBudget() === referenceBudget) paint(true);
+    else renderTree();
+  });
 }
 
 /** Expansion resets on rescan — the tree may not have the same shape (§4.4). */
@@ -583,6 +622,7 @@ function renderTree(): void {
   clear(canvasEl);
   placed = [];
   lastWindow = "";
+  referenceBudget = measureReferenceBudget();
 
   if (!model.ready) {
     canvasEl.appendChild(emptyState(model.overlay.entries.length));
@@ -630,9 +670,18 @@ function renderTree(): void {
         }
         const filtered = filterGroup(node, byKey);
         if (filtered === null) continue;
-        placed.push({ top, height: GROUP_HEIGHT, depth, group: filtered });
+        const open = expanded.has(node.path);
+        // §5.2 — a strip only on a **collapsed** group. An expanded one has its children showing
+        // their own swatches one line below, so a strip alongside is the same information twice.
+        placed.push({
+          top,
+          height: GROUP_HEIGHT,
+          depth,
+          group: filtered,
+          strip: open ? undefined : stripFor(node, byKey),
+        });
         top += GROUP_HEIGHT;
-        if (expanded.has(node.path)) walk(node.children, depth + 1);
+        if (open) walk(node.children, depth + 1);
       }
     };
     walk(model.tree, 0);
@@ -667,6 +716,23 @@ function filterGroup(node: GroupNode, byKey: Map<string, Row>): GroupNode | null
   walk(node.children);
   if (count === 0) return null;
   return { ...node, pathCount: count };
+}
+
+/**
+ * A collapsed group's dots, under the current filters and the current theme lens (§5).
+ *
+ * Sits next to `filterGroup` and is invalidated with it, because it keys off the same inputs — the
+ * filtered row set and the active theme (§10). The lens and the resolution both come from the model
+ * rather than from anything computed here, so a dot and the row it previews cannot disagree.
+ */
+function stripFor(node: GroupNode, byKey: Map<string, Row>): GroupStripModel | undefined {
+  return (
+    groupStrip(node, {
+      lookup: (key) => byKey.get(key),
+      stack: getModel().resolve.stack,
+      resolve: (entry: FlatToken) => resolutionOf(entry),
+    }) ?? undefined
+  );
 }
 
 function paint(force: boolean): void {
@@ -723,6 +789,12 @@ function groupRow(item: Placed): HTMLElement {
   const open = expanded.has(group.path);
   line.appendChild(el("span", "caret", open ? "▾" : "▸"));
   line.appendChild(el("span", "tname group-name", group.name));
+
+  // §5.1 — after the name, before the `⚑` and the right-aligned count. It is the first thing to
+  // yield when the row runs out of width: the name, the flag and the count are all load-bearing and
+  // the strip is a preview. It carries no click handler of its own, so clicking it toggles the group
+  // like clicking anywhere else on the row (§5.6) — including the `+N`.
+  if (item.strip !== undefined) line.appendChild(swatchStrip(item.strip));
 
   if (groupHasFlag(group)) line.appendChild(el("span", "badge needs", "⚑"));
   line.appendChild(el("span", "count-right", String(group.pathCount)));
@@ -879,6 +951,51 @@ function colorSwatch(color: string): HTMLElement {
   return wrap;
 }
 
+/** The "no colour" chip: a dangling pointer, or one that lands on a non-colour (§4.2). */
+function outlinedSwatch(): HTMLElement {
+  const wrap = el("span", "swatch-wrap");
+  wrap.appendChild(el("span", "swatch outlined"));
+  return wrap;
+}
+
+/**
+ * The 12px slot with nothing drawn in it — UX `panel-size-and-swatches.md` §4.3.
+ *
+ * A cycle has no value, so it has no colour and gets no mark; but its `—` still has to sit in the
+ * same column as every sibling's hex, or it reads as a different *kind* of row rather than as
+ * absence. Colour rows only: giving every row in the tree a permanent 12px indent to serve colour
+ * rows is the wrong trade at 400px.
+ */
+function reservedSwatchSlot(): HTMLElement {
+  return el("span", "swatch-wrap reserved");
+}
+
+/**
+ * A collapsed group's dots — §5.3.
+ *
+ * 8px squares rather than circles: the row-level chip is a 12px rounded square, and the same shape
+ * smaller reads as *"the same thing, less of it."* Two departures from the 12px chip, both forced by
+ * the size and both in the stylesheet — the checkerboard is dropped (at 8px the 6px checker is one
+ * and a bit squares of noise) and the ring is kept (1px of an 8px box is a lot, and it is what stops
+ * a `#000000` shade being a hole in a dark panel).
+ */
+function swatchStrip(strip: GroupStripModel): HTMLElement {
+  const wrap = el("span", "strip");
+  for (const dot of strip.dots) {
+    const cell = el("span", "strip-dot");
+    // Painted as a gradient of one colour rather than as `background`, so the stylesheet's
+    // `background-color: var(--checker-a)` survives underneath it and a semi-transparent token
+    // composites against the panel's own ground (§5.3). An inline `background` would replace it.
+    cell.style.backgroundImage = `linear-gradient(${dot.color}, ${dot.color})`;
+    cell.title = dotTitle(dot);
+    wrap.appendChild(cell);
+  }
+  // A bare numeral, muted, same weight as the right-hand count — a footnote on the strip, not a
+  // control, and not `+4 more` (§6). Expanding is the "show all"; there is no second affordance.
+  if (strip.overflow > 0) wrap.appendChild(el("span", "strip-more", `+${strip.overflow}`));
+  return wrap;
+}
+
 function appendValue(container: HTMLElement, line: Line, row: Row): void {
   const resolution = resolutionFor(line);
   // A composite renders its **resolved** summary (UX §14.5): `Urbanist 20/24 · 500`, not the 140
@@ -886,13 +1003,18 @@ function appendValue(container: HTMLElement, line: Line, row: Row): void {
   // which `previewOf` produces from the substituted value rather than from a second rule here.
   const preview = previewOf(
     line.entry.token,
-    resolution.kind === "composite" ? resolution.value : undefined
+    resolution.kind === "composite" ? resolution.value : undefined,
+    { referenceMax: referenceBudget }
   );
+  const isColor = line.entry.token.$type === "color";
 
   // §7.3b — a token on a loop carries `⚑ cycle` on its value line and its preview is `—`. No
   // number, no swatch, no stale value: a silently wrong number is strictly worse than a visible
   // error, and the whole point of a derived value is that it wasn't typed (§7.1).
   if (resolution.kind === "cycle") {
+    // No mark, but the slot is reserved on a colour row so the `—` lands in the same column as every
+    // sibling's hex (§4.2, §4.3).
+    if (isColor) container.appendChild(reservedSwatchSlot());
     const dash = el("span", "val readonly", "—");
     dash.title = "This token is part of a loop, so it has no value.";
     dash.addEventListener("click", (event) => {
@@ -904,22 +1026,20 @@ function appendValue(container: HTMLElement, line: Line, row: Row): void {
     return;
   }
 
-  if (preview.swatch !== undefined) {
-    container.appendChild(colorSwatch(preview.swatch));
-  } else if (preview.reference !== undefined && line.entry.token.$type === "color") {
-    // `previewOf` is pure over the token, so a pointer never carries a `swatch` — the colour it
-    // lands on only exists on the resolution, which is why this stays its own branch. What it is
-    // *not* is a different swatch: a reference paints at full opacity with a solid ring, exactly
-    // like a literal (§4.5, amended). The `↗` and the value text already say "pointer"; fading the
-    // fill only made the ends of a scale — near-white, near-black — read as the wrong colour.
-    if (typeof resolution.value === "string") {
-      container.appendChild(colorSwatch(resolution.value));
-    } else {
-      // Nothing resolves, so there is no colour to show: the dashed outline is the whole mark.
-      const wrap = el("span", "swatch-wrap");
-      wrap.appendChild(el("span", "swatch outlined"));
-      container.appendChild(wrap);
-    }
+  // One question, asked once, and answered the same way for the 8px dots in a collapsed group's
+  // strip (`swatch.ts`, `panel-size-and-swatches.md` §4.2, §5.4). A resolved reference paints at
+  // full opacity with a solid ring, exactly like a literal (`local-editor.md` §4.5, amended by issue
+  // #28): the `↗` and the value text already say "pointer", and fading the fill only made the ends
+  // of a scale — near-white, near-black — read as the wrong colour.
+  const mark = swatchMark(line.entry.token, resolution);
+  if (mark.kind === "color") {
+    container.appendChild(colorSwatch(mark.color));
+  } else if (mark.kind === "outlined") {
+    // A pointer that resolves nowhere, or to a non-colour — one mark for both, because from here
+    // they are the same fact: this colour token has no colour to show. The flag says which (§4.2).
+    container.appendChild(outlinedSwatch());
+  } else if (isColor) {
+    container.appendChild(reservedSwatchSlot());
   }
 
   // A token with no overlay target has nothing to key an edit on (ADR-0004 §2), so it reads as

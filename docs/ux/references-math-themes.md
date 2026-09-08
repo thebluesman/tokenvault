@@ -4,7 +4,7 @@
 **Extended 2026-09-05 — §14, sub-key references on composite tokens (issue #26).** Phase 7 deferred these (§2, §12) and ADR-0007 §10 left the authoring surface unsettled. §14 settles it: **the picker does not change shape** — a composite member becomes an ordinary Phase 7 value field and `{` fires the same popover. §14 is Settled; its two remaining questions (§14.8) are product-feel calls for Shyam and neither gates the build.
 **Owner:** `@ux-designer`
 **Covers:** PRD §6.2 (themes), §6.3 (aliasing, math expressions, circular-reference detection), §6.7 (plugin panel), build plan §9 Phase 7.
-**Builds on:** `docs/ux/local-editor.md` (Phase 4), `docs/ux/apply-and-drift.md` (Phase 5), `docs/ux/git-sync.md` (Phase 6) — same panel, same 460 × 640 px, same vocabulary. Read those first; this doc extends them and does not restate them.
+**Builds on:** `docs/ux/local-editor.md` (Phase 4), `docs/ux/apply-and-drift.md` (Phase 5), `docs/ux/git-sync.md` (Phase 6) — same panel — **minimum 400px wide, resizable** since issue #35 (`panel-size-and-swatches.md` §3) — same vocabulary. Read those first; this doc extends them and does not restate them.
 **Depends on:** ADR-0007 (`docs/adr/0007-themes-aliasing-and-math.md`) — **Accepted 2026-09-03**. Where this doc and the ADR disagree, the ADR wins and this doc gets amended.
 **Amends:** `docs/ux/local-editor.md` §5.3 (reference values read-only) — Phase 7 lifts it, exactly as that section said Phase 7 would. §12 states the replacement in full.
 **Resolves for the ADR:** ADR-0007 §4 handed `@ux-designer` one question — *does the editor steer users toward a reference over an expression, given the live-link loss?* Answered in §6.5: **yes, but in exactly one case**, and never as a standing warning.

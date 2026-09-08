@@ -385,8 +385,26 @@ test("the UI is created with themeColors", () => {
   // §2: there is no other supported way for a plugin to learn Figma's theme, so this flag is
   // load-bearing whatever else the doc decided. Without it Figma stamps no class and injects no
   // variables, and three of the four palette blocks never fire.
+  //
+  // The size moved into a variable in Phase 10 (`panel-size-and-swatches.md` §3.3 — the panel opens
+  // at the size it was left at), so the flag is asserted on the options object every `showUI` call
+  // shares rather than inside one call's braces. Both branches of the resizable fallback have to
+  // carry it; a panel that opened unthemed on the fallback path would be the same bug one level down.
   const code = readFileSync(join(ROOT, "src/code.ts"), "utf8");
-  assert.equal(/figma\.showUI\(__html__, \{[^}]*themeColors: true/.test(code), true);
+  assert.equal(
+    /const options = \{[^}]*themeColors: true/.test(code),
+    true,
+    "the showUI options no longer set themeColors — dark mode's only mechanism is gone"
+  );
+  const calls = code.match(/figma\.showUI\(__html__[^;]*/g) ?? [];
+  assert.equal(calls.length > 0, true, "no showUI call found — this test's premise has moved");
+  for (const call of calls) {
+    assert.equal(
+      /themeColors: true|\.\.\.options|, options\)/.test(call),
+      true,
+      `a showUI call opens the panel without themeColors: ${call}`
+    );
+  }
 });
 
 test("the appearance preference has its own storage key and never touches the overlay", () => {
