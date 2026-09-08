@@ -5,9 +5,9 @@
 // group's strip. §5.4 exists to prevent the failure where those two disagree — expanding a group
 // showing you six colours that are not the six dots you clicked.
 //
-// The 12px chip itself has shipped since Phase 4 and is not retested here. What is new is the three
-// no-colour cases (§4.2), the reserved slot they need (§4.3, pinned structurally below), and the
-// strip.
+// What the chip *is* has shipped since Phase 4. What is pinned here is the three no-colour cases
+// (§4.2), the reserved slot they need (§4.3), the strip, and — since 2026-09-07 — how the chip is
+// drawn: a circle at `--swatch-size` with a ring that got fainter without disappearing (§4.5).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -195,6 +195,129 @@ test("the cycle row reserves the swatch slot, and only on a colour row", () => {
     true,
     "the no-mark case no longer reserves the slot for a colour row"
   );
+});
+
+// ---------------------------------------------------------------------------
+// §4.5 — how the row chip is drawn (Shyam's call, 2026-09-07)
+// ---------------------------------------------------------------------------
+//
+// Source inspection, like `darkMode.test.ts`: there is no DOM in CI, and the shape of a chip is a
+// structural property of the stylesheet. Three things are pinned, and the third is the one worth
+// having — the ring must get *fainter*, never *gone*. A `#000000` token with no edge is invisible on
+// a dark panel (`dark-mode.md` §6.3), which is the one failure a colour tool cannot ship.
+
+/** The stylesheet, comments stripped so prose about a swatch isn't mistaken for a declaration. */
+const chipCss = (() => {
+  const html = readFileSync(join(process.cwd(), "src/ui/index.html"), "utf8");
+  return html
+    .slice(html.indexOf("<style>") + "<style>".length, html.indexOf("</style>"))
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+})();
+
+function cssRule(selector: string): string {
+  const found = Array.from(chipCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)).find(
+    (match) => match[1].trim().replace(/\s+/g, " ") === selector
+  );
+  assert.ok(found !== undefined, `no \`${selector}\` rule in the stylesheet`);
+  return found[2];
+}
+
+function rootVar(name: string): string {
+  const match = cssRule(":root").match(new RegExp(`${name}\\s*:\\s*([^;]+);`));
+  assert.ok(match !== null, `\`${name}\` is not declared on :root`);
+  return match[1].trim();
+}
+
+test("the row chip is a circle, and the slot that holds a cycle's `—` is the same size", () => {
+  // One number for the chip, the slot and nothing else. If the slot ever stops tracking it, a
+  // cycle's `—` sits left of its siblings' hex and reads as a different kind of row (§4.3).
+  const size = rootVar("--swatch-size");
+  assert.equal(/^\d+px$/.test(size), true, `--swatch-size should be a pixel length, got ${size}`);
+  assert.equal(
+    Number.parseInt(size, 10) >= 15,
+    true,
+    `the chip was deliberately grown past the old 12px square, got ${size}`
+  );
+  // `.vline` is a fixed-height row; a chip taller than it would push the row open.
+  const line = cssRule(".vline").match(/height:\s*(\d+)px/);
+  assert.ok(line !== null);
+  assert.equal(
+    Number.parseInt(size, 10) <= Number.parseInt(line[1], 10),
+    true,
+    `a ${size} chip does not fit .vline's ${line[1]}px row`
+  );
+
+  for (const selector of [".swatch", ".swatch-wrap"]) {
+    const body = cssRule(selector);
+    assert.equal(
+      /width:\s*var\(--swatch-size\)/.test(body) && /height:\s*var\(--swatch-size\)/.test(body),
+      true,
+      `${selector} sizes itself off something other than --swatch-size`
+    );
+  }
+  // Circle, not square — the fill and the checkerboard base both, or the alpha checkerboard would
+  // show square corners behind a round fill.
+  for (const selector of [".swatch", ".swatch-fill"]) {
+    assert.equal(
+      /border-radius:\s*(50%|inherit)/.test(cssRule(selector)),
+      true,
+      `${selector} is not round`
+    );
+  }
+});
+
+test("the chip's ring is faint but never absent", () => {
+  // The whole point of the ring survives the softening: some edge is drawn, from Figma's own border
+  // colour, at less than full strength.
+  const alpha = Number(rootVar("--swatch-ring-alpha"));
+  assert.equal(alpha > 0, true, "the ring's opacity is 0 — a #000000 chip is now invisible in dark");
+  assert.equal(alpha < 1, true, `the ring is still full-strength (${alpha}) — §4.5 asked for faint`);
+
+  const ring = cssRule(".swatch::after, .swatch-fill::after");
+  assert.equal(
+    /box-shadow:\s*inset 0 0 0 1px var\(--swatch-ring\)/.test(ring),
+    true,
+    "the ring no longer draws --swatch-ring — it must stay sourced from Figma's border (§6.3)"
+  );
+  assert.equal(
+    /opacity:\s*var\(--swatch-ring-alpha\)/.test(ring),
+    true,
+    "the ring's strength is hard-coded rather than read from --swatch-ring-alpha"
+  );
+  // A translucent ring *colour* would need `color-mix` over a var we didn't author, and an engine
+  // that failed to parse it would compute the whole box-shadow away — no edge at all.
+  assert.equal(
+    /color-mix/.test(chipCss),
+    false,
+    "the ring went back to color-mix — a parse failure there removes the edge entirely"
+  );
+  // Two stacked 45% rings read as one ~70% ring wherever the fill is semi-transparent.
+  assert.equal(
+    /content:\s*none/.test(cssRule(".swatch-wrap .swatch::after")),
+    true,
+    "the checkerboard base under a fill draws its own ring again — the two compound"
+  );
+});
+
+test("the 8px strip dot did not follow the chip", () => {
+  // §5.3 as amended: the divergence is deliberate. A ~6px circle at a faint ring opacity is a
+  // smudge; a small hard square is a legible tick. This test exists to make a future "reconcile the
+  // two swatch treatments" cleanup fail loudly rather than quietly undo Shyam's call.
+  const dot = cssRule(".strip-dot");
+  assert.equal(/width:\s*8px/.test(dot) && /height:\s*8px/.test(dot), true, "the dot is not 8px");
+  assert.equal(/border-radius:\s*2px/.test(dot), true, "the dot is no longer a 2px-radius square");
+  assert.equal(
+    /box-shadow:\s*inset 0 0 0 1px var\(--swatch-ring\)/.test(dot),
+    true,
+    "the dot's ring moved off full-strength --swatch-ring"
+  );
+  assert.equal(
+    /var\(--swatch-ring-alpha\)|var\(--swatch-size\)/.test(dot),
+    false,
+    "the dot picked up the row chip's size or ring opacity — they diverge on purpose"
+  );
+  // No checkerboard at 8px, unchanged.
+  assert.equal(/background-image/.test(dot), false, "the dot grew a checkerboard");
 });
 
 // ---------------------------------------------------------------------------

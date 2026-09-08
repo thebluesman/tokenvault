@@ -358,16 +358,25 @@ test("red is a button and menu-label colour and nothing else", () => {
 
 test("the swatch decorations are sourced, never a tuned hairline", () => {
   // §6.3. The failure this guards is precise: a `#000000` token on a dark panel is an invisible
-  // 12px square, which is exactly the failure a colour tool cannot have. The old fixed
-  // `rgba(0,0,0,0.15)` hairline was tuned against one known background; after §9.2 the background
-  // is Figma's, so the ring is sourced from the colour whose contrast with it Figma maintains.
+  // chip, which is exactly the failure a colour tool cannot have. The old fixed `rgba(0,0,0,0.15)`
+  // hairline was tuned against one known background; after §9.2 the background is Figma's, so the
+  // ring is sourced from the colour whose contrast with it Figma maintains.
+  //
+  // Since 2026-09-07 the row chip draws that sourced colour at `--swatch-ring-alpha` from a ring
+  // layer rather than from its own `box-shadow` (§6.3 amended, `local-editor.md` §4.5). What §6.3
+  // cares about is unchanged and is what's asserted: the ring's *colour* is still Figma's and not a
+  // literal. How faint it is, and that it never reaches zero, is `swatchStrip.test.ts`'s business.
   const swatch = rules.find((rule) => rule.selector === ".swatch");
   assert.ok(swatch !== undefined);
-  assert.equal(/box-shadow:\s*inset 0 0 0 1px var\(--swatch-ring\)/.test(swatch.body), true);
   assert.equal(/background-color:\s*var\(--checker-a\)/.test(swatch.body), true);
-  const fill = rules.find((rule) => rule.selector === ".swatch-fill");
-  assert.ok(fill !== undefined);
-  assert.equal(/var\(--swatch-ring\)/.test(fill.body), true);
+  const ring = rules.find((rule) => rule.selector === ".swatch::after, .swatch-fill::after");
+  assert.ok(ring !== undefined, "the row chip's ring layer is gone");
+  assert.equal(/box-shadow:\s*inset 0 0 0 1px var\(--swatch-ring\)/.test(ring.body), true);
+  assert.equal(/opacity:\s*var\(--swatch-ring-alpha\)/.test(ring.body), true);
+  // The strip dot keeps drawing it at full strength on its own box (§5.3 — deliberate divergence).
+  const dot = rules.find((rule) => rule.selector === ".strip-dot");
+  assert.ok(dot !== undefined);
+  assert.equal(/box-shadow:\s*inset 0 0 0 1px var\(--swatch-ring\)/.test(dot.body), true);
 
   // Square A is the panel's own ground, so a semi-transparent token composites against exactly the
   // surface it will look like in use — which is more correct than the authored `#fff`/`#ddd` pair

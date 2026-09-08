@@ -512,6 +512,16 @@ other, and the split falls straight out of the size:
   like in use; it just no longer advertises that it has alpha. Alpha is not readable at 8px, and
   pretending otherwise costs legibility for every opaque token in the strip.
 
+**The row-level chip diverges from the dot** — amended 2026-09-07, same day as the dot itself, once
+both were live in the panel together. The chip grows, becomes a circle, and its ring drops to a
+low-opacity `--swatch-ring` rather than the full-strength inset used everywhere else on this page.
+The ring is *thinned*, not removed — the `#000000`-on-dark-panel failure this section exists to
+prevent is unchanged, so some ring stays; it is simply quieter because a larger mark needs less of
+it to read. This is the row-level chip only (`local-editor.md` §4.5's 2026-09-07 follow-up
+amendment); the 8px strip dot keeps the full-strength ring described above, and the two marks no
+longer share one rule — a chip and a dot for the same token can look meaningfully different, and
+that's accepted rather than reconciled.
+
 ### 6.4 The hover filter flips direction
 
 `button.primary:hover` and `button.danger:hover` darken by `filter: brightness(0.93 / 0.92)`. On a

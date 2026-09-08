@@ -201,6 +201,8 @@ Shyam's direct call, from live UX testing during Phase 10 dark-mode review (issu
 
 The swatch shows the colour; the `↗` and the value text say where it came from. Nothing about how references resolve or display in the value/detail view changes — this is the swatch's own rendering only.
 
+**Amendment — 2026-09-07 (issue #36 follow-up): the row-level swatch is a larger circle with a faint ring, not a 12px square with a solid hairline.** Shyam's direct call after reviewing the shipped strip/chip pair live. The chip grows and becomes a circle so it reads as a colour sample first, a UI chip second; the ring drops from a solid `--swatch-ring` hairline to a low-opacity version of the same token, kept only so a `#000000` swatch doesn't disappear into the dark panel (`dark-mode.md` §6.3) — it is not removed outright. This applies to the **row-level chip only**. The 8px collapsed-group strip dots (`panel-size-and-swatches.md` §5.3) are unchanged: still squares, still the full-opacity ring, for the reasons stated there (a smaller mark needs the stronger ring, and the strip's whole argument is "the same mark, smaller" — it now intentionally diverges from the chip it once matched 1:1, and that divergence is accepted, not an oversight).
+
 ### 4.6 Search and filter
 
 - **Search** covers **everything in view** — there's no "current set" left to scope to, and no cross-set opt-in, because the merge already removed the reason we wanted one. The old worry was that searching `accent.default` would return a `Theme/Light` hit and a `Theme/Dark` hit that look like duplicates; under §4.2 that's one result row with two value lines, which is exactly what the user wanted to see.
