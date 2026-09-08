@@ -74,12 +74,25 @@ export interface StripInput {
 export function groupStrip(node: GroupNode, input: StripInput): GroupStripModel | null {
   const cap = input.cap ?? STRIP_CAP;
   const dots: StripDot[] = [];
+  /** Colour children the strip knows about — the ones it painted, plus the ones it only counted. */
   let colorChildren = 0;
 
   // Tree order — the order the children appear when you expand (§5.4). Not sorted by hue or
   // lightness: the strip previews the list, and a sorted strip stops matching the list it previews.
-  for (const child of node.children) {
+  const children = node.children;
+  for (let index = 0; index < children.length; index += 1) {
+    const child = children[index];
     if (child.kind !== "token") continue;
+
+    // **Stop resolving once the strip is full** (§10). A 50-shade ramp used to resolve all 50 to
+    // render six dots and `+44` — on every `renderTree()`, which is every filter keystroke and every
+    // theme switch. What is left is counted, not resolved: `+N` is a number of children, and the
+    // colours behind it are never shown.
+    if (dots.length >= cap) {
+      colorChildren += countColorChildren(children.slice(index), input);
+      break;
+    }
+
     const row = input.lookup(normalizePathKey(child.path));
     if (row === undefined) continue;
 
@@ -88,11 +101,31 @@ export function groupStrip(node: GroupNode, input: StripInput): GroupStripModel 
     const color = colorFor(row, input);
     if (color === null) continue;
     colorChildren += 1;
-    if (dots.length < cap) dots.push({ leaf: child.name, color });
+    dots.push({ leaf: child.name, color });
   }
 
   if (colorChildren === 0) return null;
   return { dots, overflow: colorChildren - dots.length };
+}
+
+/**
+ * How many of these children `+N` should count, **without resolving any of them**.
+ *
+ * The `$type` off the file plus the filtered-rows lookup is everything the count needs: a hidden path
+ * is not in the group any more (§5.4) and a `number` child was never going to be a dot. What this
+ * cannot know is whether a colour child past the cap resolves to a colour, and it deliberately does
+ * not ask — one resolve per child is the cost this exists to avoid, and `+N` is a count of what is
+ * not shown rather than a promise about what it looks like.
+ */
+function countColorChildren(children: GroupNode["children"], input: StripInput): number {
+  let count = 0;
+  for (const child of children) {
+    if (child.kind !== "token") continue;
+    const row = input.lookup(normalizePathKey(child.path));
+    if (row === undefined) continue;
+    if (row.lines.some((line) => line.entry.token.$type === "color")) count += 1;
+  }
+  return count;
 }
 
 /**
@@ -108,11 +141,18 @@ function colorFor(row: StripRow, input: StripInput): string | null {
   if (lens !== undefined) {
     const line = row.lines.filter((each) => each.entry.setId === lens.setId)[0];
     if (line !== undefined) {
+      // **The lens's answer, or none — never another set's.** A cycle, a dangling reference or a
+      // wrong-type reference in the theme you are looking at is the "resolves to no colour" case
+      // above, and substituting the value some other set happens to hold for that path would paint
+      // a dot the expanded rows then contradict, which is the exact disagreement §5.4 forbids.
       const mark = swatchMark(line.entry.token, input.resolve(line.entry));
-      if (mark.kind === "color") return mark.color;
+      return mark.kind === "color" ? mark.color : null;
     }
   }
 
+  // Only now — the active lens has nothing for this path at all, or its set is filtered out — is
+  // §5.4's fallback to the first contributing set in `tokenSetOrder` the right answer. `lines` is
+  // already in that order.
   for (const line of row.lines) {
     const mark = swatchMark(line.entry.token, input.resolve(line.entry));
     if (mark.kind === "color") return mark.color;

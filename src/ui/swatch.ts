@@ -14,6 +14,7 @@
 import type { Token } from "../tokens/types";
 import type { Resolution } from "../tokens/resolve";
 import { previewOf } from "../tokens/preview";
+import { HEX_COLOR } from "../tokens/edit";
 import { el } from "./dom";
 
 export type SwatchMark =
@@ -38,11 +39,13 @@ export type SwatchMark =
  * to answer §4.2's wrong-type case: a colour token pointing at a `string` token resolves to
  * `"Urbanist"`, and painting that as a colour renders an invisible chip that claims a colour is
  * there. This is the check that turns it into the dashed outline the design asks for.
+ *
+ * The pattern is `edit.ts`'s own, imported rather than restated: `parseHexColor` is what *writes* a
+ * colour value, so a value that commits and a value that paints have to agree about what a hex is.
+ * They did not until 2026-09-08 — this file carried its own copy, which differed on the `#`.
  */
-const COLOR_VALUE = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
-
 export function isColorValue(value: unknown): boolean {
-  return typeof value === "string" && COLOR_VALUE.test(value.trim());
+  return typeof value === "string" && HEX_COLOR.test(value.trim());
 }
 
 /**

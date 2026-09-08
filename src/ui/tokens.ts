@@ -41,6 +41,7 @@ import { hasMixedTypes } from "../tokens/view";
 import { previewOf } from "../tokens/preview";
 import { parseHexColor, parseNumberValue, parseStringValue } from "../tokens/edit";
 import { normalizePathKey } from "../tokens/paths";
+import { RESIZE_DEBOUNCE_MS } from "../window";
 import { button, clear, closePopover, copy, el, highlight, popover, toast } from "./dom";
 import { applyLines, closeDetail, deleteButton, openDetail, runDelete } from "./detail";
 
@@ -109,14 +110,25 @@ function measureReferenceBudget(): number {
   return Math.max(14, Math.min(64, 24 + Math.round((width - 460) / 7)));
 }
 
+/** Coalesces a drag into one rebuild — see `RESIZE_DEBOUNCE_MS`. */
+let budgetTimer: ReturnType<typeof setTimeout> | null = null;
+
 export function initTokens(): void {
   scrollEl.addEventListener("scroll", () => paint(false));
   window.addEventListener("resize", () => {
-    // A resize changes how many rows are in view, which is a repaint. It changes the *content* of a
-    // row only when the reference budget moves with it (§3.4) — so the full rebuild is spent on that
-    // and not on every frame of a drag.
-    if (measureReferenceBudget() === referenceBudget) paint(true);
-    else renderTree();
+    // A resize changes how many rows are in view, which is a repaint, and that stays immediate: it
+    // is the same work a scroll frame does and the panel would otherwise lag the drag.
+    paint(true);
+
+    // It changes the *content* of a row only when the reference budget moves with it (§3.4), and
+    // that is a **full tree rebuild** — so it is debounced on the same interval `main.ts` reports
+    // the new size on. Dragging the handle across the budget boundary used to rebuild the whole
+    // tree on every native resize event, which is visible stutter at 1,300 tokens.
+    if (budgetTimer !== null) clearTimeout(budgetTimer);
+    budgetTimer = setTimeout(() => {
+      budgetTimer = null;
+      if (measureReferenceBudget() !== referenceBudget) renderTree();
+    }, RESIZE_DEBOUNCE_MS);
   });
 }
 

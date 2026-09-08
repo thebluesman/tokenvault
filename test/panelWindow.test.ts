@@ -17,8 +17,8 @@ import { join } from "node:path";
 import {
   DEFAULT_WINDOW_SIZE,
   MIN_WINDOW_SIZE,
+  RESIZE_DEBOUNCE_MS,
   clampWindowSize,
-  sameWindowSize,
 } from "../src/window";
 
 const ROOT = process.cwd();
@@ -64,9 +64,20 @@ test("a fractional size is rounded rather than refused", () => {
   assert.deepEqual(clampWindowSize({ width: 640.4, height: 719.6 }), { width: 640, height: 720 });
 });
 
-test("sameWindowSize is what stops a drag writing every frame", () => {
-  assert.equal(sameWindowSize({ width: 640, height: 720 }, { width: 640, height: 720 }), true);
-  assert.equal(sameWindowSize({ width: 640, height: 720 }, { width: 641, height: 720 }), false);
+test("one guard stops a drag writing every frame, not two", () => {
+  // The ±2 dead zone in `rememberWindowSize` is the whole guard: it already returns for every size
+  // an exact-equality check would have caught, so the exact check that used to sit under it was
+  // unreachable and is gone (`/code-review high`, 2026-09-08).
+  assert.equal(
+    codeTs.indexOf("sameWindowSize") === -1,
+    true,
+    "the dead exact-equality guard came back under the ±2 dead zone"
+  );
+  assert.equal(
+    /Math\.abs\(size\.width - storedWindowSize\.width\) <= 2/.test(codeTs),
+    true,
+    "the ±2 creep guard is gone — a hairline difference now writes to clientStorage every drag"
+  );
 });
 
 test("the stored size is read and clamped before showUI, never after", () => {
@@ -85,11 +96,43 @@ test("the stored size is read and clamped before showUI, never after", () => {
 test("the resize write is debounced", () => {
   // §10, ADR-0004 §1 — resize fires continuously during a drag and `clientStorage` is
   // quota-constrained. One write when the drag settles, not one per frame.
-  assert.equal(/RESIZE_DEBOUNCE_MS\s*=\s*\d+/.test(mainTs), true, "the debounce interval is gone");
+  assert.equal(RESIZE_DEBOUNCE_MS > 0, true, "the debounce interval is gone");
   assert.equal(
     mainTs.indexOf("clearTimeout(resizeTimer)") !== -1,
     true,
     "the resize handler no longer coalesces — every frame of a drag would reach clientStorage"
+  );
+});
+
+test("both resize listeners coalesce on the same interval", () => {
+  // The tree's own listener rebuilds the whole tree when the reference budget moves with the width
+  // (§3.4), and it used to do that on every native resize event — visible stutter while dragging the
+  // handle across the boundary at 1,300 tokens (`/code-review high`, 2026-09-08). One interval, one
+  // source, so a future change to it cannot leave two rebuild waves per drag.
+  const tokensTs = readFileSync(join(ROOT, "src/ui/tokens.ts"), "utf8");
+  assert.equal(
+    /RESIZE_DEBOUNCE_MS\s*=\s*\d+/.test(readFileSync(join(ROOT, "src/window.ts"), "utf8")),
+    true,
+    "the shared debounce interval left src/window.ts"
+  );
+  for (const [name, source] of [["main.ts", mainTs], ["tokens.ts", tokensTs]] as const) {
+    assert.equal(
+      /import \{[^}]*RESIZE_DEBOUNCE_MS[^}]*\} from "\.\.\/window"/.test(source),
+      true,
+      `${name} no longer takes the debounce interval from src/window.ts`
+    );
+  }
+  const listener = tokensTs.slice(tokensTs.indexOf("export function initTokens"));
+  const handler = listener.slice(0, listener.indexOf("\n}"));
+  assert.equal(
+    handler.indexOf("clearTimeout(budgetTimer)") !== -1,
+    true,
+    "the tree's resize listener stopped coalescing — a drag rebuilds the tree per native event"
+  );
+  assert.equal(
+    handler.indexOf("renderTree()") > handler.indexOf("budgetTimer = setTimeout"),
+    true,
+    "renderTree() escaped the debounce"
   );
 });
 

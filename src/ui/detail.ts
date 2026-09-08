@@ -102,6 +102,7 @@ import {
 } from "./state";
 import {
   autoExpandFigma,
+  collapsedLayer,
   collapsedLayers,
   figmaSummary,
   hasFigmaSection,
@@ -230,6 +231,13 @@ function renderNow(): void {
     return;
   }
 
+  // The body is rebuilt from scratch, which throws its scroll position away — and a re-render is
+  // something *any* mutation causes (a commit, a layer collapsing, a shadow reordering), so on a long
+  // multi-set card the panel would jump to the top every time a field was touched. Carried across
+  // rather than restored per caller: there is one place that empties the panel and it is here.
+  const scrolled = panelEl.querySelector(".panel-body");
+  const scrollTop = scrolled instanceof HTMLElement ? scrolled.scrollTop : 0;
+
   panelEl.textContent = "";
   panelEl.classList.remove("hidden");
 
@@ -274,6 +282,11 @@ function renderNow(): void {
   panelEl.appendChild(body);
   panelEl.appendChild(renderFooter(row));
 
+  // `scrollTop` past the new content's height clamps itself, which is the right failure: a card that
+  // shrank shows its end rather than a blank scroll.
+  if (scrollTop > 0) body.scrollTop = scrollTop;
+
+  // An explicit target beats the carried position — the caller asked for a particular set.
   if (focusSet !== undefined) {
     const target = body.querySelector(`[data-set-section="${cssEscape(focusSet)}"]`);
     if (target instanceof HTMLElement) target.scrollIntoView({ block: "start" });
@@ -982,6 +995,11 @@ function attachMemberFooter(wrap: HTMLElement, input: HTMLInputElement, initial:
     window.setTimeout(() => {
       if (document.activeElement === input) return;
       if (memberFooterHost.contains(document.activeElement)) return;
+      // **Only if this field still owns it.** The host is one node moved between fields, so tabbing
+      // from one referenced member to another runs the *new* field's focus handler — which adopts the
+      // host — before this deferred teardown fires. Without the check, tabbing `fontFamily` →
+      // `fontSize` between two referenced members deletes the footer `fontSize` just rendered.
+      if (memberFooterHost.parentElement !== wrap) return;
       memberFooterHost.textContent = "";
       memberFooterHost.remove();
     }, 0);
@@ -1390,28 +1408,53 @@ function shadowEditor(line: Line): HTMLElement {
     const layerKey = stateKey(line, ` shadow ${index}`);
     const open = layerOpen.get(layerKey) ?? !collapsed.has(index);
 
+    // The address a member resolution is keyed by: a single shadow is a bare object, a stack is an
+    // array, and the token's `$value` shape is what tells them apart (edit.ts's `denormalizeShadows`).
+    const at = (field: string): Array<string | number> =>
+      Array.isArray(line.entry.token.$value) ? [index, field] : [field];
+    const memberResolution = (field: string): Resolution | undefined =>
+      resolutions.get(memberKey(at(field)));
+
     if (collapsed.has(index)) {
       const toggle = button(`${open ? "▾" : "▸"} Shadow ${index + 1}`, "layer-toggle");
       toggle.addEventListener("click", () => {
         layerOpen.set(layerKey, !open);
-        renderNow();
+        // Through the deferred path, like every other mutation here (§5.1's reason): a click on the
+        // toggle blurs whatever field had focus, and rendering synchronously inside that blur tears
+        // out the input mid-commit. It also restores the scroll position, which a collapse in the
+        // middle of a long multi-set card would otherwise throw away.
+        renderDetail();
       });
       head.appendChild(toggle);
       if (open) head.appendChild(el("span", "grow"));
       else {
-        // Reuses `previewOf` and the shared swatch node — no new vocabulary, and no new string (§8).
-        // A layer whose colour is a pointer has no literal colour to paint, which is the outlined
-        // mark's existing meaning (`panel-size-and-swatches.md` §4.2).
+        // §7.1 reaches the *collapsed* summary too — the whole point of the resolved summary is that
+        // a member on a loop, or pointing somewhere, cannot hide behind a fold. The one-line preview
+        // is built from the resolved layer and a cycle anywhere in it flags on this row, so nothing
+        // requires expanding the layer to be seen.
+        const layer = collapsedLayer(shadow, memberResolution);
+        const colorResolution = memberResolution("color");
         head.appendChild(
           swatchNode(
-            isColorValue(shadow.color)
-              ? { kind: "color", color: shadow.color }
-              : { kind: "outlined" }
+            colorResolution !== undefined
+              ? swatchMark({ $type: "color", $value: shadow.color } as Token, colorResolution)
+              : isColorValue(shadow.color)
+                ? { kind: "color", color: shadow.color }
+                : { kind: "outlined" }
           )
         );
         head.appendChild(
-          el("span", "mono grow", previewOf({ $type: "shadow", $value: shadow } as Token).text)
+          el(
+            "span",
+            "mono grow",
+            previewOf({ $type: "shadow", $value: shadow } as Token, layer.value as TokenValue).text
+          )
         );
+        if (layer.cycle) {
+          const flag = el("span", "badge needs", "⚑ cycle");
+          flag.title = "A member of this layer is on a reference loop. Expand it to see the loop.";
+          head.appendChild(flag);
+        }
       }
     } else {
       head.appendChild(el("span", "grow", `Shadow ${index + 1}`));
@@ -1438,11 +1481,6 @@ function shadowEditor(line: Line): HTMLElement {
       next[index] = parsed.value;
       return write(next);
     };
-
-    // The address a member resolution is keyed by: a single shadow is a bare object, a stack is an
-    // array, and the token's `$value` shape is what tells them apart (edit.ts's `denormalizeShadows`).
-    const at = (field: string): Array<string | number> =>
-      Array.isArray(line.entry.token.$value) ? [index, field] : [field];
 
     if (!open) {
       wrap.appendChild(box);

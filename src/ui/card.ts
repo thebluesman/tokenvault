@@ -15,6 +15,9 @@
 //   2. **Scope humanising is a transform, not a table** (§6.3). An enum Figma adds next year still
 //      has to render legibly, so there is no lookup to fall out of date.
 
+import type { ShadowValue } from "../tokens/types";
+import type { Resolution } from "../tokens/resolve";
+
 /**
  * The human label for a composite member — §5.5, §8.
  *
@@ -163,4 +166,45 @@ export function collapsedLayers(count: number): number[] {
   const collapsed: number[] = [];
   for (let index = 1; index < count; index += 1) collapsed.push(index);
   return collapsed;
+}
+
+/** One collapsed layer's summary: the value its preview reads from, and whether it hides a loop. */
+export interface CollapsedLayer {
+  /** The layer with every member that resolves substituted — what `previewOf` should be shown. */
+  value: ShadowValue;
+  /** At least one member is on a reference loop, so the fold has to say so (§7.1). */
+  cycle: boolean;
+}
+
+/**
+ * What a **collapsed** shadow layer's one-line summary is built from — §5.6, and §7.1's invariant.
+ *
+ * The fold is a size decision, never a truth decision. A layer whose `color` points at a token, or
+ * whose `blur` is on a loop, has to say so from the collapsed row: building the preview from the raw
+ * `$value` instead showed `{semantic.shadow.color} 0 2 4` where the resolved colour was known one
+ * scope away, and — worse — hid a cycle behind a fold until the layer was manually expanded, which
+ * is precisely the "never silently" half of `references-math-themes.md` §7.1.
+ *
+ * A cycled member keeps its **raw string** rather than gaining a substituted value: §7.1's no-value
+ * rule reaches down here intact, so the summary shows the expression and the flag, never a zero.
+ */
+export function collapsedLayer(
+  shadow: ShadowValue,
+  resolutionOf: (field: string) => Resolution | undefined
+): CollapsedLayer {
+  const value: ShadowValue = { ...shadow };
+  let cycle = false;
+
+  for (const field of ["color", "offsetX", "offsetY", "blur", "spread"] as const) {
+    const resolution = resolutionOf(field);
+    if (resolution === undefined) continue;
+    if (resolution.kind === "cycle") {
+      cycle = true;
+      continue;
+    }
+    if (resolution.value === undefined) continue;
+    (value as unknown as Record<string, unknown>)[field] = resolution.value;
+  }
+
+  return { value, cycle };
 }

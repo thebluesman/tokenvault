@@ -18,7 +18,7 @@
 
 import type { FlatToken } from "../tokens/view";
 import type { Cycle } from "../tokens/graph";
-import type { AuthorOutcome, ResolveContext } from "../tokens/resolve";
+import type { AuthorOutcome, Resolution, ResolveContext } from "../tokens/resolve";
 import type { Line } from "./state";
 import { checkAuthoredValue, resolveValue, referencePathsOf } from "../tokens/resolve";
 import { cycleFromCandidate, describeCycle, graphNodeKey } from "../tokens/graph";
@@ -28,6 +28,7 @@ import type { MemberAccepts, MemberType } from "../tokens/members";
 import { normalizePathKey } from "../tokens/paths";
 import { getModel } from "./state";
 import { previewOf, truncateReference } from "../tokens/preview";
+import { swatchMark } from "./swatch";
 import { button, el, swatch } from "./dom";
 
 // ---------------------------------------------------------------------------
@@ -233,7 +234,11 @@ export function pickerGroups(
         resolved.kind === "expression" || resolved.kind === "reference"
           ? describeResolved(resolved.value)
           : preview.text,
-      swatch: preview.swatch,
+      // The swatch comes off the **resolution**, not off `preview.swatch` — `previewOf` is pure over
+      // the token, so a pointer never carries one, and a candidate that is itself a colour reference
+      // would have shown no dot while the literal beside it did. Same `swatchMark` the tree row and
+      // the card's value shell ask (`panel-size-and-swatches.md` §5.4).
+      swatch: candidateSwatch(target.token, resolved),
       type: target.token.$type,
     };
 
@@ -298,6 +303,19 @@ export function buildPicker(
     wrap.appendChild(el("div", "empty", `Values shown for ${model.activeTheme.name}.`));
   }
   return wrap;
+}
+
+/**
+ * The dot beside one candidate row, or none.
+ *
+ * Only the painted case gets one: the picker's row is a *destination*, and the dashed outline means
+ * "this points at nothing", which is a claim about the candidate's own value that a 30-character
+ * truncated path beside it cannot qualify. A cycle candidate is in the `would make a loop` group,
+ * where the group label already says what is wrong with it.
+ */
+function candidateSwatch(token: FlatToken["token"], resolved: Resolution): string | undefined {
+  const mark = swatchMark(token, resolved);
+  return mark.kind === "color" ? mark.color : undefined;
 }
 
 /** `number`, `number or string` — the picker's own name for what this field takes. */

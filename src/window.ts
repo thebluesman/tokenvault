@@ -56,7 +56,12 @@ function axis(value: unknown, fallback: number, min: number): number {
   return Math.max(min, Math.round(value));
 }
 
-/** Whether two sizes are the same window — the guard that keeps a drag from writing every frame. */
-export function sameWindowSize(a: WindowSize, b: WindowSize): boolean {
-  return a.width === b.width && a.height === b.height;
-}
+/**
+ * How long a `resize` burst has to settle before anything acts on it — §3.3, §10.
+ *
+ * One number for both consumers, because they are coalescing the same burst: `main.ts` reports the
+ * final size to the plugin (one `clientStorage` write per drag, not one per frame — ADR-0004 §1) and
+ * `tokens.ts` rebuilds the tree when the reference budget moves with the width (§3.4). Two intervals
+ * would mean two rebuild waves per drag, which is the stutter this exists to prevent.
+ */
+export const RESIZE_DEBOUNCE_MS = 250;

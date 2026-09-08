@@ -16,8 +16,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import type { ShadowValue } from "../src/tokens/types";
 import {
   autoExpandFigma,
+  collapsedLayer,
   collapsedLayers,
   figmaSummary,
   hasFigmaSection,
@@ -419,4 +421,145 @@ test("nothing in the card calls Figma", () => {
   const api = /figma\.(variables|getLocal|currentPage|root|clientStorage|ui)/;
   assert.equal(api.test(code(detailTs)), false);
   assert.equal(api.test(cardCode), false);
+});
+
+// ---------------------------------------------------------------------------
+// `/code-review high`, 2026-09-08 — three defects the redesign shipped with
+// ---------------------------------------------------------------------------
+
+/** A shadow layer, with only the members a test cares about spelled out. */
+function layer(overrides: Partial<ShadowValue> = {}): ShadowValue {
+  return {
+    color: "#000000",
+    offsetX: { value: 0, unit: "px" },
+    offsetY: { value: 2, unit: "px" },
+    blur: { value: 8, unit: "px" },
+    spread: { value: 0, unit: "px" },
+    inset: false,
+    ...overrides,
+  };
+}
+
+test("a collapsed layer's summary is built from the resolved members, not the raw file", () => {
+  // The whole reason the resolution is threaded into the fold: the collapsed row used to read
+  // `{semantic.shadow.color} 0 2 8` while the colour it resolves to was known one scope away.
+  const summary = collapsedLayer(layer({ color: "{semantic.shadow.color}" }), (field) =>
+    field === "color" ? { kind: "reference", value: "#c33a2e", target: "semantic.shadow.color" } : undefined
+  );
+  assert.equal(summary.value.color, "#c33a2e");
+  assert.equal(summary.cycle, false);
+  // Everything else is left exactly as authored — a literal is not round-tripped through anything.
+  assert.deepEqual(summary.value.blur, { value: 8, unit: "px" });
+});
+
+test("a cycle on a collapsed layer surfaces from the fold, and carries no value", () => {
+  // §7.1's hard invariant, at the one place this PR could hide it: a loop on `blur` was invisible
+  // until the layer was manually expanded. Never a zero, never the last good number — the raw
+  // expression stays, the flag says what is wrong with it.
+  const summary = collapsedLayer(layer({ blur: "{shadow.blur} * 2" as never }), (field) =>
+    field === "blur" ? { kind: "cycle" } : undefined
+  );
+  assert.equal(summary.cycle, true, "a collapsed layer no longer reports the loop under it");
+  assert.equal(summary.value.blur, "{shadow.blur} * 2", "a cycled member gained a substituted value");
+});
+
+test("an expression that evaluates substitutes; only a cycle withholds", () => {
+  const summary = collapsedLayer(layer({ spread: "{space.1} * 2" as never }), (field) =>
+    field === "spread" ? { kind: "expression", value: 8 } : undefined
+  );
+  assert.equal(summary.value.spread as unknown, 8);
+  assert.equal(summary.cycle, false);
+});
+
+test("a dangling member keeps its raw pointer rather than blanking the summary", () => {
+  // `unresolved` has no `value` by contract (`resolve.ts`), so there is nothing to substitute and the
+  // pointer is the honest thing to show. It is not a cycle, so it does not raise the flag.
+  const summary = collapsedLayer(layer({ color: "{nowhere.at.all}" }), () => ({ kind: "unresolved" }));
+  assert.equal(summary.value.color, "{nowhere.at.all}");
+  assert.equal(summary.cycle, false);
+});
+
+test("the collapsed branch actually asks — resolved preview, and the cycle flag", () => {
+  // Structural half: the logic above is only reached if the fold calls it. Pinned because the failure
+  // mode is silent — a `previewOf` with one argument renders the raw file and looks plausible.
+  const shadowEditor = detailTs.slice(
+    detailTs.indexOf("function shadowEditor"),
+    detailTs.indexOf("function gridEditor")
+  );
+  const fold = shadowEditor.slice(
+    shadowEditor.indexOf("if (collapsed.has(index))"),
+    shadowEditor.indexOf("if (!open)")
+  );
+  assert.equal(
+    /collapsedLayer\(shadow, memberResolution\)/.test(fold),
+    true,
+    "the fold stopped resolving its own summary"
+  );
+  assert.equal(
+    /previewOf\(\{ \$type: "shadow", \$value: shadow \} as Token\)/.test(fold),
+    false,
+    "the collapsed preview went back to the raw, unresolved value"
+  );
+  assert.equal(
+    /layer\.cycle/.test(fold),
+    true,
+    "a cycle on a collapsed layer is invisible again until it is expanded (§7.1)"
+  );
+  assert.equal(
+    /swatchMark\(\{ \$type: "color", \$value: shadow\.color \} as Token, colorResolution\)/.test(fold),
+    true,
+    "the fold's swatch stopped going through swatchMark — a resolved reference paints nothing again"
+  );
+});
+
+test("the layer toggle renders through the deferred path, like every other mutation", () => {
+  // A click on the toggle blurs whatever field had focus; rendering synchronously inside that blur
+  // tears the input out mid-commit, and throws the panel's scroll position away with it.
+  const shadowEditor = detailTs.slice(
+    detailTs.indexOf("function shadowEditor"),
+    detailTs.indexOf("function gridEditor")
+  );
+  assert.equal(
+    shadowEditor.indexOf("renderNow()") === -1,
+    true,
+    "the shadow editor calls renderNow() directly again — it must go through renderDetail()"
+  );
+  assert.equal(shadowEditor.indexOf("renderDetail()") !== -1, true);
+});
+
+test("the panel carries its scroll position across a re-render", () => {
+  // One place empties the panel, so one place restores it. Without this every commit on a long
+  // multi-set card jumps back to the top.
+  const render = detailTs.slice(
+    detailTs.indexOf("function renderNow"),
+    detailTs.indexOf("function cssEscape")
+  );
+  assert.equal(/const scrollTop = /.test(render), true, "the scroll position is no longer read");
+  assert.equal(/body\.scrollTop = scrollTop/.test(render), true, "the scroll position is never restored");
+  assert.equal(
+    render.indexOf("const scrollTop") < render.indexOf('panelEl.textContent = ""'),
+    true,
+    "the scroll position is read after the panel is emptied, which always reads 0"
+  );
+});
+
+test("the member footer is only torn down by the field that still owns it", () => {
+  // The host is one node moved between fields, so tabbing between two referenced members runs the new
+  // field's focus handler before the old field's deferred blur. Without the ownership check the blur
+  // deletes the footer the field beside it just rendered.
+  const attach = detailTs.slice(
+    detailTs.indexOf("function attachMemberFooter"),
+    detailTs.indexOf("function memberCycle")
+  );
+  const blur = attach.slice(attach.indexOf('addEventListener("blur"'));
+  assert.equal(
+    /memberFooterHost\.parentElement !== wrap/.test(blur),
+    true,
+    "the blur teardown is unconditional again — it can delete another field's footer"
+  );
+  assert.equal(
+    blur.indexOf("memberFooterHost.parentElement !== wrap") < blur.indexOf("memberFooterHost.remove()"),
+    true,
+    "the ownership check runs after the teardown, which makes it decorative"
+  );
 });

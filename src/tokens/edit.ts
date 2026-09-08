@@ -42,7 +42,26 @@ function fail<T>(message: string): ParseResult<T> {
 // Scalars
 // ---------------------------------------------------------------------------
 
-const HEX = /^#?([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+/**
+ * The digit shapes a hex colour is ever written in — **the single source of truth** for both the
+ * commit path and the swatch's "is this a colour?" test.
+ *
+ * Two regexes are built from it because the two callers want different strictness about the `#`, and
+ * that difference is deliberate rather than accidental (it was accidental until 2026-09-08, when a
+ * duplicated copy of this pattern in `ui/swatch.ts` was found diverging from it):
+ *
+ *   - `HEX` (below) is **lenient**: `parseHexColor` normalises what a user *typed*, and a typed
+ *     `c33a2e` is a hex colour missing a `#` we are about to add.
+ *   - `HEX_COLOR` is **strict**: `isColorValue` tests a *stored* value, which the importer and
+ *     `parseHexColor` both always write with the `#`. Without it, a `string` token holding `"abc"`
+ *     would paint as a colour, which is the wrong-type case §4.2 exists to catch.
+ */
+const HEX_DIGITS = "([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})";
+
+const HEX = new RegExp(`^#?${HEX_DIGITS}$`, "i");
+
+/** A stored hex value — the `#` is required. See `HEX_DIGITS` for why the two differ. */
+export const HEX_COLOR = new RegExp(`^#${HEX_DIGITS}$`, "i");
 
 /**
  * Normalises a typed hex colour to the form the importer emits (`rgbaToHex`).
