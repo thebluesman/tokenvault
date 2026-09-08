@@ -1,9 +1,11 @@
 # UX: Panel size and colour swatches (Phase 10)
 
-**Status: Settled 2026-09-07.** All four §9 questions answered by Shyam: (a) for §9.2 — the tree
+**Status: Implemented 2026-09-08.** All four §9 questions answered by Shyam: (a) for §9.2 — the tree
 stays, no table rewrite, revisit only as its own future phase if it turns out to be needed — and the
-three numeric recommendations in §9.1, §9.3, §9.4 confirmed as written. This doc is now
-implementation-ready for `@frontend-engineer`.
+three numeric recommendations in §9.1, §9.3, §9.4 confirmed as written. Built via PR #37 (window +
+strip), PR #40 (row-level swatch circle/faint-ring follow-up) and the code-review fixes folded into
+PR #39. §7/§11's acceptance checklists walked live in Figma desktop and confirmed by Shyam — closes
+issues #35 and #36.
 **Owner:** `@ux-designer`
 **Covers:** Issues [#35](https://github.com/thebluesman/tokenvault/issues/35) (resizable window) and
 [#36](https://github.com/thebluesman/tokenvault/issues/36) (colour swatches in the token list).
